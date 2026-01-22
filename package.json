@@ -1,0 +1,37 @@
+{
+  "name": "src",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "db:push": "turbo -F @src/db db:push",
+    "db:studio": "turbo -F @src/db db:studio",
+    "db:generate": "turbo -F @src/db db:generate",
+    "db:migrate": "turbo -F @src/db db:migrate",
+    "db:start": "turbo -F @src/db db:start",
+    "db:watch": "turbo -F @src/db db:watch",
+    "db:stop": "turbo -F @src/db db:stop",
+    "db:down": "turbo -F @src/db db:down"
+  },
+  "dependencies": {
+    "@src/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@src/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "turbo": "^2.6.3",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@10.22.0"
+}
