@@ -1,5 +1,19 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  index,
+} from "drizzle-orm/pg-core";
+
+import { exercise } from "./exercise";
+import { muscleGroupVolume } from "./muscle-group-volume";
+import { personalRecord } from "./personal-record";
+import { progressiveOverloadState } from "./progressive-overload";
+import { userPreferences } from "./user-preferences";
+import { workout } from "./workout";
+import { workoutTemplate } from "./template";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -73,9 +87,16 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ many, one }) => ({
   sessions: many(session),
   accounts: many(account),
+  preferences: one(userPreferences),
+  workouts: many(workout),
+  templates: many(workoutTemplate),
+  personalRecords: many(personalRecord),
+  overloadStates: many(progressiveOverloadState),
+  muscleGroupVolumes: many(muscleGroupVolume),
+  exercises: many(exercise),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

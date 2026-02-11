@@ -24,7 +24,9 @@ export default function Home() {
   return (
     <Container className="p-6">
       <View className="py-4 mb-6">
-        <Text className="text-4xl font-bold text-foreground mb-2">BETTER T STACK</Text>
+        <Text className="text-4xl font-bold text-foreground mb-2">
+          BETTER T STACK
+        </Text>
       </View>
 
       {session?.user ? (
@@ -40,7 +42,7 @@ export default function Home() {
               queryClient.invalidateQueries();
             }}
           >
-            <Text className="text-foreground font-medium">Sign Out</Text>
+            <Text className="text-background font-medium">Sign Out</Text>
           </Pressable>
         </Card>
       ) : null}
@@ -48,7 +50,11 @@ export default function Home() {
       <Card variant="secondary" className="p-6">
         <View className="flex-row items-center justify-between mb-4">
           <Card.Title>System Status</Card.Title>
-          <Chip variant="secondary" color={isConnected ? "success" : "danger"} size="sm">
+          <Chip
+            variant="secondary"
+            color={isConnected ? "success" : "danger"}
+            size="sm"
+          >
             <Chip.Label>{isConnected ? "LIVE" : "OFFLINE"}</Chip.Label>
           </Chip>
         </View>
@@ -59,7 +65,9 @@ export default function Home() {
               className={`w-3 h-3 rounded-full mr-3 ${isConnected ? "bg-success" : "bg-muted"}`}
             />
             <View className="flex-1">
-              <Text className="text-foreground font-medium mb-1">TRPC Backend</Text>
+              <Text className="text-foreground font-medium mb-1">
+                TRPC Backend
+              </Text>
               <Card.Description>
                 {isLoading
                   ? "Checking connection..."
@@ -68,9 +76,15 @@ export default function Home() {
                     : "API Disconnected"}
               </Card.Description>
             </View>
-            {isLoading && <Ionicons name="hourglass-outline" size={20} color={mutedColor} />}
+            {isLoading && (
+              <Ionicons name="hourglass-outline" size={20} color={mutedColor} />
+            )}
             {!isLoading && isConnected && (
-              <Ionicons name="checkmark-circle" size={20} color={successColor} />
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color={successColor}
+              />
             )}
             {!isLoading && !isConnected && (
               <Ionicons name="close-circle" size={20} color={dangerColor} />
@@ -81,7 +95,9 @@ export default function Home() {
 
       <Card variant="secondary" className="mt-6 p-4">
         <Card.Title className="mb-3">Private Data</Card.Title>
-        {privateData && <Card.Description>{privateData.data?.message}</Card.Description>}
+        {privateData && (
+          <Card.Description>{privateData.data?.message}</Card.Description>
+        )}
       </Card>
 
       {!session?.user && (

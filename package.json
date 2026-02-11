@@ -1,5 +1,5 @@
 {
-  "name": "src",
+  "name": "fitness-app",
   "private": true,
   "workspaces": [
     "apps/*",

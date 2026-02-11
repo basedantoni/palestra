@@ -1,15 +1,15 @@
-name: src
+name: fitness-app
 
 services:
   postgres:
     image: postgres
-    container_name: src-postgres
+    container_name: fitness-app-postgres
     environment:
-      POSTGRES_DB: src
+      POSTGRES_DB: fitness-app
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - src_postgres_data:/var/lib/postgresql
     healthcheck:

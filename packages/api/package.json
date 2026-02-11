@@ -16,6 +16,7 @@
     "@src/env": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
