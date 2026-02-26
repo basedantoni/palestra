@@ -37,13 +37,11 @@ export const stepMetricsSchema = z.object({
     .optional(),
   heightCm: z
     .number()
-    .int()
     .min(50, "Please enter a valid height")
     .max(300, "Please enter a valid height")
     .optional(),
   weightKg: z
     .number()
-    .int()
     .min(20, "Please enter a valid weight")
     .max(500, "Please enter a valid weight")
     .optional(),
@@ -66,11 +64,13 @@ export const onboardingSchema = stepGoalsSchema
 export type OnboardingFormData = z.infer<typeof onboardingSchema>;
 
 // Field names grouped by step, for per-step validation
+// NOTE: Step 3 is preferences (units), Step 4 is metrics (height/weight)
+// This order allows users to select their preferred units before entering measurements
 export const STEP_FIELD_NAMES: ReadonlyArray<ReadonlyArray<keyof OnboardingFormData>> = [
   ["fitnessGoal", "experienceLevel"],
   ["preferredWorkoutTypes"],
-  ["gender", "birthYear", "heightCm", "weightKg"],
   ["weightUnit", "distanceUnit", "muscleGroupSystem", "theme"],
+  ["gender", "birthYear", "heightCm", "weightKg"],
 ];
 
 export const TOTAL_STEPS = STEP_FIELD_NAMES.length;

@@ -1,4 +1,4 @@
-const STEP_LABELS = ["Goals", "Workouts", "Metrics", "Preferences"];
+const STEP_LABELS = ["Goals", "Workouts", "Preferences", "Metrics"];
 
 interface OnboardingProgressProps {
   currentStep: number;

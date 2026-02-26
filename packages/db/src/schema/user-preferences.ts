@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, integer, timestamp, text, pgTable } from "drizzle-orm/pg-core";
+import { boolean, integer, timestamp, text, pgTable, real } from "drizzle-orm/pg-core";
 
 import {
   distanceUnitEnum,
@@ -27,8 +27,8 @@ export const userPreferences = pgTable("user_preferences", {
   preferredWorkoutTypes: text("preferred_workout_types"), // JSON array stored as text
   gender: genderEnum("gender"),
   birthYear: integer("birth_year"),
-  heightCm: integer("height_cm"),
-  weightKg: integer("weight_kg"),
+  heightCm: real("height_cm"),
+  weightKg: real("weight_kg"),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")

@@ -116,8 +116,8 @@ export default function OnboardingPage() {
         >
           {currentStep === 0 ? <StepGoals form={form} /> : null}
           {currentStep === 1 ? <StepWorkouts form={form} /> : null}
-          {currentStep === 2 ? <StepMetrics form={form} /> : null}
-          {currentStep === 3 ? <StepPreferences form={form} /> : null}
+          {currentStep === 2 ? <StepPreferences form={form} /> : null}
+          {currentStep === 3 ? <StepMetrics form={form} /> : null}
 
           <div className="mt-8 flex justify-between">
             <Button

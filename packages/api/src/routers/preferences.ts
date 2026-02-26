@@ -22,8 +22,8 @@ const preferencesInput = z.object({
   ).optional(),
   gender: z.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
   birthYear: z.number().int().min(1920).max(2020).optional(),
-  heightCm: z.number().int().min(50).max(300).optional(),
-  weightKg: z.number().int().min(20).max(500).optional(),
+  heightCm: z.number().min(50).max(300).optional(),
+  weightKg: z.number().min(20).max(500).optional(),
   onboardingCompleted: z.boolean().optional(),
 });
 
