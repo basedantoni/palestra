@@ -1,27 +1,7 @@
 import type { ReactFormExtendedApi } from "@tanstack/react-form";
 
 import { Label } from "@/components/ui/label";
-
-const WEIGHT_UNITS = [
-  { value: "lbs", label: "Pounds (lbs)" },
-  { value: "kg", label: "Kilograms (kg)" },
-] as const;
-
-const DISTANCE_UNITS = [
-  { value: "mi", label: "Miles (mi)" },
-  { value: "km", label: "Kilometers (km)" },
-] as const;
-
-const MUSCLE_GROUP_SYSTEMS = [
-  { value: "bodybuilding", label: "Bodybuilding", description: "Chest, Back, Shoulders, Arms, Legs, Core" },
-  { value: "movement_patterns", label: "Movement Patterns", description: "Push, Pull, Squat, Hinge, Carry" },
-] as const;
-
-const THEMES = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
-  { value: "auto", label: "Auto (System)" },
-] as const;
+import { WEIGHT_UNITS, DISTANCE_UNITS, MUSCLE_GROUP_SYSTEMS, THEMES } from "@src/shared";
 
 interface StepPreferencesProps {
   form: ReactFormExtendedApi<any, any, any, any>;

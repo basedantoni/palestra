@@ -1,4 +1,5 @@
 import "@/global.css";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { HeroUINativeProvider } from "heroui-native";
@@ -18,6 +19,14 @@ function StackLayout() {
       <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ title: "Modal", presentation: "modal" }} />
+      <Stack.Screen
+        name="new-workout"
+        options={{ title: "New Workout", presentation: "modal", headerShown: false }}
+      />
+      <Stack.Screen
+        name="workout-detail/[id]"
+        options={{ title: "Workout", headerShown: true }}
+      />
     </Stack>
   );
 }
@@ -29,7 +38,9 @@ export default function Layout() {
         <KeyboardProvider>
           <AppThemeProvider>
             <HeroUINativeProvider>
-              <StackLayout />
+              <BottomSheetModalProvider>
+                <StackLayout />
+              </BottomSheetModalProvider>
             </HeroUINativeProvider>
           </AppThemeProvider>
         </KeyboardProvider>

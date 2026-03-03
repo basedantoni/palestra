@@ -2,21 +2,7 @@ import type { ReactFormExtendedApi } from "@tanstack/react-form";
 import z from "zod";
 
 import { Label } from "@/components/ui/label";
-
-const GOALS = [
-  { value: "build_muscle", label: "Build Muscle", description: "Gain size and definition" },
-  { value: "lose_fat", label: "Lose Fat", description: "Cut body fat while maintaining muscle" },
-  { value: "increase_strength", label: "Increase Strength", description: "Lift heavier weights" },
-  { value: "improve_endurance", label: "Improve Endurance", description: "Better cardiovascular fitness" },
-  { value: "general_fitness", label: "General Fitness", description: "Overall health and wellness" },
-  { value: "flexibility", label: "Flexibility", description: "Improve mobility and range of motion" },
-] as const;
-
-const EXPERIENCE_LEVELS = [
-  { value: "beginner", label: "Beginner", description: "New to fitness or less than 6 months" },
-  { value: "intermediate", label: "Intermediate", description: "6 months to 2 years of training" },
-  { value: "advanced", label: "Advanced", description: "2+ years of consistent training" },
-] as const;
+import { GOALS, EXPERIENCE_LEVELS } from "@src/shared";
 
 interface StepGoalsProps {
   form: ReactFormExtendedApi<any, any, any, any>;

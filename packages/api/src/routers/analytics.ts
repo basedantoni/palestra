@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
+  exercise,
   muscleGroupVolume,
   personalRecord,
   progressiveOverloadState,
@@ -46,22 +47,75 @@ export const analyticsRouter = router({
         .optional(),
     )
     .query(async ({ ctx, input }) => {
+      const clauses = [
+        eq(progressiveOverloadState.userId, ctx.session.user.id),
+      ];
       if (input?.exerciseId) {
-        return db
-          .select()
-          .from(progressiveOverloadState)
-          .where(
-            and(
-              eq(progressiveOverloadState.userId, ctx.session.user.id),
-              eq(progressiveOverloadState.exerciseId, input.exerciseId),
-            ),
-          );
+        clauses.push(
+          eq(progressiveOverloadState.exerciseId, input.exerciseId),
+        );
       }
 
-      return db
-        .select()
+      const rows = await db
+        .select({
+          exerciseId: progressiveOverloadState.exerciseId,
+          trendStatus: progressiveOverloadState.trendStatus,
+          plateauCount: progressiveOverloadState.plateauCount,
+          nextSuggestedProgression:
+            progressiveOverloadState.nextSuggestedProgression,
+          lastCalculatedAt: progressiveOverloadState.lastCalculatedAt,
+          exerciseName: exercise.name,
+        })
         .from(progressiveOverloadState)
-        .where(eq(progressiveOverloadState.userId, ctx.session.user.id));
+        .leftJoin(
+          exercise,
+          eq(progressiveOverloadState.exerciseId, exercise.id),
+        )
+        .where(and(...clauses));
+
+      return rows.map((row) => ({
+        exerciseId: row.exerciseId,
+        exerciseName: row.exerciseName,
+        trendStatus: row.trendStatus,
+        plateauCount: row.plateauCount,
+        suggestion: row.nextSuggestedProgression as {
+          type: string;
+          message: string;
+          details: { currentValue: number; suggestedValue: number; unit: string };
+        } | null,
+        lastCalculatedAt: row.lastCalculatedAt,
+      }));
+    }),
+  exerciseSuggestion: protectedProcedure
+    .input(z.object({ exerciseId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [row] = await db
+        .select({
+          trendStatus: progressiveOverloadState.trendStatus,
+          nextSuggestedProgression:
+            progressiveOverloadState.nextSuggestedProgression,
+          lastCalculatedAt: progressiveOverloadState.lastCalculatedAt,
+        })
+        .from(progressiveOverloadState)
+        .where(
+          and(
+            eq(progressiveOverloadState.userId, ctx.session.user.id),
+            eq(progressiveOverloadState.exerciseId, input.exerciseId),
+          ),
+        )
+        .limit(1);
+
+      if (!row) return null;
+
+      return {
+        trendStatus: row.trendStatus as "improving" | "plateau" | "declining",
+        suggestion: row.nextSuggestedProgression as {
+          type: string;
+          message: string;
+          details: { currentValue: number; suggestedValue: number; unit: string };
+        } | null,
+        lastCalculatedAt: row.lastCalculatedAt,
+      };
     }),
   muscleGroupVolume: protectedProcedure
     .input(
@@ -79,11 +133,15 @@ export const analyticsRouter = router({
       const clauses = [eq(muscleGroupVolume.userId, ctx.session.user.id)];
 
       if (input?.startDate) {
-        clauses.push(gte(muscleGroupVolume.weekStartDate, input.startDate));
+        clauses.push(
+          sql`${muscleGroupVolume.weekStartDate} >= ${input.startDate.toISOString().split("T")[0]}`,
+        );
       }
 
       if (input?.endDate) {
-        clauses.push(lte(muscleGroupVolume.weekStartDate, input.endDate));
+        clauses.push(
+          sql`${muscleGroupVolume.weekStartDate} <= ${input.endDate.toISOString().split("T")[0]}`,
+        );
       }
 
       if (input?.categorizationSystem) {

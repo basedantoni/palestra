@@ -1,31 +1,9 @@
-import { z } from "zod";
+import { preferencesInputSchema } from "@src/shared";
 
 import { db } from "@src/db";
 import { userPreferences } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
-
-const preferencesInput = z.object({
-  weightUnit: z.enum(["lbs", "kg"]),
-  distanceUnit: z.enum(["mi", "km"]),
-  muscleGroupSystem: z.enum(["bodybuilding", "movement_patterns"]),
-  plateauThreshold: z.number().int().min(1).max(20),
-  theme: z.enum(["light", "dark", "auto"]),
-  // New onboarding fields (all optional so existing callers don't break)
-  fitnessGoal: z.enum([
-    "build_muscle", "lose_fat", "increase_strength",
-    "improve_endurance", "general_fitness", "flexibility",
-  ]).optional(),
-  experienceLevel: z.enum(["beginner", "intermediate", "advanced"]).optional(),
-  preferredWorkoutTypes: z.array(
-    z.enum(["weightlifting", "hiit", "cardio", "calisthenics", "yoga", "sports"])
-  ).optional(),
-  gender: z.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
-  birthYear: z.number().int().min(1920).max(2020).optional(),
-  heightCm: z.number().min(50).max(300).optional(),
-  weightKg: z.number().min(20).max(500).optional(),
-  onboardingCompleted: z.boolean().optional(),
-});
 
 export const preferencesRouter = router({
   get: protectedProcedure.query(async ({ ctx }) => {
@@ -43,7 +21,7 @@ export const preferencesRouter = router({
   }),
 
   upsert: protectedProcedure
-    .input(preferencesInput)
+    .input(preferencesInputSchema)
     .mutation(async ({ ctx, input }) => {
       const now = new Date();
       const { preferredWorkoutTypes, ...rest } = input;

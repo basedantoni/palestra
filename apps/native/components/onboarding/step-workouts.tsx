@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import { useThemeColor } from "heroui-native";
-import { WORKOUT_TYPES } from "@/lib/onboarding-schemas";
+import { WORKOUT_TYPES } from "@src/shared";
 import { Ionicons } from "@expo/vector-icons";
 
 interface StepWorkoutsProps {

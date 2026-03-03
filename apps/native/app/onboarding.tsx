@@ -8,7 +8,7 @@ import { useThemeColor } from "heroui-native";
 
 import { authClient } from "@/lib/auth-client";
 import { queryClient, trpc } from "@/utils/trpc";
-import { TOTAL_STEPS, stepGoalsSchema, stepWorkoutsSchema, stepPreferencesSchema } from "@/lib/onboarding-schemas";
+import { TOTAL_STEPS, stepGoalsSchema, stepWorkoutsSchema, stepPreferencesSchema } from "@src/shared";
 import OnboardingProgress from "@/components/onboarding/onboarding-progress";
 import StepGoals from "@/components/onboarding/step-goals";
 import StepWorkouts from "@/components/onboarding/step-workouts";

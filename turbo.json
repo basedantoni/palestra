@@ -7,6 +7,9 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**"]
     },
+    "test": {
+      "dependsOn": ["^test"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },
@@ -28,6 +31,9 @@
       "cache": false
     },
     "db:generate": {
+      "cache": false
+    },
+    "db:seed": {
       "cache": false
     },
     "db:start": {

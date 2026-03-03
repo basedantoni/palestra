@@ -72,6 +72,7 @@ export const adminRouter = router({
       const [created] = await db
         .insert(exercise)
         .values({
+          id: crypto.randomUUID(),
           name: input.name,
           category: input.category,
           muscleGroupsBodybuilding: input.muscleGroupsBodybuilding,
@@ -81,7 +82,7 @@ export const adminRouter = router({
           createdByUserId: null,
         })
         .returning();
-      return created;
+      return created!;
     }),
   exercisesUpdate: adminProcedure
     .input(
@@ -123,9 +124,11 @@ export const adminRouter = router({
     .input(templateInput)
     .mutation(async ({ input }) => {
       return db.transaction(async (tx) => {
+        const templateId = crypto.randomUUID();
         const [createdTemplate] = await tx
           .insert(workoutTemplate)
           .values({
+            id: templateId,
             userId: null,
             name: input.name,
             workoutType: input.workoutType,
@@ -134,9 +137,10 @@ export const adminRouter = router({
           })
           .returning();
 
-        if (input.exercises.length) {
+        if (input.exercises.length && createdTemplate) {
           await tx.insert(workoutTemplateExercise).values(
             input.exercises.map((exerciseInput) => ({
+              id: crypto.randomUUID(),
               workoutTemplateId: createdTemplate.id,
               exerciseId: exerciseInput.exerciseId,
               order: exerciseInput.order,
@@ -145,7 +149,7 @@ export const adminRouter = router({
           );
         }
 
-        return createdTemplate;
+        return createdTemplate!;
       });
     }),
   templatesUpdate: adminProcedure
@@ -178,6 +182,7 @@ export const adminRouter = router({
         if (input.exercises.length) {
           await tx.insert(workoutTemplateExercise).values(
             input.exercises.map((exerciseInput) => ({
+              id: crypto.randomUUID(),
               workoutTemplateId: updatedTemplate.id,
               exerciseId: exerciseInput.exerciseId,
               order: exerciseInput.order,

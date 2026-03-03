@@ -1,6 +1,9 @@
 import z from "zod";
 
-// Step 1: Goals & Experience
+// ---------------------------------------------------------------------------
+// Step schemas
+// ---------------------------------------------------------------------------
+
 export const stepGoalsSchema = z.object({
   fitnessGoal: z.enum([
     "build_muscle",
@@ -17,7 +20,6 @@ export const stepGoalsSchema = z.object({
   ]),
 });
 
-// Step 2: Workout Preferences
 export const stepWorkoutsSchema = z.object({
   preferredWorkoutTypes: z
     .array(
@@ -26,7 +28,6 @@ export const stepWorkoutsSchema = z.object({
     .min(1, "Select at least one workout type"),
 });
 
-// Step 3: Body Metrics (all optional)
 export const stepMetricsSchema = z.object({
   gender: z.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
   birthYear: z
@@ -47,7 +48,6 @@ export const stepMetricsSchema = z.object({
     .optional(),
 });
 
-// Step 4: App Preferences
 export const stepPreferencesSchema = z.object({
   weightUnit: z.enum(["lbs", "kg"]),
   distanceUnit: z.enum(["mi", "km"]),
@@ -55,7 +55,10 @@ export const stepPreferencesSchema = z.object({
   theme: z.enum(["light", "dark", "auto"]),
 });
 
-// Combined schema for the entire form (used in validators.onSubmit)
+// ---------------------------------------------------------------------------
+// Combined schema (used for full form submission)
+// ---------------------------------------------------------------------------
+
 export const onboardingSchema = stepGoalsSchema
   .merge(stepWorkoutsSchema)
   .merge(stepMetricsSchema)
@@ -63,9 +66,27 @@ export const onboardingSchema = stepGoalsSchema
 
 export type OnboardingFormData = z.infer<typeof onboardingSchema>;
 
-// Field names grouped by step, for per-step validation
-// NOTE: Step 3 is preferences (units), Step 4 is metrics (height/weight)
-// This order allows users to select their preferred units before entering measurements
+// ---------------------------------------------------------------------------
+// Composed schema for the preferences API router
+// Makes all onboarding fields optional so existing callers don't break,
+// and adds API-only fields (plateauThreshold, onboardingCompleted).
+// ---------------------------------------------------------------------------
+
+export const preferencesInputSchema = stepPreferencesSchema
+  .merge(stepGoalsSchema.partial())
+  .merge(stepWorkoutsSchema.partial())
+  .merge(stepMetricsSchema)
+  .extend({
+    plateauThreshold: z.number().int().min(1).max(20),
+    onboardingCompleted: z.boolean().optional(),
+  });
+
+// ---------------------------------------------------------------------------
+// Step field groupings (used for per-step validation in both apps)
+// NOTE: Step 3 is preferences (units), step 4 is metrics (height/weight).
+// This order lets users select their preferred units before entering measurements.
+// ---------------------------------------------------------------------------
+
 export const STEP_FIELD_NAMES: ReadonlyArray<ReadonlyArray<keyof OnboardingFormData>> = [
   ["fitnessGoal", "experienceLevel"],
   ["preferredWorkoutTypes"],
@@ -75,7 +96,10 @@ export const STEP_FIELD_NAMES: ReadonlyArray<ReadonlyArray<keyof OnboardingFormD
 
 export const TOTAL_STEPS = STEP_FIELD_NAMES.length;
 
-// Option constants
+// ---------------------------------------------------------------------------
+// Option label constants (shared across web and native UIs)
+// ---------------------------------------------------------------------------
+
 export const GOALS = [
   { value: "build_muscle", label: "Build Muscle", description: "Gain size and definition" },
   { value: "lose_fat", label: "Lose Fat", description: "Cut body fat while maintaining muscle" },

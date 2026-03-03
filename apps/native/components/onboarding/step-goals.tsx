@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import { useThemeColor } from "heroui-native";
-import { GOALS, EXPERIENCE_LEVELS } from "@/lib/onboarding-schemas";
+import { GOALS, EXPERIENCE_LEVELS } from "@src/shared";
 
 interface StepGoalsProps {
   fitnessGoal: string;

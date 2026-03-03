@@ -75,9 +75,11 @@ export const templatesRouter = router({
     .input(templateInput)
     .mutation(async ({ ctx, input }) => {
       return db.transaction(async (tx) => {
+        const templateId = crypto.randomUUID();
         const [createdTemplate] = await tx
           .insert(workoutTemplate)
           .values({
+            id: templateId,
             userId: ctx.session.user.id,
             name: input.name,
             workoutType: input.workoutType,
@@ -86,9 +88,10 @@ export const templatesRouter = router({
           })
           .returning();
 
-        if (input.exercises.length) {
+        if (input.exercises.length && createdTemplate) {
           await tx.insert(workoutTemplateExercise).values(
             input.exercises.map((exerciseInput) => ({
+              id: crypto.randomUUID(),
               workoutTemplateId: createdTemplate.id,
               exerciseId: exerciseInput.exerciseId,
               order: exerciseInput.order,
@@ -97,7 +100,7 @@ export const templatesRouter = router({
           );
         }
 
-        return createdTemplate;
+        return createdTemplate!;
       });
     }),
   update: protectedProcedure
@@ -130,6 +133,7 @@ export const templatesRouter = router({
         if (input.exercises.length) {
           await tx.insert(workoutTemplateExercise).values(
             input.exercises.map((exerciseInput) => ({
+              id: crypto.randomUUID(),
               workoutTemplateId: updatedTemplate.id,
               exerciseId: exerciseInput.exerciseId,
               order: exerciseInput.order,

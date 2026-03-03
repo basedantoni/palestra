@@ -19,6 +19,7 @@
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/elements": "^2.8.1",
     "@src/api": "workspace:*",
+    "@src/shared": "workspace:*",
     "@src/env": "workspace:*",
     "@tanstack/react-query": "catalog:",
     "@trpc/client": "catalog:",

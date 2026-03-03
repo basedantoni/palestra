@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import { useThemeColor } from "heroui-native";
-import { WEIGHT_UNITS, DISTANCE_UNITS, MUSCLE_GROUP_SYSTEMS, THEMES } from "@/lib/onboarding-schemas";
+import { WEIGHT_UNITS, DISTANCE_UNITS, MUSCLE_GROUP_SYSTEMS, THEMES } from "@src/shared";
 
 interface StepPreferencesProps {
   weightUnit: string;

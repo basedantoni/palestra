@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import { TextField, useThemeColor } from "heroui-native";
-import { GENDERS } from "@/lib/onboarding-schemas";
+import { GENDERS } from "@src/shared";
 
 interface StepMetricsProps {
   gender?: string;

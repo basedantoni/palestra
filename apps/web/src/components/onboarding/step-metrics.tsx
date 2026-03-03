@@ -4,13 +4,7 @@ import z from "zod";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const GENDERS = [
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "other", label: "Other" },
-  { value: "prefer_not_to_say", label: "Prefer not to say" },
-] as const;
+import { GENDERS } from "@src/shared";
 
 interface StepMetricsProps {
   form: ReactFormExtendedApi<any, any, any, any>;

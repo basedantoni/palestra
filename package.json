@@ -17,6 +17,7 @@
     "db:studio": "turbo -F @src/db db:studio",
     "db:generate": "turbo -F @src/db db:generate",
     "db:migrate": "turbo -F @src/db db:migrate",
+    "db:seed": "turbo -F @src/db db:seed",
     "db:start": "turbo -F @src/db db:start",
     "db:watch": "turbo -F @src/db db:watch",
     "db:stop": "turbo -F @src/db db:stop",

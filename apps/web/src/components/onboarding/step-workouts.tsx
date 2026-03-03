@@ -3,15 +3,7 @@ import z from "zod";
 
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-
-const WORKOUT_TYPES = [
-  { value: "weightlifting", label: "Weightlifting", description: "Barbell, dumbbell, and machine exercises" },
-  { value: "hiit", label: "HIIT", description: "High-intensity interval training" },
-  { value: "cardio", label: "Cardio", description: "Running, cycling, rowing, swimming" },
-  { value: "calisthenics", label: "Calisthenics", description: "Bodyweight exercises" },
-  { value: "yoga", label: "Yoga & Flexibility", description: "Stretching and mobility work" },
-  { value: "sports", label: "Sports", description: "Basketball, tennis, hiking, etc." },
-] as const;
+import { WORKOUT_TYPES } from "@src/shared";
 
 interface StepWorkoutsProps {
   form: ReactFormExtendedApi<any, any, any, any>;

@@ -9,20 +9,27 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
+  },
   "dependencies": {
     "@src/auth": "workspace:*",
+    "@src/shared": "workspace:*",
     "@src/db": "workspace:*",
     "@src/env": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
-    "drizzle-orm": "^0.45.1",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@src/config": "workspace:*",
+    "@vitest/ui": "^4.0.18",
     "hono": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.0.18"
   }
 }

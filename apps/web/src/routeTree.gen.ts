@@ -13,6 +13,9 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
+import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
+import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
@@ -34,18 +37,39 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkoutsIndexRoute = WorkoutsIndexRouteImport.update({
+  id: '/workouts/',
+  path: '/workouts/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkoutsNewRoute = WorkoutsNewRouteImport.update({
+  id: '/workouts/new',
+  path: '/workouts/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkoutsWorkoutIdRoute = WorkoutsWorkoutIdRouteImport.update({
+  id: '/workouts/$workoutId',
+  path: '/workouts/$workoutId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
+  '/workouts/new': typeof WorkoutsNewRoute
+  '/workouts/': typeof WorkoutsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
+  '/workouts/new': typeof WorkoutsNewRoute
+  '/workouts': typeof WorkoutsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +77,38 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
+  '/workouts/new': typeof WorkoutsNewRoute
+  '/workouts/': typeof WorkoutsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/onboarding'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/onboarding'
+    | '/workouts/$workoutId'
+    | '/workouts/new'
+    | '/workouts/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/onboarding'
-  id: '__root__' | '/' | '/dashboard' | '/login' | '/onboarding'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/onboarding'
+    | '/workouts/$workoutId'
+    | '/workouts/new'
+    | '/workouts'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/onboarding'
+    | '/workouts/$workoutId'
+    | '/workouts/new'
+    | '/workouts/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +116,9 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
+  WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
+  WorkoutsNewRoute: typeof WorkoutsNewRoute
+  WorkoutsIndexRoute: typeof WorkoutsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +151,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workouts/': {
+      id: '/workouts/'
+      path: '/workouts'
+      fullPath: '/workouts/'
+      preLoaderRoute: typeof WorkoutsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workouts/new': {
+      id: '/workouts/new'
+      path: '/workouts/new'
+      fullPath: '/workouts/new'
+      preLoaderRoute: typeof WorkoutsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workouts/$workoutId': {
+      id: '/workouts/$workoutId'
+      path: '/workouts/$workoutId'
+      fullPath: '/workouts/$workoutId'
+      preLoaderRoute: typeof WorkoutsWorkoutIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +180,9 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
+  WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,
+  WorkoutsNewRoute: WorkoutsNewRoute,
+  WorkoutsIndexRoute: WorkoutsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

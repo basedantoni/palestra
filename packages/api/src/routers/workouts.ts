@@ -1,10 +1,18 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@src/db";
-import { exerciseLog, exerciseSet, workout } from "@src/db/schema/index";
+import {
+  exerciseLog,
+  exerciseSet,
+  workout,
+  workoutTemplate,
+  workoutTemplateExercise,
+} from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 
 const workoutTypeEnum = z.enum([
   "weightlifting",
@@ -71,6 +79,41 @@ export const workoutsRouter = router({
         .limit(limit)
         .offset(offset);
     }),
+  listWithSummary: protectedProcedure
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(100).optional(),
+          offset: z.number().int().min(0).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 20;
+      const offset = input?.offset ?? 0;
+
+      const workouts = await db.query.workout.findMany({
+        where: (table, { eq }) => eq(table.userId, ctx.session.user.id),
+        orderBy: (table, { desc }) => [desc(table.date)],
+        limit,
+        offset,
+        with: {
+          logs: {
+            columns: {
+              id: true,
+              exerciseName: true,
+            },
+          },
+        },
+      });
+
+      return workouts.map((w) => ({
+        ...w,
+        exerciseCount: w.logs.length,
+        exerciseNames: w.logs.map((l) => l.exerciseName),
+        logs: undefined,
+      }));
+    }),
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -89,10 +132,12 @@ export const workoutsRouter = router({
   create: protectedProcedure
     .input(workoutInput)
     .mutation(async ({ ctx, input }) => {
-      return db.transaction(async (tx) => {
-        const [createdWorkout] = await tx
+      const createdWorkout = await db.transaction(async (tx) => {
+        const workoutId = crypto.randomUUID();
+        const [newWorkout] = await tx
           .insert(workout)
           .values({
+            id: workoutId,
             userId: ctx.session.user.id,
             date: input.date,
             workoutType: input.workoutType,
@@ -104,10 +149,12 @@ export const workoutsRouter = router({
           .returning();
 
         for (const log of input.logs) {
+          const logId = crypto.randomUUID();
           const [createdLog] = await tx
             .insert(exerciseLog)
             .values({
-              workoutId: createdWorkout.id,
+              id: logId,
+              workoutId: newWorkout!.id,
               exerciseId: log.exerciseId,
               exerciseName: log.exerciseName,
               order: log.order,
@@ -124,9 +171,10 @@ export const workoutsRouter = router({
             })
             .returning();
 
-          if (log.sets?.length) {
+          if (log.sets?.length && createdLog) {
             await tx.insert(exerciseSet).values(
               log.sets.map((set) => ({
+                id: crypto.randomUUID(),
                 exerciseLogId: createdLog.id,
                 setNumber: set.setNumber,
                 reps: set.reps,
@@ -137,13 +185,25 @@ export const workoutsRouter = router({
           }
         }
 
-        return createdWorkout;
+        return newWorkout;
       });
+
+      // Fire and forget — don't block the response on recalculation
+      const exerciseIds = input.logs
+        .map((log) => log.exerciseId)
+        .filter((id): id is string => id != null);
+      if (exerciseIds.length > 0) {
+        recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
+          (err) => console.error("Progressive overload recalc failed:", err),
+        );
+      }
+
+      return createdWorkout;
     }),
   update: protectedProcedure
     .input(workoutInput.extend({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      return db.transaction(async (tx) => {
+      const updatedWorkout = await db.transaction(async (tx) => {
         const [updated] = await tx
           .update(workout)
           .set({
@@ -169,10 +229,12 @@ export const workoutsRouter = router({
           .where(eq(exerciseLog.workoutId, updated.id));
 
         for (const log of input.logs) {
+          const logId = crypto.randomUUID();
           const [createdLog] = await tx
             .insert(exerciseLog)
             .values({
-              workoutId: updated.id,
+              id: logId,
+              workoutId: updated!.id,
               exerciseId: log.exerciseId,
               exerciseName: log.exerciseName,
               order: log.order,
@@ -189,9 +251,10 @@ export const workoutsRouter = router({
             })
             .returning();
 
-          if (log.sets?.length) {
+          if (log.sets?.length && createdLog) {
             await tx.insert(exerciseSet).values(
               log.sets.map((set) => ({
+                id: crypto.randomUUID(),
                 exerciseLogId: createdLog.id,
                 setNumber: set.setNumber,
                 reps: set.reps,
@@ -203,6 +266,85 @@ export const workoutsRouter = router({
         }
 
         return updated;
+      });
+
+      // Fire and forget — don't block the response on recalculation
+      if (updatedWorkout) {
+        const exerciseIds = input.logs
+          .map((log) => log.exerciseId)
+          .filter((id): id is string => id != null);
+        if (exerciseIds.length > 0) {
+          recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
+            (err) => console.error("Progressive overload recalc failed:", err),
+          );
+        }
+      }
+
+      return updatedWorkout;
+    }),
+  saveAsTemplate: protectedProcedure
+    .input(
+      z.object({
+        workoutId: z.string().uuid(),
+        name: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const existingWorkout = await db.query.workout.findFirst({
+        where: (table, { and, eq }) =>
+          and(
+            eq(table.id, input.workoutId),
+            eq(table.userId, ctx.session.user.id),
+          ),
+        with: {
+          logs: {
+            columns: {
+              exerciseId: true,
+              exerciseName: true,
+              order: true,
+            },
+            with: {
+              sets: {
+                columns: { id: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!existingWorkout) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Workout not found",
+        });
+      }
+
+      return db.transaction(async (tx) => {
+        const templateId = crypto.randomUUID();
+        const [template] = await tx
+          .insert(workoutTemplate)
+          .values({
+            id: templateId,
+            userId: ctx.session.user.id,
+            name: input.name,
+            workoutType: existingWorkout.workoutType,
+            isSystemTemplate: false,
+          })
+          .returning();
+
+        if (existingWorkout.logs.length) {
+          await tx.insert(workoutTemplateExercise).values(
+            existingWorkout.logs.map((log) => ({
+              id: crypto.randomUUID(),
+              workoutTemplateId: templateId,
+              exerciseId: log.exerciseId,
+              order: log.order,
+              defaultSets: log.sets.length || null,
+            })),
+          );
+        }
+
+        return template;
       });
     }),
   delete: protectedProcedure

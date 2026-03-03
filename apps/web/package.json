@@ -14,6 +14,7 @@
     "@base-ui/react": "^1.0.0",
     "@hookform/resolvers": "^5.1.1",
     "@src/api": "workspace:*",
+    "@src/shared": "workspace:*",
     "@src/auth": "workspace:*",
     "@src/env": "workspace:*",
     "@tailwindcss/vite": "^4.0.15",

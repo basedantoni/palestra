@@ -10,7 +10,7 @@ import {
   STEP_FIELD_NAMES,
   TOTAL_STEPS,
   type OnboardingFormData,
-} from "@/lib/onboarding-schemas";
+} from "@src/shared";
 
 import StepGoals from "./step-goals";
 import StepWorkouts from "./step-workouts";
