@@ -19,6 +19,7 @@
     "@react-native-community/datetimepicker": "^8.6.0",
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/elements": "^2.8.1",
+    "@shopify/react-native-skia": "2.2.12",
     "@src/api": "workspace:*",
     "@src/env": "workspace:*",
     "@src/shared": "workspace:*",
@@ -53,6 +54,7 @@
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.1.18",
     "uniwind": "^1.2.2",
+    "victory-native": "^41.20.2",
     "zod": "catalog:"
   },
   "devDependencies": {

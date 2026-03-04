@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
@@ -7,9 +7,17 @@ import {
   muscleGroupVolume,
   personalRecord,
   progressiveOverloadState,
+  workout,
 } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import {
+  aggregateVolumeByWeek,
+  aggregateVolumeByMonth,
+  calculateStreaks,
+  buildFrequencyMap,
+  groupPersonalRecordsByExercise,
+} from "../lib/analytics-queries";
 
 export const analyticsRouter = router({
   personalRecords: protectedProcedure
@@ -21,22 +29,27 @@ export const analyticsRouter = router({
         .optional(),
     )
     .query(async ({ ctx, input }) => {
+      const clauses = [eq(personalRecord.userId, ctx.session.user.id)];
+
       if (input?.exerciseId) {
-        return db
-          .select()
-          .from(personalRecord)
-          .where(
-            and(
-              eq(personalRecord.userId, ctx.session.user.id),
-              eq(personalRecord.exerciseId, input.exerciseId),
-            ),
-          );
+        clauses.push(eq(personalRecord.exerciseId, input.exerciseId));
       }
 
-      return db
-        .select()
+      const rows = await db
+        .select({
+          id: personalRecord.id,
+          exerciseId: personalRecord.exerciseId,
+          recordType: personalRecord.recordType,
+          value: personalRecord.value,
+          previousRecordValue: personalRecord.previousRecordValue,
+          dateAchieved: personalRecord.dateAchieved,
+          exerciseName: exercise.name,
+        })
         .from(personalRecord)
-        .where(eq(personalRecord.userId, ctx.session.user.id));
+        .leftJoin(exercise, eq(personalRecord.exerciseId, exercise.id))
+        .where(and(...clauses));
+
+      return groupPersonalRecordsByExercise(rows);
     }),
   progressiveOverload: protectedProcedure
     .input(
@@ -155,4 +168,108 @@ export const analyticsRouter = router({
         .from(muscleGroupVolume)
         .where(and(...clauses));
     }),
+  volumeOverTime: protectedProcedure
+    .input(
+      z.object({
+        granularity: z.enum(["weekly", "monthly"]),
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+        workoutType: z
+          .enum([
+            "weightlifting",
+            "hiit",
+            "cardio",
+            "calisthenics",
+            "yoga",
+            "sports",
+            "mixed",
+          ])
+          .optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const clauses = [eq(workout.userId, ctx.session.user.id)];
+
+      if (input.startDate) {
+        clauses.push(gte(workout.date, input.startDate));
+      }
+
+      if (input.endDate) {
+        clauses.push(lte(workout.date, input.endDate));
+      }
+
+      if (input.workoutType) {
+        clauses.push(eq(workout.workoutType, input.workoutType));
+      }
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          totalVolume: workout.totalVolume,
+        })
+        .from(workout)
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      if (input.granularity === "weekly") {
+        return aggregateVolumeByWeek(rows);
+      }
+      return aggregateVolumeByMonth(rows);
+    }),
+  workoutFrequency: protectedProcedure
+    .input(
+      z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const now = new Date();
+      const defaultStart = new Date(now);
+      defaultStart.setFullYear(defaultStart.getFullYear() - 1);
+
+      const clauses = [eq(workout.userId, ctx.session.user.id)];
+
+      const startDate = input?.startDate ?? defaultStart;
+      const endDate = input?.endDate ?? now;
+
+      clauses.push(gte(workout.date, startDate));
+      clauses.push(lte(workout.date, endDate));
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          totalVolume: workout.totalVolume,
+          durationMinutes: workout.durationMinutes,
+        })
+        .from(workout)
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      const days = buildFrequencyMap(rows);
+
+      const today = new Date().toISOString().split("T")[0] ?? "";
+      const sortedDates = days.map((d) => d.date);
+      const streaks = calculateStreaks(sortedDates, today);
+
+      return { days, streaks };
+    }),
+  streaks: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db
+      .select({ date: workout.date })
+      .from(workout)
+      .where(eq(workout.userId, ctx.session.user.id))
+      .orderBy(asc(workout.date));
+
+    const dates = rows.map((r) => {
+      const d = r.date;
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    });
+
+    const today = new Date().toISOString().split("T")[0] ?? "";
+
+    return calculateStreaks(dates, today);
+  }),
 });

@@ -13,6 +13,7 @@ import {
 
 import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
+import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 
 const workoutTypeEnum = z.enum([
   "weightlifting",
@@ -197,6 +198,9 @@ export const workoutsRouter = router({
           (err) => console.error("Progressive overload recalc failed:", err),
         );
       }
+      recalculateMuscleGroupVolumeForWeek(ctx.session.user.id, input.date).catch(
+        (err) => console.error("Muscle group volume recalc failed:", err),
+      );
 
       return createdWorkout;
     }),
@@ -278,6 +282,9 @@ export const workoutsRouter = router({
             (err) => console.error("Progressive overload recalc failed:", err),
           );
         }
+        recalculateMuscleGroupVolumeForWeek(ctx.session.user.id, input.date).catch(
+          (err) => console.error("Muscle group volume recalc failed:", err),
+        );
       }
 
       return updatedWorkout;
