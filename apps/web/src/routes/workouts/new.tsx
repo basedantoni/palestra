@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarIcon, Plus } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -17,6 +24,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { ExerciseCard } from "@/components/workout/exercise-card";
+import { cn } from "@/lib/utils";
 import {
   createBlankExercise,
   formDataToApiInput,
@@ -58,6 +66,7 @@ function RouteComponent() {
     exercises: [],
     notes: "",
     templateId: undefined,
+    date: new Date(),
   });
 
   const createWorkout = useMutation(
@@ -167,6 +176,38 @@ function RouteComponent() {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Workout Date */}
+      <div className="mb-6">
+        <Label>Date</Label>
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[200px] justify-start text-left font-normal mt-1",
+                  !formData.date && "text-muted-foreground",
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {formData.date ? format(formData.date, "PPP") : "Pick a date"}
+              </Button>
+            }
+          />
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={formData.date}
+              onSelect={(date) => {
+                if (date) setFormData({ ...formData, date });
+              }}
+              disabled={(date) => date > new Date()}
+              autoFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       <Separator className="my-6" />

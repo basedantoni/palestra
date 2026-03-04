@@ -50,6 +50,7 @@ export interface WorkoutFormData {
   exercises: WorkoutExerciseFormData[];
   notes: string;
   templateId: string | undefined;
+  date?: Date;
 }
 
 // Volume calculation (client-side)
@@ -117,7 +118,7 @@ export function formDataToApiInput(form: WorkoutFormData) {
   const totalVolume = calculateTotalVolume(exercises);
 
   return {
-    date: new Date(),
+    date: form.date ?? new Date(),
     workoutType: form.workoutType,
     notes: form.notes || undefined,
     templateId: form.templateId,

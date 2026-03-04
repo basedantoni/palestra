@@ -1,3 +1,4 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Button } from "heroui-native";
@@ -47,7 +48,12 @@ export default function NewWorkoutScreen() {
     exercises: [],
     notes: "",
     templateId: undefined,
+    date: new Date(),
   });
+
+  const [showDatePicker, setShowDatePicker] = useState(
+    Platform.OS === "ios",
+  );
 
   const createWorkout = useMutation(
     trpc.workouts.create.mutationOptions({
@@ -186,6 +192,32 @@ export default function NewWorkoutScreen() {
               </Pressable>
             ))}
           </ScrollView>
+        </View>
+
+        {/* Workout Date */}
+        <View className="px-4 pb-2">
+          <Text className="text-sm font-medium text-foreground mb-2">Date</Text>
+          {Platform.OS === "android" && (
+            <Pressable onPress={() => setShowDatePicker(true)}>
+              <Text className="text-foreground text-base py-2 px-3 border border-border rounded-lg">
+                {(formData.date ?? new Date()).toLocaleDateString()}
+              </Text>
+            </Pressable>
+          )}
+          {showDatePicker && (
+            <DateTimePicker
+              value={formData.date ?? new Date()}
+              mode="date"
+              display={Platform.OS === "ios" ? "compact" : "default"}
+              maximumDate={new Date()}
+              onChange={(_event, selectedDate) => {
+                setShowDatePicker(Platform.OS === "ios");
+                if (selectedDate) {
+                  setFormData((prev) => ({ ...prev, date: selectedDate }));
+                }
+              }}
+            />
+          )}
         </View>
 
         {/* Exercises */}

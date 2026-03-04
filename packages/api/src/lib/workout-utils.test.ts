@@ -542,6 +542,76 @@ describe("workout-utils", () => {
       const result = formDataToApiInput(formData);
       expect(result.totalVolume).toBeUndefined();
     });
+
+    it("should use the provided date when set", () => {
+      const customDate = new Date("2025-12-25");
+      const formData: WorkoutFormData = {
+        workoutType: "weightlifting",
+        date: customDate,
+        exercises: [
+          {
+            tempId: "ex-1",
+            exerciseId: "bench-press-id",
+            exerciseName: "Bench Press",
+            order: 0,
+            sets: [
+              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7 },
+            ],
+            rounds: undefined,
+            workDurationSeconds: undefined,
+            restDurationSeconds: undefined,
+            intensity: undefined,
+            distance: undefined,
+            durationSeconds: undefined,
+            pace: undefined,
+            heartRate: undefined,
+            durationMinutes: undefined,
+            notes: "",
+          },
+        ],
+        notes: "",
+        templateId: undefined,
+      };
+
+      const result = formDataToApiInput(formData);
+      expect(result.date).toEqual(customDate);
+    });
+
+    it("should default to approximately now when date is not provided", () => {
+      const before = new Date();
+      const formData: WorkoutFormData = {
+        workoutType: "weightlifting",
+        exercises: [
+          {
+            tempId: "ex-1",
+            exerciseId: "bench-press-id",
+            exerciseName: "Bench Press",
+            order: 0,
+            sets: [
+              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7 },
+            ],
+            rounds: undefined,
+            workDurationSeconds: undefined,
+            restDurationSeconds: undefined,
+            intensity: undefined,
+            distance: undefined,
+            durationSeconds: undefined,
+            pace: undefined,
+            heartRate: undefined,
+            durationMinutes: undefined,
+            notes: "",
+          },
+        ],
+        notes: "",
+        templateId: undefined,
+        // date intentionally omitted
+      };
+      const after = new Date();
+
+      const result = formDataToApiInput(formData);
+      expect(result.date.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(result.date.getTime()).toBeLessThanOrEqual(after.getTime());
+    });
   });
 
   describe("formatVolume", () => {
