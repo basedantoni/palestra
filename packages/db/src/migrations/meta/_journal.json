@@ -29,6 +29,13 @@
       "when": 1772063964943,
       "tag": "0003_magenta_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772731927372,
+      "tag": "0004_broken_mojo",
+      "breakpoints": true
     }
   ]
 }

@@ -42,6 +42,9 @@ function RouteComponent() {
   const queryClient = useQueryClient();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [formData, setFormData] = useState<TemplateFormData | null>(null);
+  const [initializedTemplateId, setInitializedTemplateId] = useState<string | null>(
+    null,
+  );
 
   const { data: template, isLoading } = useQuery(
     trpc.templates.get.queryOptions({ id: templateId }),
@@ -54,10 +57,40 @@ function RouteComponent() {
   }, [exercises]);
 
   useEffect(() => {
-    if (template) {
+    if (template && initializedTemplateId !== template.id) {
       setFormData(apiTemplateToFormData(template as any, exerciseNameById));
+      setInitializedTemplateId(template.id);
     }
-  }, [template, exerciseNameById]);
+  }, [template, exerciseNameById, initializedTemplateId]);
+
+  useEffect(() => {
+    if (!formData) return;
+    if (!Object.keys(exerciseNameById).length) return;
+    setFormData((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const exercises = prev.exercises.map((exercise) => {
+        if (
+          exercise.exerciseName !== "Unknown Exercise" ||
+          !exercise.exerciseId
+        ) {
+          return exercise;
+        }
+        const resolvedName = exerciseNameById[exercise.exerciseId];
+        if (!resolvedName) return exercise;
+        changed = true;
+        return {
+          ...exercise,
+          exerciseName: resolvedName,
+        };
+      });
+      if (!changed) return prev;
+      return {
+        ...prev,
+        exercises,
+      };
+    });
+  }, [exerciseNameById, formData]);
 
   const updateTemplate = useMutation(
     trpc.templates.update.mutationOptions({

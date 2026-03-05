@@ -10,6 +10,7 @@ import {
   templateToWorkoutFormData,
   formatVolume,
   formatDuration,
+  normalizeDateToLocalNoon,
   WORKOUT_TYPE_LABELS,
   EXERCISE_CATEGORY_LABELS,
 } from "./workout-utils";
@@ -576,11 +577,10 @@ describe("workout-utils", () => {
       };
 
       const result = formDataToApiInput(formData);
-      expect(result.date).toEqual(customDate);
+      expect(result.date).toEqual(normalizeDateToLocalNoon(customDate));
     });
 
-    it("should default to approximately now when date is not provided", () => {
-      const before = new Date();
+    it("should normalize default date to local noon when date is not provided", () => {
       const formData: WorkoutFormData = {
         workoutType: "weightlifting",
         exercises: [
@@ -608,11 +608,12 @@ describe("workout-utils", () => {
         templateId: undefined,
         // date intentionally omitted
       };
-      const after = new Date();
 
       const result = formDataToApiInput(formData);
-      expect(result.date.getTime()).toBeGreaterThanOrEqual(before.getTime());
-      expect(result.date.getTime()).toBeLessThanOrEqual(after.getTime());
+      expect(result.date.getHours()).toBe(12);
+      expect(result.date.getMinutes()).toBe(0);
+      expect(result.date.getSeconds()).toBe(0);
+      expect(result.date.getMilliseconds()).toBe(0);
     });
   });
 

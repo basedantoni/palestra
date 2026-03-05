@@ -1,11 +1,11 @@
-import type { ReactFormExtendedApi } from "@tanstack/react-form";
 import z from "zod";
 
 import { Label } from "@/components/ui/label";
 import { GOALS, EXPERIENCE_LEVELS } from "@src/shared";
+import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepGoalsProps {
-  form: ReactFormExtendedApi<any, any, any, any>;
+  form: OnboardingFormApi;
 }
 
 export default function StepGoals({ form }: StepGoalsProps) {

@@ -59,6 +59,20 @@ const workoutInput = z.object({
   logs: z.array(exerciseLogInput).default([]),
 });
 
+function toUtcDayBoundary(date: Date, endOfDay: boolean): Date {
+  return new Date(
+    Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0,
+    ),
+  );
+}
+
 export const workoutsRouter = router({
   list: protectedProcedure
     .input(
@@ -123,12 +137,14 @@ export const workoutsRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
+      const startDate = toUtcDayBoundary(input.startDate, false);
+      const endDate = toUtcDayBoundary(input.endDate, true);
       const workouts = await db.query.workout.findMany({
         where: (table, { and, eq, gte, lte }) =>
           and(
             eq(table.userId, ctx.session.user.id),
-            gte(table.date, input.startDate),
-            lte(table.date, input.endDate),
+            gte(table.date, startDate),
+            lte(table.date, endDate),
           ),
         orderBy: (table, { desc }) => [desc(table.date)],
         with: {
@@ -223,9 +239,13 @@ export const workoutsRouter = router({
       });
 
       // Fire and forget — don't block the response on recalculation
-      const exerciseIds = input.logs
-        .map((log) => log.exerciseId)
-        .filter((id): id is string => id != null);
+      const exerciseIds = Array.from(
+        new Set(
+          input.logs
+            .map((log) => log.exerciseId)
+            .filter((id): id is string => id != null),
+        ),
+      );
       if (exerciseIds.length > 0) {
         recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
           (err) => console.error("Progressive overload recalc failed:", err),
@@ -307,9 +327,13 @@ export const workoutsRouter = router({
 
       // Fire and forget — don't block the response on recalculation
       if (updatedWorkout) {
-        const exerciseIds = input.logs
-          .map((log) => log.exerciseId)
-          .filter((id): id is string => id != null);
+        const exerciseIds = Array.from(
+          new Set(
+            input.logs
+              .map((log) => log.exerciseId)
+              .filter((id): id is string => id != null),
+          ),
+        );
         if (exerciseIds.length > 0) {
           recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
             (err) => console.error("Progressive overload recalc failed:", err),

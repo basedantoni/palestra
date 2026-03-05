@@ -1,12 +1,12 @@
-import type { ReactFormExtendedApi } from "@tanstack/react-form";
 import z from "zod";
 
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { WORKOUT_TYPES } from "@src/shared";
+import { WORKOUT_TYPES, type OnboardingFormData } from "@src/shared";
+import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepWorkoutsProps {
-  form: ReactFormExtendedApi<any, any, any, any>;
+  form: OnboardingFormApi;
 }
 
 export default function StepWorkouts({ form }: StepWorkoutsProps) {
@@ -28,7 +28,8 @@ export default function StepWorkouts({ form }: StepWorkoutsProps) {
         }}
       >
         {(field) => {
-          const selected: string[] = field.state.value ?? [];
+          const selected: OnboardingFormData["preferredWorkoutTypes"] =
+            field.state.value ?? [];
           return (
             <>
               <div className="grid grid-cols-2 gap-3">

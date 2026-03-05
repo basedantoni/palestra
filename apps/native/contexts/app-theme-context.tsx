@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo } from "react";
 import { Uniwind, useUniwind } from "uniwind";
 
-type ThemeName = "light" | "dark";
+type ThemeName = "light" | "dark" | "auto";
 
 type AppThemeContextType = {
   currentTheme: string;
@@ -25,7 +25,7 @@ export const AppThemeProvider = ({ children }: { children: React.ReactNode }) =>
   }, [theme]);
 
   const setTheme = useCallback((newTheme: ThemeName) => {
-    Uniwind.setTheme(newTheme);
+    Uniwind.setTheme(newTheme === "auto" ? "system" : newTheme);
   }, []);
 
   const toggleTheme = useCallback(() => {

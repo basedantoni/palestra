@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -32,6 +33,10 @@ export const progressiveOverloadState = pgTable(
   (table) => [
     index("progressive_overload_state_userId_idx").on(table.userId),
     index("progressive_overload_state_exerciseId_idx").on(table.exerciseId),
+    uniqueIndex("progressive_overload_state_user_exercise_uq").on(
+      table.userId,
+      table.exerciseId,
+    ),
   ],
 );
 

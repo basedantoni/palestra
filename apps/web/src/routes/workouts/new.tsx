@@ -31,6 +31,8 @@ import {
   formDataToApiInput,
   calculateTotalVolume,
   formatVolume,
+  normalizeDateToLocalNoon,
+  reconcileUnknownExerciseNames,
   templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/index";
@@ -127,6 +129,11 @@ function RouteComponent() {
     suggestionsByExerciseId,
   ]);
 
+  useEffect(() => {
+    if (!Object.keys(exerciseNameById).length) return;
+    setFormData((prev) => reconcileUnknownExerciseNames(prev, exerciseNameById));
+  }, [exerciseNameById]);
+
   const handleAddExercise = () => {
     setEditingExerciseIndex(formData.exercises.length);
     setShowExercisePicker(true);
@@ -209,7 +216,8 @@ function RouteComponent() {
         <Select
           value={selectedTemplateId ?? "__none__"}
           onValueChange={(value) => {
-            const nextTemplateId = value === "__none__" ? undefined : value;
+            const nextTemplateId =
+              !value || value === "__none__" ? undefined : value;
             setSelectedTemplateId(nextTemplateId);
             if (!nextTemplateId) {
               setAppliedTemplateId(undefined);
@@ -279,7 +287,12 @@ function RouteComponent() {
               mode="single"
               selected={formData.date}
               onSelect={(date) => {
-                if (date) setFormData({ ...formData, date });
+                if (date) {
+                  setFormData({
+                    ...formData,
+                    date: normalizeDateToLocalNoon(date),
+                  });
+                }
               }}
               disabled={(date) => date > new Date()}
               autoFocus

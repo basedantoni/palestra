@@ -1,10 +1,9 @@
-import type { ReactFormExtendedApi } from "@tanstack/react-form";
-
 import { Label } from "@/components/ui/label";
 import { WEIGHT_UNITS, DISTANCE_UNITS, MUSCLE_GROUP_SYSTEMS, THEMES } from "@src/shared";
+import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepPreferencesProps {
-  form: ReactFormExtendedApi<any, any, any, any>;
+  form: OnboardingFormApi;
 }
 
 export default function StepPreferences({ form }: StepPreferencesProps) {

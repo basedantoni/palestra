@@ -19,6 +19,13 @@ describe("export-utils", () => {
       expect(escapeCsvValue(null)).toBe("");
       expect(escapeCsvValue(undefined)).toBe("");
     });
+
+    it("should neutralize spreadsheet formulas", () => {
+      expect(escapeCsvValue("=SUM(A1:A2)")).toBe("'=SUM(A1:A2)");
+      expect(escapeCsvValue("+1+1")).toBe("'+1+1");
+      expect(escapeCsvValue("-10")).toBe("'-10");
+      expect(escapeCsvValue("@cmd")).toBe("'@cmd");
+    });
   });
 
   describe("rowsToCsv", () => {

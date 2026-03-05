@@ -1,13 +1,13 @@
-import type { ReactFormExtendedApi } from "@tanstack/react-form";
 import { useState } from "react";
 import z from "zod";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GENDERS } from "@src/shared";
+import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepMetricsProps {
-  form: ReactFormExtendedApi<any, any, any, any>;
+  form: OnboardingFormApi;
 }
 
 export default function StepMetrics({ form }: StepMetricsProps) {
@@ -68,12 +68,12 @@ export default function StepMetrics({ form }: StepMetricsProps) {
                   </button>
                 ))}
               </div>
-              {field.state.meta.errors.map((error) => (
+              {field.state.meta.errors.map((error, index) => (
                 <p
-                  key={error?.message}
+                  key={`gender-error-${index}`}
                   className="mt-1 text-xs text-destructive"
                 >
-                  {error?.message}
+                  {String(error)}
                 </p>
               ))}
             </>

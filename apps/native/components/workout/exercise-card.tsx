@@ -71,7 +71,24 @@ export function ExerciseCard({
     value: string,
   ) => {
     const updatedSets = [...exercise.sets];
-    const numValue = value === "" ? undefined : Number(value);
+    let numValue: number | undefined;
+    if (value === "") {
+      numValue = undefined;
+    } else {
+      const parsed = Number(value);
+      if (Number.isNaN(parsed)) {
+        numValue = undefined;
+      } else if (field === "rpe") {
+        const clamped = Math.min(10, Math.max(1, Math.round(parsed)));
+        numValue = clamped;
+      } else if (field === "reps") {
+        const clamped = Math.max(0, Math.round(parsed));
+        numValue = clamped;
+      } else {
+        const clamped = Math.max(0, parsed);
+        numValue = clamped;
+      }
+    }
     updatedSets[setIndex] = {
       ...updatedSets[setIndex],
       [field]: numValue,

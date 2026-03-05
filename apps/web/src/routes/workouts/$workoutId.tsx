@@ -92,6 +92,9 @@ function RouteComponent() {
       onSuccess: () => {
         alert("Workout saved as template!");
       },
+      onError: (error) => {
+        toast.error(error.message || "Failed to save workout as template");
+      },
     }),
   );
 
@@ -119,8 +122,9 @@ function RouteComponent() {
 
   const handleSaveAsTemplate = () => {
     const name = prompt("Enter template name:");
-    if (name) {
-      saveAsTemplate.mutate({ workoutId, name });
+    const trimmedName = name?.trim();
+    if (trimmedName) {
+      saveAsTemplate.mutate({ workoutId, name: trimmedName });
     }
   };
 

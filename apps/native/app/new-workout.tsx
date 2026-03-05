@@ -15,12 +15,17 @@ import {
 } from "react-native";
 
 import { trpc } from "@/utils/trpc";
-import type { WorkoutFormData } from "@src/api/lib/workout-utils";
+import type {
+  ApiTemplateForWorkoutPrefill,
+  WorkoutFormData,
+} from "@src/api/lib/workout-utils";
 import {
   calculateTotalVolume,
   createBlankExercise,
   formatVolume,
   formDataToApiInput,
+  normalizeDateToLocalNoon,
+  reconcileUnknownExerciseNames,
   templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/workout-utils";
@@ -86,11 +91,14 @@ export default function NewWorkoutScreen() {
     if (!selectedTemplateId || !templateQuery.data) return;
     if (appliedTemplateId === selectedTemplateId) return;
     setFormData(
-      templateToWorkoutFormData(templateQuery.data as any, {
+      templateToWorkoutFormData(
+        templateQuery.data as ApiTemplateForWorkoutPrefill,
+        {
         exerciseNameById,
         suggestionsByExerciseId,
         date: new Date(),
-      }),
+      },
+      ),
     );
     setAppliedTemplateId(selectedTemplateId);
   }, [
@@ -100,6 +108,11 @@ export default function NewWorkoutScreen() {
     exerciseNameById,
     suggestionsByExerciseId,
   ]);
+
+  useEffect(() => {
+    if (!Object.keys(exerciseNameById).length) return;
+    setFormData((prev) => reconcileUnknownExerciseNames(prev, exerciseNameById));
+  }, [exerciseNameById]);
 
   const createWorkout = useMutation(
     trpc.workouts.create.mutationOptions({
@@ -312,7 +325,10 @@ export default function NewWorkoutScreen() {
               onChange={(_event, selectedDate) => {
                 setShowDatePicker(Platform.OS === "ios");
                 if (selectedDate) {
-                  setFormData((prev) => ({ ...prev, date: selectedDate }));
+                  setFormData((prev) => ({
+                    ...prev,
+                    date: normalizeDateToLocalNoon(selectedDate),
+                  }));
                 }
               }}
             />

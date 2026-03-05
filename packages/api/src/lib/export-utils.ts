@@ -1,6 +1,7 @@
 export function escapeCsvValue(value: unknown): string {
   if (value == null) return "";
-  const text = String(value);
+  const unsafeText = String(value);
+  const text = /^[=+\-@]/.test(unsafeText) ? `'${unsafeText}` : unsafeText;
   if (/[",\n]/.test(text)) {
     return `"${text.replaceAll('"', '""')}"`;
   }

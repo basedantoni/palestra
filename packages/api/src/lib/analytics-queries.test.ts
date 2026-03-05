@@ -7,6 +7,9 @@ import {
   groupPersonalRecordsByExercise,
 } from "./analytics-queries";
 
+const localNoon = (year: number, month: number, day: number): Date =>
+  new Date(year, month - 1, day, 12, 0, 0);
+
 // ---------------------------------------------------------------------------
 // aggregateVolumeByWeek
 // ---------------------------------------------------------------------------
@@ -219,9 +222,9 @@ describe("buildFrequencyMap", () => {
 
   it("returns one entry per unique date", () => {
     const workouts = [
-      { date: new Date("2026-03-01"), totalVolume: 1000, durationMinutes: 60 },
-      { date: new Date("2026-03-02"), totalVolume: 900, durationMinutes: 45 },
-      { date: new Date("2026-03-03"), totalVolume: 800, durationMinutes: 50 },
+      { date: localNoon(2026, 3, 1), totalVolume: 1000, durationMinutes: 60 },
+      { date: localNoon(2026, 3, 2), totalVolume: 900, durationMinutes: 45 },
+      { date: localNoon(2026, 3, 3), totalVolume: 800, durationMinutes: 50 },
     ];
     const result = buildFrequencyMap(workouts);
     expect(result).toHaveLength(3);
@@ -229,8 +232,8 @@ describe("buildFrequencyMap", () => {
 
   it("aggregates multiple workouts on same date — sums volume, sums duration, increments count", () => {
     const workouts = [
-      { date: new Date("2026-03-01"), totalVolume: 1000, durationMinutes: 60 },
-      { date: new Date("2026-03-01"), totalVolume: 500, durationMinutes: 30 },
+      { date: localNoon(2026, 3, 1), totalVolume: 1000, durationMinutes: 60 },
+      { date: localNoon(2026, 3, 1), totalVolume: 500, durationMinutes: 30 },
     ];
     const result = buildFrequencyMap(workouts);
     expect(result).toHaveLength(1);
@@ -241,7 +244,7 @@ describe("buildFrequencyMap", () => {
 
   it("handles null volume and duration gracefully", () => {
     const workouts = [
-      { date: new Date("2026-03-01"), totalVolume: null, durationMinutes: null },
+      { date: localNoon(2026, 3, 1), totalVolume: null, durationMinutes: null },
     ];
     const result = buildFrequencyMap(workouts);
     expect(result).toHaveLength(1);
@@ -252,9 +255,9 @@ describe("buildFrequencyMap", () => {
 
   it("sorts output by date ascending", () => {
     const workouts = [
-      { date: new Date("2026-03-03"), totalVolume: 800, durationMinutes: 50 },
-      { date: new Date("2026-03-01"), totalVolume: 1000, durationMinutes: 60 },
-      { date: new Date("2026-03-02"), totalVolume: 900, durationMinutes: 45 },
+      { date: localNoon(2026, 3, 3), totalVolume: 800, durationMinutes: 50 },
+      { date: localNoon(2026, 3, 1), totalVolume: 1000, durationMinutes: 60 },
+      { date: localNoon(2026, 3, 2), totalVolume: 900, durationMinutes: 45 },
     ];
     const result = buildFrequencyMap(workouts);
     expect(result[0]!.date).toBe("2026-03-01");

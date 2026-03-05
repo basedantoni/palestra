@@ -107,6 +107,18 @@ export interface ExerciseProgressionSuggestion {
   };
 }
 
+export function normalizeDateToLocalNoon(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    12,
+    0,
+    0,
+    0,
+  );
+}
+
 // Volume calculation (client-side)
 export function calculateSetVolume(set: WorkoutSetFormData): number {
   const reps = set.reps ?? 0;
@@ -170,9 +182,10 @@ export function formDataToApiInput(form: WorkoutFormData) {
     (ex) => ex.exerciseName.trim() !== "",
   );
   const totalVolume = calculateTotalVolume(exercises);
+  const selectedDate = normalizeDateToLocalNoon(form.date ?? new Date());
 
   return {
-    date: form.date ?? new Date(),
+    date: selectedDate,
     workoutType: form.workoutType,
     notes: form.notes || undefined,
     templateId: form.templateId,
@@ -307,6 +320,31 @@ export function templateToWorkoutFormData(
           notes: "",
         };
       }),
+  };
+}
+
+export function reconcileUnknownExerciseNames(
+  form: WorkoutFormData,
+  exerciseNameById: Record<string, string>,
+): WorkoutFormData {
+  let updated = false;
+  const exercises = form.exercises.map((exercise) => {
+    if (!exercise.exerciseId || exercise.exerciseName !== "Unknown Exercise") {
+      return exercise;
+    }
+    const resolved = exerciseNameById[exercise.exerciseId];
+    if (!resolved) return exercise;
+    updated = true;
+    return {
+      ...exercise,
+      exerciseName: resolved,
+    };
+  });
+
+  if (!updated) return form;
+  return {
+    ...form,
+    exercises,
   };
 }
 

@@ -52,15 +52,15 @@ describe("workout-history-calendar", () => {
         new Date("2026-03-15T12:00:00.000Z"),
       );
 
-      expect(startDate.getDate()).toBe(1);
-      expect(startDate.getHours()).toBe(0);
-      expect(startDate.getMinutes()).toBe(0);
-      expect(startDate.getSeconds()).toBe(0);
+      expect(startDate.getUTCDate()).toBe(1);
+      expect(startDate.getUTCHours()).toBe(0);
+      expect(startDate.getUTCMinutes()).toBe(0);
+      expect(startDate.getUTCSeconds()).toBe(0);
 
-      expect(endDate.getMonth()).toBe(startDate.getMonth());
-      expect(endDate.getHours()).toBe(23);
-      expect(endDate.getMinutes()).toBe(59);
-      expect(endDate.getSeconds()).toBe(59);
+      expect(endDate.getUTCMonth()).toBe(startDate.getUTCMonth());
+      expect(endDate.getUTCHours()).toBe(23);
+      expect(endDate.getUTCMinutes()).toBe(59);
+      expect(endDate.getUTCSeconds()).toBe(59);
     });
   });
 });

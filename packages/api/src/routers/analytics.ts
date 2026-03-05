@@ -16,8 +16,15 @@ import {
   aggregateVolumeByMonth,
   calculateStreaks,
   buildFrequencyMap,
+  getTodayLocalDateString,
   groupPersonalRecordsByExercise,
 } from "../lib/analytics-queries";
+
+function toLocalDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
 
 export const analyticsRouter = router({
   personalRecords: protectedProcedure
@@ -250,7 +257,7 @@ export const analyticsRouter = router({
 
       const days = buildFrequencyMap(rows);
 
-      const today = new Date().toISOString().split("T")[0] ?? "";
+      const today = getTodayLocalDateString();
       const sortedDates = days.map((d) => d.date);
       const streaks = calculateStreaks(sortedDates, today);
 
@@ -265,10 +272,10 @@ export const analyticsRouter = router({
 
     const dates = rows.map((r) => {
       const d = r.date;
-      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      return toLocalDateKey(d);
     });
 
-    const today = new Date().toISOString().split("T")[0] ?? "";
+    const today = getTodayLocalDateString();
 
     return calculateStreaks(dates, today);
   }),

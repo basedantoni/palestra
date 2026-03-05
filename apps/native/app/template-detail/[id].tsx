@@ -12,6 +12,7 @@ import { Container } from "@/components/container";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { trpc } from "@/utils/trpc";
 import {
+  type ApiTemplateForEdit,
   apiTemplateToFormData,
   templateFormToApiInput,
 } from "@src/api/lib/template-utils";
@@ -49,6 +50,9 @@ export default function TemplateDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [formData, setFormData] = useState<TemplateFormData | null>(null);
+  const [initializedTemplateId, setInitializedTemplateId] = useState<string | null>(
+    null,
+  );
 
   const template = useQuery(trpc.templates.get.queryOptions({ id }));
   const exercises = useQuery(trpc.exercises.list.queryOptions());
@@ -60,10 +64,45 @@ export default function TemplateDetailScreen() {
   }, [exercises.data]);
 
   useEffect(() => {
-    if (template.data) {
-      setFormData(apiTemplateToFormData(template.data as any, exerciseNameById));
+    if (template.data && initializedTemplateId !== template.data.id) {
+      setFormData(
+        apiTemplateToFormData(
+          template.data as ApiTemplateForEdit,
+          exerciseNameById,
+        ),
+      );
+      setInitializedTemplateId(template.data.id);
     }
-  }, [template.data, exerciseNameById]);
+  }, [template.data, exerciseNameById, initializedTemplateId]);
+
+  useEffect(() => {
+    if (!formData) return;
+    if (!Object.keys(exerciseNameById).length) return;
+    setFormData((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const exercises = prev.exercises.map((exercise) => {
+        if (
+          exercise.exerciseName !== "Unknown Exercise" ||
+          !exercise.exerciseId
+        ) {
+          return exercise;
+        }
+        const resolved = exerciseNameById[exercise.exerciseId];
+        if (!resolved) return exercise;
+        changed = true;
+        return {
+          ...exercise,
+          exerciseName: resolved,
+        };
+      });
+      if (!changed) return prev;
+      return {
+        ...prev,
+        exercises,
+      };
+    });
+  }, [exerciseNameById, formData]);
 
   const updateTemplate = useMutation(
     trpc.templates.update.mutationOptions({

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Card } from "heroui-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,8 +12,19 @@ import {
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/workout-utils";
 
+type WorkoutSummaryItem = {
+  id: string;
+  date: Date | string;
+  workoutType: string;
+  exerciseCount: number;
+  exerciseNames: string[];
+  totalVolume: number | null;
+  notes: string | null;
+};
+
 export default function WorkoutsTab() {
   const [page, setPage] = useState(0);
+  const [allWorkouts, setAllWorkouts] = useState<WorkoutSummaryItem[]>([]);
   const limit = 20;
 
   const workouts = useQuery(
@@ -26,6 +37,21 @@ export default function WorkoutsTab() {
   const overload = useQuery(
     trpc.analytics.progressiveOverload.queryOptions(),
   );
+
+  useEffect(() => {
+    if (!workouts.data) return;
+    if (page === 0) {
+      setAllWorkouts(workouts.data);
+      return;
+    }
+    setAllWorkouts((prev) => {
+      const map = new Map(prev.map((item) => [item.id, item]));
+      for (const workout of workouts.data) {
+        map.set(workout.id, workout);
+      }
+      return Array.from(map.values());
+    });
+  }, [workouts.data, page]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -58,9 +84,9 @@ export default function WorkoutsTab() {
             <Text className="text-muted">Loading workouts...</Text>
           </View>
         </>
-      ) : workouts.data && workouts.data.length > 0 ? (
+      ) : allWorkouts.length > 0 ? (
         <FlatList
-          data={workouts.data}
+          data={allWorkouts}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <Pressable
@@ -134,7 +160,7 @@ export default function WorkoutsTab() {
                               | "plateau"
                               | "declining"
                           }
-                          suggestion={item.suggestion as any}
+                          suggestion={item.suggestion}
                           compact
                         />
                       ) : null}

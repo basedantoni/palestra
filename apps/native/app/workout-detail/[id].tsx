@@ -5,6 +5,7 @@ import { Button, Card } from "heroui-native";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +20,7 @@ import { ExerciseCard } from "@/components/workout/exercise-card";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { trpc } from "@/utils/trpc";
 import {
+  type ApiWorkoutForEdit,
   apiWorkoutToFormData,
   calculateSetVolume,
   calculateTotalVolume,
@@ -38,6 +40,8 @@ export default function WorkoutDetailScreen() {
   );
   const [formData, setFormData] = useState<WorkoutFormData | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(Platform.OS === "ios");
+  const [showTemplateNameModal, setShowTemplateNameModal] = useState(false);
+  const [templateName, setTemplateName] = useState("");
 
   const { data: workout, isLoading, refetch } = useQuery(
     trpc.workouts.get.queryOptions({ id }),
@@ -45,7 +49,7 @@ export default function WorkoutDetailScreen() {
 
   useEffect(() => {
     if (workout) {
-      setFormData(apiWorkoutToFormData(workout as any));
+      setFormData(apiWorkoutToFormData(workout as ApiWorkoutForEdit));
     }
   }, [workout]);
 
@@ -103,33 +107,29 @@ export default function WorkoutDetailScreen() {
   };
 
   const handleSaveAsTemplate = () => {
-    Alert.prompt(
-      "Save as Template",
-      "Enter a name for this template:",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Save",
-          onPress: (name?: string) => {
-            if (name && name.trim()) {
-              saveAsTemplate.mutate({ workoutId: id, name: name.trim() });
-            }
-          },
-        },
-      ],
-      "plain-text",
-    );
+    setTemplateName(`${formatDate(workout?.date ?? new Date())} Template`);
+    setShowTemplateNameModal(true);
+  };
+
+  const handleConfirmSaveAsTemplate = () => {
+    const trimmedName = templateName.trim();
+    if (!trimmedName) {
+      Alert.alert("Template name required", "Please enter a template name.");
+      return;
+    }
+    saveAsTemplate.mutate({ workoutId: id, name: trimmedName });
+    setShowTemplateNameModal(false);
   };
 
   const handleStartEdit = () => {
     if (!workout) return;
-    setFormData(apiWorkoutToFormData(workout as any));
+    setFormData(apiWorkoutToFormData(workout as ApiWorkoutForEdit));
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     if (workout) {
-      setFormData(apiWorkoutToFormData(workout as any));
+      setFormData(apiWorkoutToFormData(workout as ApiWorkoutForEdit));
     }
     setIsEditing(false);
   };
@@ -467,6 +467,48 @@ export default function WorkoutDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showTemplateNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTemplateNameModal(false)}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="w-full max-w-md rounded-xl bg-background p-4 border border-border">
+            <Text className="text-base font-semibold text-foreground mb-1">
+              Save as Template
+            </Text>
+            <Text className="text-sm text-muted mb-3">
+              Enter a name for this template
+            </Text>
+            <TextInput
+              className="border border-border rounded-lg px-3 py-2 text-foreground bg-background"
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="Template name"
+              placeholderTextColor="#999"
+              autoFocus
+            />
+            <View className="mt-4 flex-row justify-end gap-2">
+              <Button
+                variant="secondary"
+                onPress={() => setShowTemplateNameModal(false)}
+              >
+                <Button.Label>Cancel</Button.Label>
+              </Button>
+              <Button
+                onPress={handleConfirmSaveAsTemplate}
+                isDisabled={saveAsTemplate.isPending}
+              >
+                <Button.Label>
+                  {saveAsTemplate.isPending ? "Saving..." : "Save"}
+                </Button.Label>
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ExercisePicker
         isOpen={showExercisePicker}

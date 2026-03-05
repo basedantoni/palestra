@@ -29,6 +29,8 @@ export async function recalculateProgressiveOverload(
   userId: string,
   exerciseIds: string[],
 ): Promise<void> {
+  const uniqueExerciseIds = Array.from(new Set(exerciseIds));
+
   // 1. Fetch user preferences (plateauThreshold, weightUnit)
   const prefs = await db
     .select({
@@ -44,7 +46,7 @@ export async function recalculateProgressiveOverload(
   const weightUnit: "lbs" | "kg" = prefs[0]?.weightUnit ?? "lbs";
 
   // 2. Process each exerciseId
-  for (const exerciseId of exerciseIds) {
+  for (const exerciseId of uniqueExerciseIds) {
     // a. Look up the exercise and check its type
     const [exerciseRow] = await db
       .select({ exerciseType: exercise.exerciseType })
@@ -129,34 +131,11 @@ export async function recalculateProgressiveOverload(
       weightUnit,
     });
 
-    // e. Upsert into progressive_overload_state using select-then-insert/update.
-    //    The table uses a UUID PK (not a composite unique key), so we do a manual upsert.
+    // e. Atomic upsert by (userId, exerciseId) to avoid duplicate rows on concurrent writers.
     const now = new Date();
-
-    const [existing] = await db
-      .select({ id: progressiveOverloadState.id })
-      .from(progressiveOverloadState)
-      .where(
-        and(
-          eq(progressiveOverloadState.userId, userId),
-          eq(progressiveOverloadState.exerciseId, exerciseId),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(progressiveOverloadState)
-        .set({
-          trendStatus: analysis.trendStatus,
-          plateauCount: analysis.plateauCount,
-          nextSuggestedProgression: analysis.suggestion,
-          lastCalculatedAt: now,
-          last10Workouts: snapshots,
-        })
-        .where(eq(progressiveOverloadState.id, existing.id));
-    } else {
-      await db.insert(progressiveOverloadState).values({
+    await db
+      .insert(progressiveOverloadState)
+      .values({
         id: crypto.randomUUID(),
         userId,
         exerciseId,
@@ -165,7 +144,19 @@ export async function recalculateProgressiveOverload(
         nextSuggestedProgression: analysis.suggestion,
         lastCalculatedAt: now,
         last10Workouts: snapshots,
+      })
+      .onConflictDoUpdate({
+        target: [
+          progressiveOverloadState.userId,
+          progressiveOverloadState.exerciseId,
+        ],
+        set: {
+          trendStatus: analysis.trendStatus,
+          plateauCount: analysis.plateauCount,
+          nextSuggestedProgression: analysis.suggestion,
+          lastCalculatedAt: now,
+          last10Workouts: snapshots,
+        },
       });
-    }
   }
 }

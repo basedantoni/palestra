@@ -49,11 +49,20 @@ export function getLocalMonthRange(anchorDate: Date): {
   startDate: Date;
   endDate: Date;
 } {
-  const startDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
-  startDate.setHours(0, 0, 0, 0);
-
-  const endDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = new Date(
+    Date.UTC(anchorDate.getFullYear(), anchorDate.getMonth(), 1, 0, 0, 0, 0),
+  );
+  const endDate = new Date(
+    Date.UTC(
+      anchorDate.getFullYear(),
+      anchorDate.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
 
   return { startDate, endDate };
 }

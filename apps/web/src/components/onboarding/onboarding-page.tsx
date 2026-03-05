@@ -1,4 +1,3 @@
-import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
@@ -6,7 +5,6 @@ import { toast } from "sonner";
 
 import { trpc } from "@/utils/trpc";
 import {
-  onboardingSchema,
   STEP_FIELD_NAMES,
   TOTAL_STEPS,
   type OnboardingFormData,
@@ -17,13 +15,13 @@ import StepWorkouts from "./step-workouts";
 import StepMetrics from "./step-metrics";
 import StepPreferences from "./step-preferences";
 import OnboardingProgress from "./onboarding-progress";
+import { useOnboardingForm } from "./use-onboarding-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const navigate = useNavigate();
-
   const saveMutation = useMutation(
     trpc.preferences.upsert.mutationOptions({
       onSuccess: () => {
@@ -36,38 +34,12 @@ export default function OnboardingPage() {
     })
   );
 
-  const form = useForm({
-    defaultValues: {
-      fitnessGoal: "general_fitness",
-      experienceLevel: "beginner",
-      preferredWorkoutTypes: [] as string[],
-      gender: undefined as string | undefined,
-      birthYear: undefined as number | undefined,
-      heightCm: undefined as number | undefined,
-      weightKg: undefined as number | undefined,
-      weightUnit: "lbs",
-      distanceUnit: "mi",
-      muscleGroupSystem: "bodybuilding",
-      theme: "dark",
-    },
-    onSubmit: async ({ value }) => {
+  const form = useOnboardingForm(async (value) => {
       saveMutation.mutate({
         ...value,
-        fitnessGoal: value.fitnessGoal as OnboardingFormData["fitnessGoal"],
-        experienceLevel: value.experienceLevel as OnboardingFormData["experienceLevel"],
-        preferredWorkoutTypes: value.preferredWorkoutTypes as OnboardingFormData["preferredWorkoutTypes"],
-        gender: value.gender as OnboardingFormData["gender"],
-        weightUnit: value.weightUnit as OnboardingFormData["weightUnit"],
-        distanceUnit: value.distanceUnit as OnboardingFormData["distanceUnit"],
-        muscleGroupSystem: value.muscleGroupSystem as OnboardingFormData["muscleGroupSystem"],
-        theme: value.theme as OnboardingFormData["theme"],
         plateauThreshold: 3,
         onboardingCompleted: true,
       });
-    },
-    validators: {
-      onSubmit: onboardingSchema,
-    },
   });
 
   const handleNext = useCallback(async () => {

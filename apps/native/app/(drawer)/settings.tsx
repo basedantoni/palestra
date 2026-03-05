@@ -48,9 +48,7 @@ export default function SettingsScreen() {
   const saveMutation = useMutation(
     trpc.preferences.upsert.mutationOptions({
       onSuccess: () => {
-        if (formData.theme === "light" || formData.theme === "dark") {
-          setTheme(formData.theme);
-        }
+        setTheme(formData.theme);
         Alert.alert("Success", "Settings updated");
       },
       onError: (error) => {
