@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+**/dist
+**/.turbo
+
+# Native app (not needed for server build)
+apps/native
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Dev tooling
+**/*.log
+.git
+.gitignore
+*.md
+
+# Docker
+Dockerfile
+.dockerignore
