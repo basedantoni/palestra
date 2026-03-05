@@ -6,6 +6,8 @@ import {
   createBlankSet,
   createBlankExercise,
   formDataToApiInput,
+  apiWorkoutToFormData,
+  templateToWorkoutFormData,
   formatVolume,
   formatDuration,
   WORKOUT_TYPE_LABELS,
@@ -672,6 +674,158 @@ describe("workout-utils", () => {
       expect(EXERCISE_CATEGORY_LABELS).toHaveProperty("core");
       expect(EXERCISE_CATEGORY_LABELS).toHaveProperty("cardio");
       expect(EXERCISE_CATEGORY_LABELS).toHaveProperty("other");
+    });
+  });
+
+  describe("apiWorkoutToFormData", () => {
+    it("should map workout payload into editable form shape", () => {
+      const workout = {
+        workoutType: "weightlifting" as const,
+        notes: "Heavy day",
+        templateId: "template-1",
+        date: new Date("2026-01-10T12:00:00.000Z"),
+        logs: [
+          {
+            exerciseId: "exercise-1",
+            exerciseName: "Bench Press",
+            order: 0,
+            rounds: null,
+            workDurationSeconds: null,
+            restDurationSeconds: null,
+            intensity: null,
+            distance: null,
+            durationSeconds: null,
+            pace: null,
+            heartRate: null,
+            durationMinutes: null,
+            notes: "Top set felt good",
+            sets: [
+              { setNumber: 1, reps: 10, weight: 135, rpe: 7 },
+              { setNumber: 2, reps: 8, weight: 145, rpe: 8 },
+            ],
+          },
+        ],
+      };
+
+      const form = apiWorkoutToFormData(workout);
+
+      expect(form.workoutType).toBe("weightlifting");
+      expect(form.notes).toBe("Heavy day");
+      expect(form.templateId).toBe("template-1");
+      expect(form.date?.toISOString()).toBe("2026-01-10T12:00:00.000Z");
+      expect(form.exercises).toHaveLength(1);
+      expect(form.exercises[0]?.exerciseName).toBe("Bench Press");
+      expect(form.exercises[0]?.sets).toHaveLength(2);
+      expect(form.exercises[0]?.sets[0]?.reps).toBe(10);
+      expect(form.exercises[0]?.sets[1]?.weight).toBe(145);
+    });
+
+    it("should add one blank set when a workout log has no sets", () => {
+      const workout = {
+        workoutType: "cardio" as const,
+        notes: null,
+        templateId: null,
+        date: "2026-01-10T12:00:00.000Z",
+        logs: [
+          {
+            exerciseId: null,
+            exerciseName: "Run",
+            order: 0,
+            rounds: null,
+            workDurationSeconds: null,
+            restDurationSeconds: null,
+            intensity: null,
+            distance: 5,
+            durationSeconds: 1800,
+            pace: 6,
+            heartRate: 150,
+            durationMinutes: 30,
+            notes: null,
+            sets: [],
+          },
+        ],
+      };
+
+      const form = apiWorkoutToFormData(workout);
+
+      expect(form.exercises[0]?.sets).toHaveLength(1);
+      expect(form.exercises[0]?.sets[0]?.setNumber).toBe(1);
+      expect(form.exercises[0]?.sets[0]?.reps).toBeUndefined();
+      expect(form.exercises[0]?.sets[0]?.weight).toBeUndefined();
+    });
+  });
+
+  describe("templateToWorkoutFormData", () => {
+    it("should prefill workout exercises from template and apply progression weight/reps", () => {
+      const form = templateToWorkoutFormData(
+        {
+          id: "template-1",
+          workoutType: "weightlifting",
+          notes: "Push day",
+          exercises: [
+            { exerciseId: "ex-1", order: 0, defaultSets: 3 },
+            { exerciseId: "ex-2", order: 1, defaultSets: 2 },
+          ],
+        },
+        {
+          exerciseNameById: {
+            "ex-1": "Bench Press",
+            "ex-2": "Dumbbell Press",
+          },
+          suggestionsByExerciseId: {
+            "ex-1": {
+              type: "increase_weight",
+              details: {
+                currentValue: 135,
+                suggestedValue: 140,
+                unit: "lbs",
+              },
+            },
+            "ex-2": {
+              type: "increase_reps",
+              details: {
+                currentValue: 8,
+                suggestedValue: 9,
+                unit: "reps",
+              },
+            },
+          },
+          date: new Date("2026-01-15T12:00:00.000Z"),
+        },
+      );
+
+      expect(form.templateId).toBe("template-1");
+      expect(form.notes).toBe("Push day");
+      expect(form.exercises).toHaveLength(2);
+      expect(form.exercises[0]?.exerciseName).toBe("Bench Press");
+      expect(form.exercises[0]?.sets).toHaveLength(3);
+      expect(form.exercises[0]?.sets[0]?.weight).toBe(140);
+      expect(form.exercises[1]?.sets[0]?.reps).toBe(9);
+    });
+
+    it("should use add_set suggestion to increase set count", () => {
+      const form = templateToWorkoutFormData(
+        {
+          id: "template-2",
+          workoutType: "weightlifting",
+          notes: null,
+          exercises: [{ exerciseId: "ex-3", order: 0, defaultSets: 3 }],
+        },
+        {
+          suggestionsByExerciseId: {
+            "ex-3": {
+              type: "add_set",
+              details: {
+                currentValue: 3,
+                suggestedValue: 4,
+                unit: "sets",
+              },
+            },
+          },
+        },
+      );
+
+      expect(form.exercises[0]?.sets).toHaveLength(4);
     });
   });
 });

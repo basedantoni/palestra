@@ -2,22 +2,52 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button, Card } from "heroui-native";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { Container } from "@/components/container";
+import { ExerciseCard } from "@/components/workout/exercise-card";
+import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { trpc } from "@/utils/trpc";
 import {
+  apiWorkoutToFormData,
   calculateSetVolume,
+  calculateTotalVolume,
+  createBlankExercise,
   formatVolume,
+  formDataToApiInput,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/workout-utils";
+import type { WorkoutFormData } from "@src/api/lib/workout-utils";
 
 export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [isEditing, setIsEditing] = useState(false);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(
+    null,
+  );
+  const [formData, setFormData] = useState<WorkoutFormData | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(Platform.OS === "ios");
 
-  const { data: workout, isLoading } = useQuery(
+  const { data: workout, isLoading, refetch } = useQuery(
     trpc.workouts.get.queryOptions({ id }),
   );
+
+  useEffect(() => {
+    if (workout) {
+      setFormData(apiWorkoutToFormData(workout as any));
+    }
+  }, [workout]);
 
   const deleteWorkout = useMutation(
     trpc.workouts.delete.mutationOptions({
@@ -40,6 +70,19 @@ export default function WorkoutDetailScreen() {
           "Error",
           error.message || "Failed to save as template",
         );
+      },
+    }),
+  );
+
+  const updateWorkout = useMutation(
+    trpc.workouts.update.mutationOptions({
+      onSuccess: async () => {
+        setIsEditing(false);
+        Alert.alert("Success", "Workout updated");
+        await refetch();
+      },
+      onError: (error) => {
+        Alert.alert("Error", error.message || "Failed to update workout");
       },
     }),
   );
@@ -76,6 +119,76 @@ export default function WorkoutDetailScreen() {
       ],
       "plain-text",
     );
+  };
+
+  const handleStartEdit = () => {
+    if (!workout) return;
+    setFormData(apiWorkoutToFormData(workout as any));
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (workout) {
+      setFormData(apiWorkoutToFormData(workout as any));
+    }
+    setIsEditing(false);
+  };
+
+  const handleAddExercise = () => {
+    if (!formData) return;
+    setEditingExerciseIndex(formData.exercises.length);
+    setShowExercisePicker(true);
+  };
+
+  const handleChangeExercise = (index: number) => {
+    setEditingExerciseIndex(index);
+    setShowExercisePicker(true);
+  };
+
+  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+    if (!formData || editingExerciseIndex === null) return;
+
+    const updatedExercises = [...formData.exercises];
+    if (editingExerciseIndex >= updatedExercises.length) {
+      updatedExercises.push({
+        ...createBlankExercise(updatedExercises.length),
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+      });
+    } else {
+      updatedExercises[editingExerciseIndex] = {
+        ...updatedExercises[editingExerciseIndex],
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+      };
+    }
+
+    setFormData({ ...formData, exercises: updatedExercises });
+    setShowExercisePicker(false);
+  };
+
+  const handleUpdateExercise = (
+    index: number,
+    updated: WorkoutFormData["exercises"][0],
+  ) => {
+    if (!formData) return;
+    const updatedExercises = [...formData.exercises];
+    updatedExercises[index] = updated;
+    setFormData({ ...formData, exercises: updatedExercises });
+  };
+
+  const handleRemoveExercise = (index: number) => {
+    if (!formData) return;
+    const updatedExercises = formData.exercises
+      .filter((_, i) => i !== index)
+      .map((ex, i) => ({ ...ex, order: i }));
+    setFormData({ ...formData, exercises: updatedExercises });
+  };
+
+  const handleSaveEdit = () => {
+    if (!formData) return;
+    const payload = formDataToApiInput(formData);
+    updateWorkout.mutate({ id, ...payload });
   };
 
   const formatDate = (date: Date | string) => {
@@ -119,27 +232,113 @@ export default function WorkoutDetailScreen() {
             <Text className="text-2xl font-bold text-foreground">
               {formatDate(workout.date)}
             </Text>
-            <Pressable onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={24} color="#999" />
-            </Pressable>
+            {isEditing ? (
+              <View className="flex-row items-center gap-3">
+                <Pressable onPress={handleCancelEdit}>
+                  <Text className="text-sm text-primary">Cancel</Text>
+                </Pressable>
+                <Pressable onPress={handleSaveEdit}>
+                  <Text className="text-sm text-primary font-medium">
+                    {updateWorkout.isPending ? "Saving..." : "Save"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View className="flex-row items-center gap-3">
+                <Pressable onPress={handleStartEdit}>
+                  <Ionicons name="create-outline" size={24} color="#999" />
+                </Pressable>
+                <Pressable onPress={handleDelete}>
+                  <Ionicons name="trash-outline" size={24} color="#999" />
+                </Pressable>
+              </View>
+            )}
           </View>
 
-          <View className="flex-row items-center gap-2 mb-4">
-            <View className="bg-primary/10 px-3 py-1 rounded-full">
-              <Text className="text-sm text-primary font-medium">
-                {WORKOUT_TYPE_LABELS[workout.workoutType] || workout.workoutType}
-              </Text>
+          {isEditing && formData ? (
+            <View className="mb-4 gap-3">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2">
+                  {Object.entries(WORKOUT_TYPE_LABELS).map(([key, label]) => (
+                    <Pressable
+                      key={key}
+                      onPress={() =>
+                        setFormData({
+                          ...formData,
+                          workoutType: key as WorkoutFormData["workoutType"],
+                        })
+                      }
+                      className={
+                        formData.workoutType === key
+                          ? "px-3 py-1 rounded-full bg-primary"
+                          : "px-3 py-1 rounded-full bg-secondary"
+                      }
+                    >
+                      <Text
+                        className={
+                          formData.workoutType === key
+                            ? "text-primary-foreground text-sm font-medium"
+                            : "text-secondary-foreground text-sm"
+                        }
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {Platform.OS === "android" && (
+                <Pressable onPress={() => setShowDatePicker(true)}>
+                  <Text className="text-foreground text-base py-2 px-3 border border-border rounded-lg">
+                    {(formData.date ?? new Date()).toLocaleDateString()}
+                  </Text>
+                </Pressable>
+              )}
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={formData.date ?? new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "compact" : "default"}
+                  maximumDate={new Date()}
+                  onChange={(_event, selectedDate) => {
+                    setShowDatePicker(Platform.OS === "ios");
+                    if (selectedDate) {
+                      setFormData({ ...formData, date: selectedDate });
+                    }
+                  }}
+                />
+              )}
             </View>
-            {workout.totalVolume ? (
-              <View className="bg-secondary px-3 py-1 rounded-full">
-                <Text className="text-sm text-secondary-foreground font-medium">
-                  {formatVolume(workout.totalVolume)}
+          ) : (
+            <View className="flex-row items-center gap-2 mb-4">
+              <View className="bg-primary/10 px-3 py-1 rounded-full">
+                <Text className="text-sm text-primary font-medium">
+                  {WORKOUT_TYPE_LABELS[workout.workoutType] || workout.workoutType}
                 </Text>
               </View>
-            ) : null}
-          </View>
+              {workout.totalVolume ? (
+                <View className="bg-secondary px-3 py-1 rounded-full">
+                  <Text className="text-sm text-secondary-foreground font-medium">
+                    {formatVolume(workout.totalVolume)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
 
-          {workout.notes ? (
+          {isEditing && formData ? (
+            <TextInput
+              className="border border-border rounded-lg p-3 text-foreground bg-background min-h-[100px]"
+              multiline
+              placeholder="Add any notes about this workout..."
+              placeholderTextColor="#999"
+              value={formData.notes}
+              onChangeText={(text) => setFormData({ ...formData, notes: text })}
+              textAlignVertical="top"
+            />
+          ) : workout.notes ? (
             <View className="bg-secondary p-3 rounded-lg mb-4">
               <Text className="text-sm text-secondary-foreground">
                 {workout.notes}
@@ -150,11 +349,32 @@ export default function WorkoutDetailScreen() {
 
         {/* Exercises */}
         <View className="px-6 pb-6">
-          <Text className="text-lg font-semibold text-foreground mb-4">
-            Exercises
-          </Text>
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-lg font-semibold text-foreground">Exercises</Text>
+            {isEditing && formData && calculateTotalVolume(formData.exercises) > 0 ? (
+              <Text className="text-sm text-muted">
+                Total Volume: {formatVolume(calculateTotalVolume(formData.exercises))}
+              </Text>
+            ) : null}
+          </View>
 
-          {workout.logs && workout.logs.length > 0 ? (
+          {isEditing && formData ? (
+            <View className="gap-4">
+              {formData.exercises.map((exercise, index) => (
+                <ExerciseCard
+                  key={exercise.tempId}
+                  exercise={exercise}
+                  onUpdate={(updated) => handleUpdateExercise(index, updated)}
+                  onRemove={() => handleRemoveExercise(index)}
+                  onChangeExercise={() => handleChangeExercise(index)}
+                />
+              ))}
+
+              <Button onPress={handleAddExercise} variant="secondary">
+                <Button.Label>Add Exercise</Button.Label>
+              </Button>
+            </View>
+          ) : workout.logs && workout.logs.length > 0 ? (
             <View className="gap-4">
               {workout.logs.map((log) => {
                 const exerciseVolume = log.sets.reduce(
@@ -182,7 +402,6 @@ export default function WorkoutDetailScreen() {
 
                     {log.sets && log.sets.length > 0 ? (
                       <View>
-                        {/* Table Header */}
                         <View className="flex-row items-center mb-2 pb-2 border-b border-border">
                           <Text className="text-xs font-medium text-muted w-12 text-center">
                             Set
@@ -198,7 +417,6 @@ export default function WorkoutDetailScreen() {
                           </Text>
                         </View>
 
-                        {/* Table Rows */}
                         {log.sets.map((set) => (
                           <View key={set.id} className="flex-row items-center py-1.5">
                             <Text className="text-sm text-foreground w-12 text-center">
@@ -236,17 +454,25 @@ export default function WorkoutDetailScreen() {
 
         {/* Actions */}
         <View className="px-6 pb-8 gap-3">
-          <Button
-            onPress={handleSaveAsTemplate}
-            variant="secondary"
-            isDisabled={saveAsTemplate.isPending}
-          >
-            <Button.Label>
-              {saveAsTemplate.isPending ? "Saving..." : "Save as Template"}
-            </Button.Label>
-          </Button>
+          {!isEditing ? (
+            <Button
+              onPress={handleSaveAsTemplate}
+              variant="secondary"
+              isDisabled={saveAsTemplate.isPending}
+            >
+              <Button.Label>
+                {saveAsTemplate.isPending ? "Saving..." : "Save as Template"}
+              </Button.Label>
+            </Button>
+          ) : null}
         </View>
       </ScrollView>
+
+      <ExercisePicker
+        isOpen={showExercisePicker}
+        onClose={() => setShowExercisePicker(false)}
+        onSelect={handleSelectExercise}
+      />
     </Container>
   );
 }

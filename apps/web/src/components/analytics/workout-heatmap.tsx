@@ -174,7 +174,9 @@ export function WorkoutHeatmap({
                       key={rowIdx}
                       className={cn(
                         "h-3 w-3 cursor-default rounded-sm",
-                        isEmpty ? "bg-slate-100" : HEATMAP_COLORS[level],
+                        isEmpty
+                          ? "bg-slate-100 dark:bg-slate-800"
+                          : HEATMAP_COLORS[level],
                       )}
                       onMouseEnter={(e) => {
                         if (day) {

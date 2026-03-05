@@ -53,6 +53,60 @@ export interface WorkoutFormData {
   date?: Date;
 }
 
+export interface ApiWorkoutSet {
+  setNumber: number;
+  reps: number | null;
+  weight: number | null;
+  rpe: number | null;
+}
+
+export interface ApiWorkoutLog {
+  exerciseId: string | null;
+  exerciseName: string;
+  order: number;
+  rounds: number | null;
+  workDurationSeconds: number | null;
+  restDurationSeconds: number | null;
+  intensity: number | null;
+  distance: number | null;
+  durationSeconds: number | null;
+  pace: number | null;
+  heartRate: number | null;
+  durationMinutes: number | null;
+  notes: string | null;
+  sets: ApiWorkoutSet[];
+}
+
+export interface ApiWorkoutForEdit {
+  workoutType: WorkoutFormData["workoutType"];
+  notes: string | null;
+  templateId: string | null;
+  date: Date | string;
+  logs: ApiWorkoutLog[];
+}
+
+export interface ApiTemplateExerciseForPrefill {
+  exerciseId: string | null;
+  order: number;
+  defaultSets: number | null;
+}
+
+export interface ApiTemplateForWorkoutPrefill {
+  id: string;
+  workoutType: WorkoutFormData["workoutType"];
+  notes: string | null;
+  exercises: ApiTemplateExerciseForPrefill[];
+}
+
+export interface ExerciseProgressionSuggestion {
+  type: string;
+  details?: {
+    currentValue: number;
+    suggestedValue: number;
+    unit: string;
+  };
+}
+
 // Volume calculation (client-side)
 export function calculateSetVolume(set: WorkoutSetFormData): number {
   const reps = set.reps ?? 0;
@@ -146,6 +200,113 @@ export function formDataToApiInput(form: WorkoutFormData) {
           rpe: s.rpe,
         })),
     })),
+  };
+}
+
+export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormData {
+  return {
+    workoutType: workout.workoutType,
+    notes: workout.notes ?? "",
+    templateId: workout.templateId ?? undefined,
+    date: workout.date instanceof Date ? workout.date : new Date(workout.date),
+    exercises: workout.logs
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((log, index) => ({
+        tempId: generateTempId(),
+        exerciseId: log.exerciseId ?? undefined,
+        exerciseName: log.exerciseName,
+        order: index,
+        sets:
+          log.sets.length > 0
+            ? log.sets.map((set) => ({
+                tempId: generateTempId(),
+                setNumber: set.setNumber,
+                reps: set.reps ?? undefined,
+                weight: set.weight ?? undefined,
+                rpe: set.rpe ?? undefined,
+              }))
+            : [createBlankSet(1)],
+        rounds: log.rounds ?? undefined,
+        workDurationSeconds: log.workDurationSeconds ?? undefined,
+        restDurationSeconds: log.restDurationSeconds ?? undefined,
+        intensity: log.intensity ?? undefined,
+        distance: log.distance ?? undefined,
+        durationSeconds: log.durationSeconds ?? undefined,
+        pace: log.pace ?? undefined,
+        heartRate: log.heartRate ?? undefined,
+        durationMinutes: log.durationMinutes ?? undefined,
+        notes: log.notes ?? "",
+      })),
+  };
+}
+
+export function templateToWorkoutFormData(
+  template: ApiTemplateForWorkoutPrefill,
+  options?: {
+    exerciseNameById?: Record<string, string>;
+    suggestionsByExerciseId?: Record<string, ExerciseProgressionSuggestion | null>;
+    date?: Date;
+  },
+): WorkoutFormData {
+  const exerciseNameById = options?.exerciseNameById ?? {};
+  const suggestionsByExerciseId = options?.suggestionsByExerciseId ?? {};
+
+  return {
+    workoutType: template.workoutType,
+    notes: template.notes ?? "",
+    templateId: template.id,
+    date: options?.date ?? new Date(),
+    exercises: template.exercises
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((exercise, index) => {
+        const suggestion = exercise.exerciseId
+          ? suggestionsByExerciseId[exercise.exerciseId]
+          : null;
+        const suggestedSets =
+          suggestion?.details?.unit === "sets"
+            ? Math.max(
+                exercise.defaultSets ?? 1,
+                Math.max(1, Math.round(suggestion.details.suggestedValue)),
+              )
+            : exercise.defaultSets ?? 1;
+        const suggestedWeight =
+          suggestion?.details &&
+          (suggestion.details.unit === "lbs" || suggestion.details.unit === "kg")
+            ? suggestion.details.suggestedValue
+            : undefined;
+        const suggestedReps =
+          suggestion?.details?.unit === "reps"
+            ? Math.max(1, Math.round(suggestion.details.suggestedValue))
+            : undefined;
+
+        return {
+          tempId: generateTempId(),
+          exerciseId: exercise.exerciseId ?? undefined,
+          exerciseName: exercise.exerciseId
+            ? (exerciseNameById[exercise.exerciseId] ?? "Unknown Exercise")
+            : "Custom Exercise",
+          order: index,
+          sets: Array.from({ length: suggestedSets }, (_, setIndex) => ({
+            tempId: generateTempId(),
+            setNumber: setIndex + 1,
+            reps: suggestedReps,
+            weight: suggestedWeight,
+            rpe: undefined,
+          })),
+          rounds: undefined,
+          workDurationSeconds: undefined,
+          restDurationSeconds: undefined,
+          intensity: undefined,
+          distance: undefined,
+          durationSeconds: undefined,
+          pace: undefined,
+          heartRate: undefined,
+          durationMinutes: undefined,
+          notes: "",
+        };
+      }),
   };
 }
 

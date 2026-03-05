@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { CalendarIcon, Plus } from "lucide-react";
+import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
@@ -30,11 +31,15 @@ import {
   formDataToApiInput,
   calculateTotalVolume,
   formatVolume,
+  templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/index";
 import type { WorkoutFormData } from "@src/api/lib/index";
 
 export const Route = createFileRoute("/workouts/new")({
+  validateSearch: z.object({
+    templateId: z.string().optional(),
+  }),
   component: RouteComponent,
   beforeLoad: async ({ context }) => {
     const session = await authClient.getSession();
@@ -55,11 +60,16 @@ export const Route = createFileRoute("/workouts/new")({
 });
 
 function RouteComponent() {
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<
     number | null
   >(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(
+    search.templateId,
+  );
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | undefined>();
 
   const [formData, setFormData] = useState<WorkoutFormData>({
     workoutType: "weightlifting",
@@ -76,6 +86,46 @@ function RouteComponent() {
       },
     }),
   );
+
+  const templatesQuery = useQuery(trpc.templates.list.queryOptions());
+  const templateQuery = useQuery(
+    trpc.templates.get.queryOptions(
+      { id: selectedTemplateId! },
+      { enabled: !!selectedTemplateId },
+    ),
+  );
+  const exercisesQuery = useQuery(trpc.exercises.list.queryOptions());
+  const overloadQuery = useQuery(trpc.analytics.progressiveOverload.queryOptions());
+
+  const exerciseNameById = useMemo(() => {
+    return Object.fromEntries(
+      (exercisesQuery.data ?? []).map((exercise) => [exercise.id, exercise.name]),
+    );
+  }, [exercisesQuery.data]);
+
+  const suggestionsByExerciseId = useMemo(() => {
+    const pairs = (overloadQuery.data ?? []).map((item) => [item.exerciseId, item.suggestion]);
+    return Object.fromEntries(pairs);
+  }, [overloadQuery.data]);
+
+  useEffect(() => {
+    if (!selectedTemplateId || !templateQuery.data) return;
+    if (appliedTemplateId === selectedTemplateId) return;
+    setFormData(
+      templateToWorkoutFormData(templateQuery.data as any, {
+        exerciseNameById,
+        suggestionsByExerciseId,
+        date: new Date(),
+      }),
+    );
+    setAppliedTemplateId(selectedTemplateId);
+  }, [
+    appliedTemplateId,
+    selectedTemplateId,
+    templateQuery.data,
+    exerciseNameById,
+    suggestionsByExerciseId,
+  ]);
 
   const handleAddExercise = () => {
     setEditingExerciseIndex(formData.exercises.length);
@@ -155,6 +205,34 @@ function RouteComponent() {
 
       {/* Workout Type Selector */}
       <div className="mb-6">
+        <Label htmlFor="template">Template</Label>
+        <Select
+          value={selectedTemplateId ?? "__none__"}
+          onValueChange={(value) => {
+            const nextTemplateId = value === "__none__" ? undefined : value;
+            setSelectedTemplateId(nextTemplateId);
+            if (!nextTemplateId) {
+              setAppliedTemplateId(undefined);
+              setFormData((prev) => ({
+                ...prev,
+                templateId: undefined,
+              }));
+            }
+          }}
+        >
+          <SelectTrigger id="template" className="w-[280px] mt-1 mb-4">
+            <SelectValue placeholder="Start from template (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">No Template</SelectItem>
+            {(templatesQuery.data ?? []).map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {template.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Label htmlFor="workout-type">Workout Type</Label>
         <Select
           value={formData.workoutType}

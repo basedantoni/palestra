@@ -1,8 +1,8 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useMutation } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "heroui-native";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -21,6 +21,7 @@ import {
   createBlankExercise,
   formatVolume,
   formDataToApiInput,
+  templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/workout-utils";
 
@@ -38,10 +39,15 @@ const WORKOUT_TYPES = [
 ] as const;
 
 export default function NewWorkoutScreen() {
+  const { templateId } = useLocalSearchParams<{ templateId?: string }>();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<
     number | null
   >(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(
+    templateId,
+  );
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | undefined>();
 
   const [formData, setFormData] = useState<WorkoutFormData>({
     workoutType: "weightlifting",
@@ -54,6 +60,46 @@ export default function NewWorkoutScreen() {
   const [showDatePicker, setShowDatePicker] = useState(
     Platform.OS === "ios",
   );
+
+  const templatesQuery = useQuery(trpc.templates.list.queryOptions());
+  const templateQuery = useQuery(
+    trpc.templates.get.queryOptions(
+      { id: selectedTemplateId! },
+      { enabled: !!selectedTemplateId },
+    ),
+  );
+  const exercisesQuery = useQuery(trpc.exercises.list.queryOptions());
+  const overloadQuery = useQuery(trpc.analytics.progressiveOverload.queryOptions());
+
+  const exerciseNameById = useMemo(() => {
+    return Object.fromEntries(
+      (exercisesQuery.data ?? []).map((exercise) => [exercise.id, exercise.name]),
+    );
+  }, [exercisesQuery.data]);
+
+  const suggestionsByExerciseId = useMemo(() => {
+    const pairs = (overloadQuery.data ?? []).map((item) => [item.exerciseId, item.suggestion]);
+    return Object.fromEntries(pairs);
+  }, [overloadQuery.data]);
+
+  useEffect(() => {
+    if (!selectedTemplateId || !templateQuery.data) return;
+    if (appliedTemplateId === selectedTemplateId) return;
+    setFormData(
+      templateToWorkoutFormData(templateQuery.data as any, {
+        exerciseNameById,
+        suggestionsByExerciseId,
+        date: new Date(),
+      }),
+    );
+    setAppliedTemplateId(selectedTemplateId);
+  }, [
+    appliedTemplateId,
+    selectedTemplateId,
+    templateQuery.data,
+    exerciseNameById,
+    suggestionsByExerciseId,
+  ]);
 
   const createWorkout = useMutation(
     trpc.workouts.create.mutationOptions({
@@ -160,6 +206,59 @@ export default function NewWorkoutScreen() {
       >
         {/* Workout Type Selector */}
         <View className="p-4">
+          <Text className="text-sm font-medium text-foreground mb-2">
+            Template
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="flex-row gap-2 mb-4"
+          >
+            <Pressable
+              onPress={() => {
+                setSelectedTemplateId(undefined);
+                setAppliedTemplateId(undefined);
+                setFormData((prev) => ({ ...prev, templateId: undefined }));
+              }}
+              className={
+                !selectedTemplateId
+                  ? "px-4 py-2 rounded-full bg-primary"
+                  : "px-4 py-2 rounded-full bg-secondary"
+              }
+            >
+              <Text
+                className={
+                  !selectedTemplateId
+                    ? "text-primary-foreground text-sm font-medium"
+                    : "text-secondary-foreground text-sm"
+                }
+              >
+                No Template
+              </Text>
+            </Pressable>
+            {(templatesQuery.data ?? []).map((template) => (
+              <Pressable
+                key={template.id}
+                onPress={() => setSelectedTemplateId(template.id)}
+                className={
+                  selectedTemplateId === template.id
+                    ? "px-4 py-2 rounded-full bg-primary"
+                    : "px-4 py-2 rounded-full bg-secondary"
+                }
+              >
+                <Text
+                  className={
+                    selectedTemplateId === template.id
+                      ? "text-primary-foreground text-sm font-medium"
+                      : "text-secondary-foreground text-sm"
+                  }
+                >
+                  {template.name}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
           <Text className="text-sm font-medium text-foreground mb-2">
             Workout Type
           </Text>
