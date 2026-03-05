@@ -96,6 +96,24 @@ function DrawerLayout() {
           ),
         }}
       />
+      <Drawer.Screen
+        name="templates"
+        options={{
+          headerTitle: "Templates",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>
+              Templates
+            </Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="copy-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
     </Drawer>
   );
 }

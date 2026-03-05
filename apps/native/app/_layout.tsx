@@ -27,6 +27,10 @@ function StackLayout() {
         name="workout-detail/[id]"
         options={{ title: "Workout", headerShown: true }}
       />
+      <Stack.Screen
+        name="template-detail/[id]"
+        options={{ title: "Template", headerShown: true }}
+      />
     </Stack>
   );
 }
