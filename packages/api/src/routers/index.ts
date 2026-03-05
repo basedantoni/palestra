@@ -1,6 +1,7 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
+import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
 import { preferencesRouter } from "./preferences";
 import { templatesRouter } from "./templates";
@@ -21,6 +22,7 @@ export const appRouter = router({
   workouts: workoutsRouter,
   templates: templatesRouter,
   analytics: analyticsRouter,
+  dataExport: dataExportRouter,
   admin: adminRouter,
 });
 export type AppRouter = typeof appRouter;
