@@ -1,15 +1,25 @@
-import { useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { Calendar, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import type { DayButton } from "react-day-picker";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { SuggestionBadge } from "@/components/workout/suggestion-badge";
-import { formatVolume, WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import { cn } from "@/lib/utils";
+import {
+  buildCalendarDayMetadata,
+  formatVolume,
+  getLocalDateKey,
+  getLocalMonthRange,
+  groupWorkoutsByLocalDay,
+  WORKOUT_TYPE_LABELS,
+} from "@src/api/lib/index";
 
 export const Route = createFileRoute("/workouts/")({
   component: RouteComponent,
@@ -31,14 +41,21 @@ export const Route = createFileRoute("/workouts/")({
   },
 });
 
+function dateFromLocalKey(localKey: string): Date {
+  const [year, month, day] = localKey.split("-").map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0);
+}
+
 function RouteComponent() {
-  const [page, setPage] = useState(0);
-  const limit = 20;
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
+  const monthRange = useMemo(() => getLocalMonthRange(visibleMonth), [visibleMonth]);
 
   const { data: workouts, isLoading } = useQuery(
-    trpc.workouts.listWithSummary.queryOptions({
-      limit,
-      offset: page * limit,
+    trpc.workouts.calendarRange.queryOptions({
+      startDate: monthRange.startDate,
+      endDate: monthRange.endDate,
     }),
   );
 
@@ -46,9 +63,53 @@ function RouteComponent() {
     trpc.analytics.progressiveOverload.queryOptions(),
   );
 
+  const groupedByDay = useMemo(
+    () => groupWorkoutsByLocalDay(workouts ?? []),
+    [workouts],
+  );
+  const dayMetadata = useMemo(
+    () => buildCalendarDayMetadata(groupedByDay),
+    [groupedByDay],
+  );
+
+  const daysWithWorkouts = useMemo(() => {
+    return Object.keys(dayMetadata).map((key) => dateFromLocalKey(key));
+  }, [dayMetadata]);
+
+  useEffect(() => {
+    if (!workouts) return;
+
+    const today = new Date();
+    const todayKey = getLocalDateKey(today);
+    const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : null;
+
+    if (selectedKey && groupedByDay[selectedKey]) {
+      return;
+    }
+
+    if (groupedByDay[todayKey]) {
+      setSelectedDate(today);
+      return;
+    }
+
+    const firstWorkoutDate = workouts[0]?.date;
+    if (firstWorkoutDate) {
+      const normalized =
+        typeof firstWorkoutDate === "string"
+          ? new Date(firstWorkoutDate)
+          : firstWorkoutDate;
+      setSelectedDate(normalized);
+      return;
+    }
+
+    setSelectedDate(today);
+  }, [workouts, groupedByDay, selectedDate]);
+
+  const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : undefined;
+  const workoutsForSelectedDay = selectedKey ? groupedByDay[selectedKey] ?? [] : [];
+
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-6">
-      {/* Header */}
+    <div className="container mx-auto max-w-4xl px-4 py-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Workout History</h1>
         <Link to="/workouts/new">
@@ -59,7 +120,116 @@ function RouteComponent() {
         </Link>
       </div>
 
-      {/* Progressive Overload Summary */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Calendar</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading calendar...</div>
+          ) : (
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => setSelectedDate(date ?? undefined)}
+              month={visibleMonth}
+              onMonthChange={setVisibleMonth}
+              modifiers={{ hasWorkouts: daysWithWorkouts }}
+              modifiersClassNames={{
+                hasWorkouts: "font-semibold text-foreground",
+              }}
+              components={{
+                DayButton: (props: React.ComponentProps<typeof DayButton>) => {
+                  const dayKey = getLocalDateKey(props.day.date);
+                  const count = dayMetadata[dayKey]?.count ?? 0;
+                  return (
+                    <CalendarDayButton
+                      {...props}
+                      className={cn(props.className, count > 0 && "pb-4")}
+                    >
+                      {props.children}
+                      {count === 1 ? (
+                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-primary" />
+                      ) : count > 1 ? (
+                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 rounded bg-primary px-1 py-0 text-[10px] leading-4 text-primary-foreground">
+                          {count > 9 ? "9+" : count}
+                        </span>
+                      ) : null}
+                    </CalendarDayButton>
+                  );
+                },
+              }}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>
+            {selectedDate
+              ? selectedDate.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "Selected Day"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {workoutsForSelectedDay.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No workouts logged for this day.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {workoutsForSelectedDay.map((workout) => (
+                <Link
+                  key={workout.id}
+                  to="/workouts/$workoutId"
+                  params={{ workoutId: workout.id }}
+                >
+                  <Card className="transition-colors hover:bg-muted/50">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">
+                            {new Date(workout.date).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </CardTitle>
+                          <Badge variant="secondary">
+                            {WORKOUT_TYPE_LABELS[workout.workoutType]}
+                          </Badge>
+                        </div>
+                        {workout.totalVolume ? (
+                          <div className="text-sm text-muted-foreground">
+                            Volume: {formatVolume(workout.totalVolume)}
+                          </div>
+                        ) : null}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground">
+                        {workout.exerciseCount}{" "}
+                        {workout.exerciseCount === 1 ? "exercise" : "exercises"}
+                      </div>
+                      {workout.exerciseNames.length > 0 ? (
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {workout.exerciseNames.join(", ")}
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {progressiveOverload && progressiveOverload.length > 0 && (
         <div className="mb-8">
           <h2 className="mb-3 text-lg font-semibold">Progressive Overload</h2>
@@ -88,90 +258,6 @@ function RouteComponent() {
               </Card>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Workout List */}
-      {isLoading ? (
-        <div className="text-center text-muted-foreground">Loading...</div>
-      ) : workouts && workouts.length > 0 ? (
-        <div className="space-y-4">
-          {workouts.map((workout) => (
-            <Link
-              key={workout.id}
-              to="/workouts/$workoutId"
-              params={{ workoutId: workout.id }}
-            >
-              <Card className="transition-colors hover:bg-muted/50">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CardTitle>
-                        {new Date(workout.date).toLocaleDateString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </CardTitle>
-                      <Badge variant="secondary">
-                        {WORKOUT_TYPE_LABELS[workout.workoutType]}
-                      </Badge>
-                    </div>
-                    {workout.totalVolume && (
-                      <div className="text-sm text-muted-foreground">
-                        Volume: {formatVolume(workout.totalVolume)}
-                      </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-sm">
-                      <span className="font-medium">
-                        {workout.exerciseCount}
-                      </span>{" "}
-                      {workout.exerciseCount === 1 ? "exercise" : "exercises"}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {workout.exerciseNames.join(", ")}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-
-          {/* Pagination */}
-          <div className="flex justify-between pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">Page {page + 1}</span>
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={!workouts || workouts.length < limit}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="py-12 text-center">
-          <p className="text-muted-foreground">No workouts yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Start logging your first workout!
-          </p>
-          <Link to="/workouts/new">
-            <Button className="mt-4">
-              <Plus className="h-4 w-4" />
-              Start First Workout
-            </Button>
-          </Link>
         </div>
       )}
     </div>

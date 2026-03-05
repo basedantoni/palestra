@@ -115,6 +115,39 @@ export const workoutsRouter = router({
         logs: undefined,
       }));
     }),
+  calendarRange: protectedProcedure
+    .input(
+      z.object({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const workouts = await db.query.workout.findMany({
+        where: (table, { and, eq, gte, lte }) =>
+          and(
+            eq(table.userId, ctx.session.user.id),
+            gte(table.date, input.startDate),
+            lte(table.date, input.endDate),
+          ),
+        orderBy: (table, { desc }) => [desc(table.date)],
+        with: {
+          logs: {
+            columns: {
+              id: true,
+              exerciseName: true,
+            },
+          },
+        },
+      });
+
+      return workouts.map((w) => ({
+        ...w,
+        exerciseCount: w.logs.length,
+        exerciseNames: w.logs.map((l) => l.exerciseName),
+        logs: undefined,
+      }));
+    }),
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
