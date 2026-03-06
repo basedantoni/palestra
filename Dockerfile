@@ -15,14 +15,10 @@ RUN cd apps/server && pnpm build && ls -la dist/
 FROM node:22-alpine AS runner
 WORKDIR /app
 
-# tsdown bundles all @src/* packages inline; only external deps (hono, pg, etc.) need node_modules
-COPY --from=builder /app/apps/server/dist ./dist
+# Keep full workspace layout from the builder stage so pnpm symlinks resolve correctly.
+COPY --from=builder /app /app
 
-# package.json required so Node treats the ESM output as "type: module"
-COPY --from=builder /app/apps/server/package.json ./package.json
-
-# Copy full workspace node_modules (external deps live here)
-COPY --from=builder /app/node_modules ./node_modules
+WORKDIR /app/apps/server
 
 EXPOSE 3000
 
