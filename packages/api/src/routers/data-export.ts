@@ -1,17 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import {
-  db,
-  exercise,
-  muscleGroupVolume,
-  personalRecord,
-  progressiveOverloadState,
-  user,
-  userPreferences,
-  workout,
-  workoutTemplate,
-} from "@src/db";
+import { db } from "@src/db";
 
 import { rowsToCsv } from "../lib/export-utils";
 import { protectedProcedure, router } from "../index";
@@ -23,13 +13,13 @@ export const dataExportRouter = router({
     const [profile, preferences, workouts, templates, personalRecords, overloadStates, muscleGroupVolumes] =
       await Promise.all([
         db.query.user.findFirst({
-          where: eq(user.id, userId),
+          where: (table, { eq }) => eq(table.id, userId),
         }),
         db.query.userPreferences.findFirst({
-          where: eq(userPreferences.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
         }),
         db.query.workout.findMany({
-          where: eq(workout.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
           with: {
             logs: {
               with: {
@@ -39,24 +29,24 @@ export const dataExportRouter = router({
           },
         }),
         db.query.workoutTemplate.findMany({
-          where: eq(workoutTemplate.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
           with: {
             exercises: true,
           },
         }),
         db.query.personalRecord.findMany({
-          where: eq(personalRecord.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
         }),
         db.query.progressiveOverloadState.findMany({
-          where: eq(progressiveOverloadState.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
         }),
         db.query.muscleGroupVolume.findMany({
-          where: eq(muscleGroupVolume.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
         }),
       ]);
 
     const customExercises = await db.query.exercise.findMany({
-      where: eq(exercise.createdByUserId, userId),
+      where: (table) => eq(table.createdByUserId, userId),
     });
 
     return {
@@ -96,7 +86,7 @@ export const dataExportRouter = router({
 
       if (input.dataset === "workouts") {
         const workouts = await db.query.workout.findMany({
-          where: eq(workout.userId, userId),
+          where: (table, { eq }) => eq(table.userId, userId),
           with: {
             logs: {
               with: {
@@ -183,7 +173,7 @@ export const dataExportRouter = router({
       }
 
       const templates = await db.query.workoutTemplate.findMany({
-        where: eq(workoutTemplate.userId, userId),
+        where: (table, { eq }) => eq(table.userId, userId),
         with: {
           exercises: true,
         },
