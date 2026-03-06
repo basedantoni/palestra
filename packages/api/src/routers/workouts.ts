@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
@@ -9,7 +9,7 @@ import {
   workout,
   workoutTemplate,
   workoutTemplateExercise,
-} from "@src/db";
+} from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
@@ -108,7 +108,7 @@ export const workoutsRouter = router({
       const offset = input?.offset ?? 0;
 
       const workouts = await db.query.workout.findMany({
-        where: eq(workout.userId, ctx.session.user.id),
+        where: (table, { eq }) => eq(table.userId, ctx.session.user.id),
         orderBy: (table, { desc }) => [desc(table.date)],
         limit,
         offset,
@@ -140,11 +140,11 @@ export const workoutsRouter = router({
       const startDate = toUtcDayBoundary(input.startDate, false);
       const endDate = toUtcDayBoundary(input.endDate, true);
       const workouts = await db.query.workout.findMany({
-        where:
+        where: (table, { and, eq, gte, lte }) =>
           and(
-            eq(workout.userId, ctx.session.user.id),
-            gte(workout.date, startDate),
-            lte(workout.date, endDate),
+            eq(table.userId, ctx.session.user.id),
+            gte(table.date, startDate),
+            lte(table.date, endDate),
           ),
         orderBy: (table, { desc }) => [desc(table.date)],
         with: {
@@ -168,10 +168,8 @@ export const workoutsRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       return db.query.workout.findFirst({
-        where: and(
-          eq(workout.id, input.id),
-          eq(workout.userId, ctx.session.user.id),
-        ),
+        where: (table, { and, eq }) =>
+          and(eq(table.id, input.id), eq(table.userId, ctx.session.user.id)),
         with: {
           logs: {
             with: {
@@ -357,10 +355,11 @@ export const workoutsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const existingWorkout = await db.query.workout.findFirst({
-        where: and(
-          eq(workout.id, input.workoutId),
-          eq(workout.userId, ctx.session.user.id),
-        ),
+        where: (table, { and, eq }) =>
+          and(
+            eq(table.id, input.workoutId),
+            eq(table.userId, ctx.session.user.id),
+          ),
         with: {
           logs: {
             columns: {
