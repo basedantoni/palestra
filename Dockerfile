@@ -9,10 +9,10 @@ WORKDIR /app
 
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN cd apps/server && pnpm build && ls -la dist/
+RUN cd apps/server && pnpm build
 
 # ---- Runtime stage ----
-FROM node:22-alpine AS runner
+FROM base AS runner
 WORKDIR /app
 
 # Keep full workspace layout from the builder stage so pnpm symlinks resolve correctly.

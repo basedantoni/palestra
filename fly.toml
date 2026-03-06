@@ -12,6 +12,9 @@ primary_region = 'dfw'
   NODE_ENV = 'production'
   PORT = '3000'
 
+[deploy]
+  release_command = "sh -c 'cd /app && pnpm -F @src/db db:migrate'"
+
 [http_service]
   internal_port = 3000
   force_https = true
