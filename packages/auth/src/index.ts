@@ -29,5 +29,9 @@ export const auth = betterAuth({
       httpOnly: true,
     },
   },
+  crossSubDomainCookies: {
+    enabled: true,
+    domain: "palestra.dev",
+  },
   plugins: [expo()],
 });
