@@ -9,7 +9,7 @@ WORKDIR /app
 
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN pnpm turbo build --filter=server
+RUN cd apps/server && pnpm build && ls -la dist/
 
 # ---- Runtime stage ----
 FROM node:22-alpine AS runner
@@ -17,9 +17,6 @@ WORKDIR /app
 
 # tsdown bundles all @src/* packages inline; only external deps (hono, pg, etc.) need node_modules
 COPY --from=builder /app/apps/server/dist ./dist
-
-# Migration SQL files (read by drizzle migrator at runtime)
-COPY --from=builder /app/packages/db/src/migrations ./migrations
 
 # package.json required so Node treats the ESM output as "type: module"
 COPY --from=builder /app/apps/server/package.json ./package.json
