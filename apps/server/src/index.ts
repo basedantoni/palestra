@@ -41,9 +41,10 @@ import { serve } from "@hono/node-server";
 serve(
   {
     fetch: app.fetch,
+    hostname: "0.0.0.0",
     port: Number(process.env.PORT) || 3000,
   },
   (info) => {
-    console.log(`Server is running on http://localhost:${info.port}`);
+    console.log(`Server is running on http://${info.address}:${info.port}`);
   },
 );
