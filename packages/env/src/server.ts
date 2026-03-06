@@ -11,6 +11,13 @@ export const env = createEnv({
     ADMIN_EMAILS: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   },
-  runtimeEnv: process.env,
+  runtimeEnvStrict: {
+    DATABASE_URL: process.env.DATABASE_URL,
+    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+    CORS_ORIGIN: process.env.CORS_ORIGIN,
+    ADMIN_EMAILS: process.env.ADMIN_EMAILS,
+    NODE_ENV: process.env.NODE_ENV,
+  },
   emptyStringAsUndefined: true,
 });
