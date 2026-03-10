@@ -25,12 +25,17 @@ const workoutTypeEnum = z.enum([
   "mixed",
 ]);
 
-const exerciseSetInput = z.object({
-  setNumber: z.number().int().min(1),
-  reps: z.number().int().min(0).optional(),
-  weight: z.number().min(0).optional(),
-  rpe: z.number().int().min(1).max(10).optional(),
-});
+const exerciseSetInput = z
+  .object({
+    setNumber: z.number().int().min(1),
+    reps: z.number().int().min(0).optional(),
+    weight: z.number().min(0).optional(),
+    rpe: z.number().int().min(1).max(10).optional(),
+    durationSeconds: z.number().int().min(1).optional(),
+  })
+  .refine((s) => s.reps !== undefined || s.durationSeconds !== undefined, {
+    message: "A set must have either reps or durationSeconds",
+  });
 
 const exerciseLogInput = z.object({
   exerciseId: z.string().uuid().optional(),
@@ -230,6 +235,7 @@ export const workoutsRouter = router({
                 reps: set.reps,
                 weight: set.weight,
                 rpe: set.rpe,
+                durationSeconds: set.durationSeconds,
               })),
             );
           }
@@ -317,6 +323,7 @@ export const workoutsRouter = router({
                 reps: set.reps,
                 weight: set.weight,
                 rpe: set.rpe,
+                durationSeconds: set.durationSeconds,
               })),
             );
           }

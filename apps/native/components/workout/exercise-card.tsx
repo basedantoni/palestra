@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Card } from "heroui-native";
 import { Pressable, Text, TextInput, View } from "react-native";
 
-import type { WorkoutExerciseFormData } from "@src/api/lib/workout-utils";
+import type { WorkoutExerciseFormData, WorkoutSetFormData } from "@src/api/lib/workout-utils";
 import {
   calculateExerciseVolume,
   createBlankSet,
@@ -22,6 +22,10 @@ function ExerciseSuggestionBadge({ exerciseId }: { exerciseId: string }) {
   );
 }
 
+function isTimedSet(set: WorkoutSetFormData): boolean {
+  return set.durationSeconds !== undefined && set.reps === undefined;
+}
+
 interface ExerciseCardProps {
   exercise: WorkoutExerciseFormData;
   onUpdate: (updated: WorkoutExerciseFormData) => void;
@@ -37,10 +41,12 @@ export function ExerciseCard({
 }: ExerciseCardProps) {
   const handleAddSet = () => {
     const lastSet = exercise.sets[exercise.sets.length - 1];
+    const timed = lastSet ? isTimedSet(lastSet) : false;
     const newSet = createBlankSet(exercise.sets.length + 1);
 
-    // Pre-fill with last set's values
-    if (lastSet) {
+    if (timed) {
+      newSet.durationSeconds = lastSet?.durationSeconds;
+    } else if (lastSet) {
       newSet.reps = lastSet.reps;
       newSet.weight = lastSet.weight;
       newSet.rpe = lastSet.rpe;
@@ -67,7 +73,7 @@ export function ExerciseCard({
 
   const handleUpdateSet = (
     setIndex: number,
-    field: "reps" | "weight" | "rpe",
+    field: "reps" | "weight" | "rpe" | "durationSeconds",
     value: string,
   ) => {
     const updatedSets = [...exercise.sets];
@@ -79,14 +85,11 @@ export function ExerciseCard({
       if (Number.isNaN(parsed)) {
         numValue = undefined;
       } else if (field === "rpe") {
-        const clamped = Math.min(10, Math.max(1, Math.round(parsed)));
-        numValue = clamped;
-      } else if (field === "reps") {
-        const clamped = Math.max(0, Math.round(parsed));
-        numValue = clamped;
+        numValue = Math.min(10, Math.max(1, Math.round(parsed)));
+      } else if (field === "reps" || field === "durationSeconds") {
+        numValue = Math.max(0, Math.round(parsed));
       } else {
-        const clamped = Math.max(0, parsed);
-        numValue = clamped;
+        numValue = Math.max(0, parsed);
       }
     }
     updatedSets[setIndex] = {
@@ -99,7 +102,23 @@ export function ExerciseCard({
     });
   };
 
+  const handleToggleSetMode = (setIndex: number) => {
+    const updatedSets = [...exercise.sets];
+    const set = updatedSets[setIndex]!;
+    if (isTimedSet(set)) {
+      updatedSets[setIndex] = { ...set, durationSeconds: undefined, reps: undefined };
+    } else {
+      updatedSets[setIndex] = { ...set, reps: undefined, weight: undefined, durationSeconds: 30 };
+    }
+    onUpdate({ ...exercise, sets: updatedSets });
+  };
+
   const volume = calculateExerciseVolume(exercise);
+  const anyTimed = exercise.sets.some(isTimedSet);
+  const anyWeighted = exercise.sets.some((s) => !isTimedSet(s));
+  const mixedModes = anyTimed && anyWeighted;
+
+  const repsHeader = mixedModes ? "Reps/s" : anyTimed ? "Dur (s)" : "Reps";
 
   return (
     <Card variant="secondary" className="p-4">
@@ -111,7 +130,7 @@ export function ExerciseCard({
           </Text>
           {volume > 0 ? (
             <Text className="text-sm text-muted mt-0.5">
-              Volume: {formatVolume(volume)}
+              {anyTimed && !anyWeighted ? `${volume}s total` : `Volume: ${formatVolume(volume)}`}
             </Text>
           ) : null}
           {exercise.exerciseId ? (
@@ -132,7 +151,7 @@ export function ExerciseCard({
               Set
             </Text>
             <Text className="text-xs font-medium text-muted flex-1 text-center">
-              Reps
+              {repsHeader}
             </Text>
             <Text className="text-xs font-medium text-muted flex-1 text-center">
               Weight
@@ -141,54 +160,80 @@ export function ExerciseCard({
               RPE
             </Text>
             <View className="w-8" />
+            <View className="w-8" />
           </View>
 
           {/* Table Rows */}
-          {exercise.sets.map((set, index) => (
-            <View key={set.tempId} className="flex-row items-center mb-2">
-              <Text className="text-sm text-foreground w-10 text-center">
-                {set.setNumber}
-              </Text>
-              <View className="flex-1 px-1">
-                <TextInput
-                  className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
-                  keyboardType="number-pad"
-                  placeholder="-"
-                  placeholderTextColor="#999"
-                  value={set.reps?.toString() || ""}
-                  onChangeText={(text) => handleUpdateSet(index, "reps", text)}
-                />
+          {exercise.sets.map((set, index) => {
+            const timed = isTimedSet(set);
+            return (
+              <View key={set.tempId} className="flex-row items-center mb-2">
+                <Text className="text-sm text-foreground w-10 text-center">
+                  {set.setNumber}
+                </Text>
+                <View className="flex-1 px-1">
+                  {timed ? (
+                    <TextInput
+                      className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+                      keyboardType="number-pad"
+                      placeholder="30"
+                      placeholderTextColor="#999"
+                      value={set.durationSeconds?.toString() || ""}
+                      onChangeText={(text) => handleUpdateSet(index, "durationSeconds", text)}
+                    />
+                  ) : (
+                    <TextInput
+                      className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+                      keyboardType="number-pad"
+                      placeholder="-"
+                      placeholderTextColor="#999"
+                      value={set.reps?.toString() || ""}
+                      onChangeText={(text) => handleUpdateSet(index, "reps", text)}
+                    />
+                  )}
+                </View>
+                <View className="flex-1 px-1">
+                  <TextInput
+                    className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+                    keyboardType="decimal-pad"
+                    placeholder="-"
+                    placeholderTextColor="#999"
+                    editable={!timed}
+                    value={timed ? "" : (set.weight?.toString() || "")}
+                    onChangeText={(text) => handleUpdateSet(index, "weight", text)}
+                    style={timed ? { opacity: 0.3 } : undefined}
+                  />
+                </View>
+                <View className="flex-1 px-1">
+                  <TextInput
+                    className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+                    keyboardType="number-pad"
+                    placeholder="-"
+                    placeholderTextColor="#999"
+                    value={set.rpe?.toString() || ""}
+                    onChangeText={(text) => handleUpdateSet(index, "rpe", text)}
+                  />
+                </View>
+                {/* Timed mode toggle */}
+                <Pressable
+                  onPress={() => handleToggleSetMode(index)}
+                  className="w-8 items-center"
+                >
+                  <Ionicons
+                    name="timer-outline"
+                    size={18}
+                    color={timed ? "#6366f1" : "#999"}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => handleRemoveSet(index)}
+                  className="w-8 items-center"
+                >
+                  <Ionicons name="close-circle-outline" size={20} color="#999" />
+                </Pressable>
               </View>
-              <View className="flex-1 px-1">
-                <TextInput
-                  className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
-                  keyboardType="decimal-pad"
-                  placeholder="-"
-                  placeholderTextColor="#999"
-                  value={set.weight?.toString() || ""}
-                  onChangeText={(text) =>
-                    handleUpdateSet(index, "weight", text)
-                  }
-                />
-              </View>
-              <View className="flex-1 px-1">
-                <TextInput
-                  className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
-                  keyboardType="number-pad"
-                  placeholder="-"
-                  placeholderTextColor="#999"
-                  value={set.rpe?.toString() || ""}
-                  onChangeText={(text) => handleUpdateSet(index, "rpe", text)}
-                />
-              </View>
-              <Pressable
-                onPress={() => handleRemoveSet(index)}
-                className="w-8 items-center"
-              >
-                <Ionicons name="close-circle-outline" size={20} color="#999" />
-              </Pressable>
-            </View>
-          ))}
+            );
+          })}
         </View>
       ) : null}
 

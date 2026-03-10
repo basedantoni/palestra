@@ -98,6 +98,7 @@ export async function recalculateProgressiveOverload(
         reps: exerciseSet.reps,
         weight: exerciseSet.weight,
         rpe: exerciseSet.rpe,
+        durationSeconds: exerciseSet.durationSeconds,
       })
       .from(exerciseSet)
       .where(inArray(exerciseSet.exerciseLogId, exerciseLogIds));
@@ -106,15 +107,15 @@ export async function recalculateProgressiveOverload(
     //    recentWorkoutLogs is newest-first, so we reverse it before building.
     const setsByLogId = new Map<
       string,
-      Array<{ reps: number | null; weight: number | null; rpe: number | null }>
+      Array<{ reps: number | null; weight: number | null; rpe: number | null; durationSeconds: number | null }>
     >();
     for (const set of allSets) {
       const existing = setsByLogId.get(set.exerciseLogId);
       if (existing) {
-        existing.push({ reps: set.reps, weight: set.weight, rpe: set.rpe });
+        existing.push({ reps: set.reps, weight: set.weight, rpe: set.rpe, durationSeconds: set.durationSeconds });
       } else {
         setsByLogId.set(set.exerciseLogId, [
-          { reps: set.reps, weight: set.weight, rpe: set.rpe },
+          { reps: set.reps, weight: set.weight, rpe: set.rpe, durationSeconds: set.durationSeconds },
         ]);
       }
     }

@@ -4,14 +4,16 @@ export interface SetSnapshot {
   reps: number;
   weight: number; // in user's preferred unit
   rpe: number | null;
+  durationSeconds: number | null;
 }
 
 export interface ExerciseSessionSnapshot {
   date: Date;
   sets: SetSnapshot[];
-  totalVolume: number; // sum of (reps * weight) across sets
-  topSetWeight: number; // heaviest weight used
-  topSetReps: number; // most reps in any single set
+  totalVolume: number; // sum of (reps * weight) for weight sets, or sum of durationSeconds for timed sets
+  topSetWeight: number; // heaviest weight used (0 for timed sets)
+  topSetReps: number; // most reps in any single set (0 for timed sets)
+  topSetDuration: number; // longest hold in any single set in seconds (0 for weight sets)
   averageRpe: number | null; // average RPE across sets, null if no RPE data
   numberOfSets: number;
 }
@@ -25,7 +27,8 @@ export type ProgressionType =
   | "increase_reps"
   | "add_set"
   | "deload"
-  | "maintain";
+  | "maintain"
+  | "increase_duration";
 
 export interface ProgressionSuggestion {
   type: ProgressionType;
@@ -33,7 +36,7 @@ export interface ProgressionSuggestion {
   details: {
     currentValue: number;
     suggestedValue: number;
-    unit: string; // "lbs", "kg", "reps", "sets"
+    unit: string; // "lbs", "kg", "reps", "sets", "s"
   };
 }
 
@@ -48,23 +51,73 @@ export interface OverloadAnalysis {
 // ---------------------------------------------------------------------------
 
 /**
- * Convert raw set data into a typed session snapshot, filtering null reps/weight.
+ * Convert raw set data into a typed session snapshot.
+ *
+ * Mode detection:
+ * - Duration mode: any set has durationSeconds != null (and reps is null/missing).
+ *   Volume = sum of durationSeconds. topSetDuration = max durationSeconds.
+ * - Weight mode (default): sets with both reps and weight non-null.
+ *   Volume = sum of reps * weight. topSetDuration = 0.
+ *
+ * A session is treated as duration mode when at least one set has durationSeconds
+ * and no sets have both reps and weight populated.
  */
 export function buildSessionSnapshot(
   date: Date,
-  sets: Array<{ reps: number | null; weight: number | null; rpe: number | null }>,
+  sets: Array<{
+    reps: number | null;
+    weight: number | null;
+    rpe: number | null;
+    durationSeconds: number | null;
+  }>,
 ): ExerciseSessionSnapshot {
-  const validSets = sets.filter(
-    (s): s is { reps: number; weight: number; rpe: number | null } =>
+  const timedSets = sets.filter((s) => s.durationSeconds != null);
+  const weightSets = sets.filter(
+    (s): s is { reps: number; weight: number; rpe: number | null; durationSeconds: number | null } =>
       s.reps != null && s.weight != null,
   );
 
-  const totalVolume = validSets.reduce((sum, s) => sum + s.reps * s.weight, 0);
+  const isDurationMode = timedSets.length > 0 && weightSets.length === 0;
+
+  if (isDurationMode) {
+    const validSets = timedSets as Array<{
+      reps: number | null;
+      weight: number | null;
+      rpe: number | null;
+      durationSeconds: number;
+    }>;
+    const totalVolume = validSets.reduce((sum, s) => sum + s.durationSeconds, 0);
+    const topSetDuration = Math.max(...validSets.map((s) => s.durationSeconds));
+    const rpeSets = validSets.filter((s) => s.rpe != null);
+    const averageRpe =
+      rpeSets.length > 0
+        ? rpeSets.reduce((sum, s) => sum + s.rpe!, 0) / rpeSets.length
+        : null;
+
+    return {
+      date,
+      sets: validSets.map((s) => ({
+        reps: 0,
+        weight: 0,
+        rpe: s.rpe,
+        durationSeconds: s.durationSeconds,
+      })),
+      totalVolume,
+      topSetWeight: 0,
+      topSetReps: 0,
+      topSetDuration,
+      averageRpe,
+      numberOfSets: validSets.length,
+    };
+  }
+
+  // Weight mode
+  const totalVolume = weightSets.reduce((sum, s) => sum + s.reps * s.weight, 0);
   const topSetWeight =
-    validSets.length > 0 ? Math.max(...validSets.map((s) => s.weight)) : 0;
+    weightSets.length > 0 ? Math.max(...weightSets.map((s) => s.weight)) : 0;
   const topSetReps =
-    validSets.length > 0 ? Math.max(...validSets.map((s) => s.reps)) : 0;
-  const rpeSets = validSets.filter((s) => s.rpe != null);
+    weightSets.length > 0 ? Math.max(...weightSets.map((s) => s.reps)) : 0;
+  const rpeSets = weightSets.filter((s) => s.rpe != null);
   const averageRpe =
     rpeSets.length > 0
       ? rpeSets.reduce((sum, s) => sum + s.rpe!, 0) / rpeSets.length
@@ -72,12 +125,18 @@ export function buildSessionSnapshot(
 
   return {
     date,
-    sets: validSets.map((s) => ({ reps: s.reps, weight: s.weight, rpe: s.rpe })),
+    sets: weightSets.map((s) => ({
+      reps: s.reps,
+      weight: s.weight,
+      rpe: s.rpe,
+      durationSeconds: null,
+    })),
     totalVolume,
     topSetWeight,
     topSetReps,
+    topSetDuration: 0,
     averageRpe,
-    numberOfSets: validSets.length,
+    numberOfSets: weightSets.length,
   };
 }
 
@@ -87,11 +146,12 @@ export function buildSessionSnapshot(
 
 /**
  * Classify a comparison between two consecutive sessions.
- * Returns "improved", "declined", or "flat" based on volume and top-set weight changes.
+ * Returns "improved", "declined", or "flat" based on volume and top-set changes.
  *
- * A change is considered "flat" if both volume and top-set weight stayed within ±2.5%.
- * "improved" requires volume > +2.5% OR top-set weight > +2.5%.
- * "declined" requires volume < -2.5% AND top-set weight did not improve.
+ * For weight mode: compares totalVolume and topSetWeight.
+ * For duration mode: compares totalVolume (total hold time) and topSetDuration.
+ *
+ * A change is considered "flat" if the key metrics stayed within ±2.5%.
  */
 function classifyComparison(
   prev: ExerciseSessionSnapshot,
@@ -99,18 +159,32 @@ function classifyComparison(
 ): "improved" | "declined" | "flat" {
   const TOLERANCE = 0.025; // 2.5%
 
+  const isDurationMode = prev.topSetDuration > 0 || curr.topSetDuration > 0;
+
   const volumeChange =
     prev.totalVolume > 0
       ? (curr.totalVolume - prev.totalVolume) / prev.totalVolume
       : 0;
 
+  const volumeImproved = volumeChange > TOLERANCE;
+  const volumeDeclined = volumeChange < -TOLERANCE;
+
+  if (isDurationMode) {
+    const durationChange =
+      prev.topSetDuration > 0
+        ? (curr.topSetDuration - prev.topSetDuration) / prev.topSetDuration
+        : 0;
+    const durationImproved = durationChange > TOLERANCE;
+
+    if (volumeImproved || durationImproved) return "improved";
+    if (volumeDeclined && !durationImproved) return "declined";
+    return "flat";
+  }
+
   const weightChange =
     prev.topSetWeight > 0
       ? (curr.topSetWeight - prev.topSetWeight) / prev.topSetWeight
       : 0;
-
-  const volumeImproved = volumeChange > TOLERANCE;
-  const volumeDeclined = volumeChange < -TOLERANCE;
   const weightImproved = weightChange > TOLERANCE;
 
   if (volumeImproved || weightImproved) {
@@ -125,9 +199,9 @@ function classifyComparison(
 /**
  * Detect the overall trend from the last N sessions (ordered oldest-first, at least 2).
  *
- * - "improving": volume or top-set weight increased in at least 2 of last 3 comparisons
- * - "plateau": volume AND top-set weight stayed within +/- 2.5% for `plateauThreshold` consecutive sessions
- * - "declining": volume or top-set weight decreased in at least 2 of last 3 comparisons,
+ * - "improving": volume or top-set metric increased in at least 2 of last 3 comparisons
+ * - "plateau": volume AND top metric stayed within +/- 2.5% for `plateauThreshold` consecutive sessions
+ * - "declining": volume or top metric decreased in at least 2 of last 3 comparisons,
  *                OR average RPE > 8 for 3+ consecutive recent sessions
  */
 export function detectTrend(
@@ -202,17 +276,21 @@ export function detectTrend(
 /**
  * Generate a progression suggestion based on trend status and recent session data.
  *
- * IMPROVING:
- *   - If topSetReps <= 3: suggest increasing reps (low-rep strength work)
- *   - Otherwise: suggest ~5% weight increase, rounded to nearest increment
+ * DURATION MODE (latestSession.topSetDuration > 0):
+ *   IMPROVING: suggest increasing hold duration (5s for <60s, 10s for >=60s, rounded to 5s)
+ *   PLATEAU:   suggest adding 1 set (isometrics don't deload the same way)
+ *   DECLINING: maintain current duration
  *
- * PLATEAU:
- *   - plateauCount >= 4: suggest deload (reduce weight by 10%)
- *   - plateauCount < 4 and < 6 sets: suggest adding 1 set
- *   - plateauCount < 4 and >= 6 sets: suggest deload (nowhere to add)
- *
- * DECLINING:
- *   - Suggest maintaining current weight and focus on form/recovery
+ * WEIGHT MODE:
+ *   IMPROVING:
+ *     - If topSetReps <= 3: suggest increasing reps (low-rep strength work)
+ *     - Otherwise: suggest ~5% weight increase, rounded to nearest increment
+ *   PLATEAU:
+ *     - plateauCount >= 4: suggest deload (reduce weight by 10%)
+ *     - plateauCount < 4 and < 6 sets: suggest adding 1 set
+ *     - plateauCount < 4 and >= 6 sets: suggest deload (nowhere to add)
+ *   DECLINING:
+ *     - Suggest maintaining current weight and focus on form/recovery
  */
 export function generateSuggestion(
   trendStatus: TrendStatus,
@@ -220,6 +298,52 @@ export function generateSuggestion(
   latestSession: ExerciseSessionSnapshot,
   weightUnit: "lbs" | "kg",
 ): ProgressionSuggestion | null {
+  const isDurationMode = latestSession.topSetDuration > 0;
+
+  if (isDurationMode) {
+    const currentDuration = latestSession.topSetDuration;
+    const currentSets = latestSession.numberOfSets;
+
+    if (trendStatus === "improving") {
+      const increment = currentDuration < 60 ? 5 : 10;
+      const suggestedDuration = Math.ceil((currentDuration + increment) / 5) * 5;
+      return {
+        type: "increase_duration",
+        message: `Increase hold to ${suggestedDuration}s — you're ready for longer holds`,
+        details: {
+          currentValue: currentDuration,
+          suggestedValue: suggestedDuration,
+          unit: "s",
+        },
+      };
+    }
+
+    if (trendStatus === "plateau") {
+      const suggestedSets = currentSets + 1;
+      return {
+        type: "add_set",
+        message: `Add 1 more set — increase from ${currentSets} to ${suggestedSets} sets`,
+        details: {
+          currentValue: currentSets,
+          suggestedValue: suggestedSets,
+          unit: "sets",
+        },
+      };
+    }
+
+    // DECLINING
+    return {
+      type: "maintain",
+      message: `Hold at ${currentDuration}s and focus on consistent form`,
+      details: {
+        currentValue: currentDuration,
+        suggestedValue: currentDuration,
+        unit: "s",
+      },
+    };
+  }
+
+  // Weight mode
   const currentWeight = latestSession.topSetWeight;
   const currentSets = latestSession.numberOfSets;
   const currentReps = latestSession.topSetReps;

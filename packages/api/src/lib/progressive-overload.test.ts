@@ -14,12 +14,13 @@ import type { ExerciseSessionSnapshot } from "./progressive-overload";
 
 function makeSession(
   date: Date,
-  sets: Array<{ reps: number; weight: number; rpe?: number | null }>,
+  sets: Array<{ reps: number; weight: number; rpe?: number | null; durationSeconds?: number | null }>,
 ): ExerciseSessionSnapshot {
   const validSets = sets.map((s) => ({
     reps: s.reps,
     weight: s.weight,
     rpe: s.rpe ?? null,
+    durationSeconds: null,
   }));
   const totalVolume = validSets.reduce((sum, s) => sum + s.reps * s.weight, 0);
   const topSetWeight =
@@ -37,6 +38,7 @@ function makeSession(
     totalVolume,
     topSetWeight,
     topSetReps,
+    topSetDuration: 0,
     averageRpe,
     numberOfSets: validSets.length,
   };
@@ -80,52 +82,52 @@ describe("progressive-overload", () => {
   describe("buildSessionSnapshot", () => {
     it("should compute totalVolume as sum of reps*weight across valid sets", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: 7 },
-        { reps: 8, weight: 110, rpe: 8 },
+        { reps: 10, weight: 100, rpe: 7, durationSeconds: null },
+        { reps: 8, weight: 110, rpe: 8, durationSeconds: null },
       ]);
       expect(snapshot.totalVolume).toBe(10 * 100 + 8 * 110); // 1880
     });
 
     it("should find topSetWeight as the max weight", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: 7 },
-        { reps: 5, weight: 120, rpe: 9 },
-        { reps: 8, weight: 110, rpe: 8 },
+        { reps: 10, weight: 100, rpe: 7, durationSeconds: null },
+        { reps: 5, weight: 120, rpe: 9, durationSeconds: null },
+        { reps: 8, weight: 110, rpe: 8, durationSeconds: null },
       ]);
       expect(snapshot.topSetWeight).toBe(120);
     });
 
     it("should find topSetReps as the max reps", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: 7 },
-        { reps: 5, weight: 120, rpe: 9 },
-        { reps: 12, weight: 90, rpe: 6 },
+        { reps: 10, weight: 100, rpe: 7, durationSeconds: null },
+        { reps: 5, weight: 120, rpe: 9, durationSeconds: null },
+        { reps: 12, weight: 90, rpe: 6, durationSeconds: null },
       ]);
       expect(snapshot.topSetReps).toBe(12);
     });
 
     it("should compute averageRpe ignoring null RPE values", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: 6 },
-        { reps: 10, weight: 100, rpe: null },
-        { reps: 10, weight: 100, rpe: 8 },
+        { reps: 10, weight: 100, rpe: 6, durationSeconds: null },
+        { reps: 10, weight: 100, rpe: null, durationSeconds: null },
+        { reps: 10, weight: 100, rpe: 8, durationSeconds: null },
       ]);
       expect(snapshot.averageRpe).toBe(7); // (6 + 8) / 2
     });
 
     it("should return averageRpe as null when no sets have RPE", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: null },
-        { reps: 8, weight: 100, rpe: null },
+        { reps: 10, weight: 100, rpe: null, durationSeconds: null },
+        { reps: 8, weight: 100, rpe: null, durationSeconds: null },
       ]);
       expect(snapshot.averageRpe).toBeNull();
     });
 
     it("should filter out sets with null reps or weight", () => {
       const snapshot = buildSessionSnapshot(D1, [
-        { reps: 10, weight: 100, rpe: 7 },
-        { reps: null as unknown as number, weight: 100, rpe: 7 },
-        { reps: 8, weight: null as unknown as number, rpe: 7 },
+        { reps: 10, weight: 100, rpe: 7, durationSeconds: null },
+        { reps: null as unknown as number, weight: 100, rpe: 7, durationSeconds: null },
+        { reps: 8, weight: null as unknown as number, rpe: 7, durationSeconds: null },
       ]);
       expect(snapshot.numberOfSets).toBe(1);
       expect(snapshot.totalVolume).toBe(1000);
@@ -207,10 +209,10 @@ describe("progressive-overload", () => {
 
     it("should return 'declining' when average RPE > 8 for 3+ consecutive sessions", () => {
       const sessions = [
-        makeSession(D1, [{ reps: 10, weight: 100, rpe: 9 }]),
-        makeSession(D2, [{ reps: 10, weight: 100, rpe: 9 }]),
-        makeSession(D3, [{ reps: 10, weight: 100, rpe: 9 }]),
-        makeSession(D4, [{ reps: 10, weight: 100, rpe: 9 }]),
+        makeSession(D1, [{ reps: 10, weight: 100, rpe: 9, durationSeconds: null }]),
+        makeSession(D2, [{ reps: 10, weight: 100, rpe: 9, durationSeconds: null }]),
+        makeSession(D3, [{ reps: 10, weight: 100, rpe: 9, durationSeconds: null }]),
+        makeSession(D4, [{ reps: 10, weight: 100, rpe: 9, durationSeconds: null }]),
       ];
       const { trendStatus } = detectTrend(sessions, 3);
       expect(trendStatus).toBe("declining");
@@ -275,9 +277,9 @@ describe("progressive-overload", () => {
   describe("generateSuggestion", () => {
     it("should suggest weight increase when improving", () => {
       const session = makeSession(D1, [
-        { reps: 8, weight: 135, rpe: 7 },
-        { reps: 8, weight: 135, rpe: 7 },
-        { reps: 8, weight: 135, rpe: 8 },
+        { reps: 8, weight: 135, rpe: 7, durationSeconds: null },
+        { reps: 8, weight: 135, rpe: 7, durationSeconds: null },
+        { reps: 8, weight: 135, rpe: 8, durationSeconds: null },
       ]);
       const suggestion = generateSuggestion("improving", 0, session, "lbs");
       expect(suggestion).not.toBeNull();
@@ -302,8 +304,8 @@ describe("progressive-overload", () => {
 
     it("should suggest rep increase when improving and reps <= 3", () => {
       const session = makeSession(D1, [
-        { reps: 3, weight: 300, rpe: 9 },
-        { reps: 2, weight: 310, rpe: 9 },
+        { reps: 3, weight: 300, rpe: 9, durationSeconds: null },
+        { reps: 2, weight: 310, rpe: 9, durationSeconds: null },
       ]);
       const suggestion = generateSuggestion("improving", 0, session, "lbs");
       expect(suggestion!.type).toBe("increase_reps");
@@ -342,8 +344,8 @@ describe("progressive-overload", () => {
 
     it("should suggest maintaining when declining with high RPE", () => {
       const session = makeSession(D1, [
-        { reps: 10, weight: 100, rpe: 9 },
-        { reps: 10, weight: 100, rpe: 9 },
+        { reps: 10, weight: 100, rpe: 9, durationSeconds: null },
+        { reps: 10, weight: 100, rpe: 9, durationSeconds: null },
       ]);
       const suggestion = generateSuggestion("declining", 0, session, "lbs");
       expect(suggestion!.type).toBe("maintain");
@@ -351,8 +353,8 @@ describe("progressive-overload", () => {
 
     it("should suggest maintaining when declining without high RPE", () => {
       const session = makeSession(D1, [
-        { reps: 10, weight: 100, rpe: 6 },
-        { reps: 10, weight: 100, rpe: 6 },
+        { reps: 10, weight: 100, rpe: 6, durationSeconds: null },
+        { reps: 10, weight: 100, rpe: 6, durationSeconds: null },
       ]);
       const suggestion = generateSuggestion("declining", 0, session, "lbs");
       expect(suggestion!.type).toBe("maintain");
@@ -429,19 +431,19 @@ describe("progressive-overload", () => {
     it("scenario: 3 sessions of increasing bench press weight -> improving + weight increase suggestion", () => {
       const sessions = [
         makeSession(D1, [
-          { reps: 5, weight: 135, rpe: 7 },
-          { reps: 5, weight: 135, rpe: 8 },
-          { reps: 5, weight: 135, rpe: 8 },
+          { reps: 5, weight: 135, rpe: 7, durationSeconds: null },
+          { reps: 5, weight: 135, rpe: 8, durationSeconds: null },
+          { reps: 5, weight: 135, rpe: 8, durationSeconds: null },
         ]),
         makeSession(D2, [
-          { reps: 5, weight: 145, rpe: 7 },
-          { reps: 5, weight: 145, rpe: 8 },
-          { reps: 5, weight: 145, rpe: 8 },
+          { reps: 5, weight: 145, rpe: 7, durationSeconds: null },
+          { reps: 5, weight: 145, rpe: 8, durationSeconds: null },
+          { reps: 5, weight: 145, rpe: 8, durationSeconds: null },
         ]),
         makeSession(D3, [
-          { reps: 5, weight: 155, rpe: 7 },
-          { reps: 5, weight: 155, rpe: 8 },
-          { reps: 5, weight: 155, rpe: 8 },
+          { reps: 5, weight: 155, rpe: 7, durationSeconds: null },
+          { reps: 5, weight: 155, rpe: 8, durationSeconds: null },
+          { reps: 5, weight: 155, rpe: 8, durationSeconds: null },
         ]),
       ];
       const result = analyzeProgressiveOverload(sessions, {
@@ -489,10 +491,10 @@ describe("progressive-overload", () => {
 
     it("scenario: 3 sessions of declining volume with high RPE -> declining + maintain suggestion", () => {
       const sessions = [
-        makeSession(D1, [{ reps: 10, weight: 130, rpe: 9 }]),
-        makeSession(D2, [{ reps: 10, weight: 120, rpe: 9 }]),
-        makeSession(D3, [{ reps: 10, weight: 110, rpe: 9 }]),
-        makeSession(D4, [{ reps: 10, weight: 100, rpe: 9 }]),
+        makeSession(D1, [{ reps: 10, weight: 130, rpe: 9, durationSeconds: null }]),
+        makeSession(D2, [{ reps: 10, weight: 120, rpe: 9, durationSeconds: null }]),
+        makeSession(D3, [{ reps: 10, weight: 110, rpe: 9, durationSeconds: null }]),
+        makeSession(D4, [{ reps: 10, weight: 100, rpe: 9, durationSeconds: null }]),
       ];
       const result = analyzeProgressiveOverload(sessions, {
         plateauThreshold: 3,

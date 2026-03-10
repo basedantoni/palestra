@@ -78,6 +78,7 @@ export const exerciseSet = pgTable(
     reps: integer("reps"),
     weight: real("weight"),
     rpe: integer("rpe"),
+    durationSeconds: integer("duration_seconds"),
   },
   (table) => [index("exercise_set_exerciseLogId_idx").on(table.exerciseLogId)],
 );

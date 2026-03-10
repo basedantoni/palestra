@@ -29,6 +29,7 @@ describe("workout-utils", () => {
         reps: 10,
         weight: 135,
         rpe: 7,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(1350);
     });
@@ -40,6 +41,7 @@ describe("workout-utils", () => {
         reps: undefined,
         weight: 135,
         rpe: 7,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(0);
     });
@@ -51,6 +53,7 @@ describe("workout-utils", () => {
         reps: 10,
         weight: undefined,
         rpe: 7,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(0);
     });
@@ -62,6 +65,7 @@ describe("workout-utils", () => {
         reps: undefined,
         weight: undefined,
         rpe: undefined,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(0);
     });
@@ -73,6 +77,7 @@ describe("workout-utils", () => {
         reps: 0,
         weight: 135,
         rpe: 7,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(0);
     });
@@ -84,6 +89,7 @@ describe("workout-utils", () => {
         reps: 10,
         weight: 135.5,
         rpe: 7,
+        durationSeconds: undefined,
       };
       expect(calculateSetVolume(set)).toBe(1355);
     });
@@ -103,6 +109,7 @@ describe("workout-utils", () => {
             reps: 10,
             weight: 135,
             rpe: 7,
+        durationSeconds: undefined,
           },
           {
             tempId: "set-2",
@@ -110,6 +117,7 @@ describe("workout-utils", () => {
             reps: 10,
             weight: 135,
             rpe: 8,
+        durationSeconds: undefined,
           },
           {
             tempId: "set-3",
@@ -117,6 +125,7 @@ describe("workout-utils", () => {
             reps: 8,
             weight: 135,
             rpe: 9,
+        durationSeconds: undefined,
           },
         ],
         rounds: undefined,
@@ -168,6 +177,7 @@ describe("workout-utils", () => {
             reps: 10,
             weight: 135,
             rpe: 7,
+        durationSeconds: undefined,
           },
           {
             tempId: "set-2",
@@ -175,6 +185,7 @@ describe("workout-utils", () => {
             reps: undefined,
             weight: 135,
             rpe: 8,
+        durationSeconds: undefined,
           },
         ],
         rounds: undefined,
@@ -207,6 +218,7 @@ describe("workout-utils", () => {
               reps: 10,
               weight: 135,
               rpe: 7,
+        durationSeconds: undefined,
             },
             {
               tempId: "set-2",
@@ -214,6 +226,7 @@ describe("workout-utils", () => {
               reps: 10,
               weight: 135,
               rpe: 8,
+        durationSeconds: undefined,
             },
           ],
           rounds: undefined,
@@ -239,6 +252,7 @@ describe("workout-utils", () => {
               reps: 5,
               weight: 225,
               rpe: 8,
+        durationSeconds: undefined,
             },
           ],
           rounds: undefined,
@@ -329,6 +343,7 @@ describe("workout-utils", () => {
                 reps: 10,
                 weight: 135,
                 rpe: 7,
+        durationSeconds: undefined,
               },
               {
                 tempId: "set-2",
@@ -336,6 +351,7 @@ describe("workout-utils", () => {
                 reps: undefined,
                 weight: undefined,
                 rpe: undefined,
+        durationSeconds: undefined,
               },
             ],
             rounds: undefined,
@@ -385,6 +401,7 @@ describe("workout-utils", () => {
                 reps: 10,
                 weight: 135,
                 rpe: 7,
+        durationSeconds: undefined,
               },
             ],
             rounds: undefined,
@@ -441,6 +458,7 @@ describe("workout-utils", () => {
                 reps: 10,
                 weight: 135,
                 rpe: 7,
+        durationSeconds: undefined,
               },
               {
                 tempId: "set-2",
@@ -448,6 +466,7 @@ describe("workout-utils", () => {
                 reps: undefined,
                 weight: undefined,
                 rpe: undefined,
+        durationSeconds: undefined,
               },
               {
                 tempId: "set-3",
@@ -455,6 +474,7 @@ describe("workout-utils", () => {
                 reps: 8,
                 weight: undefined,
                 rpe: 8,
+        durationSeconds: undefined,
               },
             ],
             rounds: undefined,
@@ -493,6 +513,7 @@ describe("workout-utils", () => {
                 reps: 10,
                 weight: 135,
                 rpe: 7,
+        durationSeconds: undefined,
               },
             ],
             rounds: undefined,
@@ -558,7 +579,7 @@ describe("workout-utils", () => {
             exerciseName: "Bench Press",
             order: 0,
             sets: [
-              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7 },
+              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7, durationSeconds: undefined },
             ],
             rounds: undefined,
             workDurationSeconds: undefined,
@@ -590,7 +611,7 @@ describe("workout-utils", () => {
             exerciseName: "Bench Press",
             order: 0,
             sets: [
-              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7 },
+              { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7, durationSeconds: undefined },
             ],
             rounds: undefined,
             workDurationSeconds: undefined,
@@ -701,8 +722,8 @@ describe("workout-utils", () => {
             durationMinutes: null,
             notes: "Top set felt good",
             sets: [
-              { setNumber: 1, reps: 10, weight: 135, rpe: 7 },
-              { setNumber: 2, reps: 8, weight: 145, rpe: 8 },
+              { setNumber: 1, reps: 10, weight: 135, rpe: 7, durationSeconds: null },
+              { setNumber: 2, reps: 8, weight: 145, rpe: 8, durationSeconds: null },
             ],
           },
         ],

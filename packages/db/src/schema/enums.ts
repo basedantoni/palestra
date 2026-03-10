@@ -44,6 +44,7 @@ export const muscleGroupMovementEnum = pgEnum("muscle_group_movement", [
   "squat",
   "hinge",
   "carry",
+  "isometric",
 ]);
 
 export const muscleGroupEnum = pgEnum("muscle_group", [
@@ -58,6 +59,7 @@ export const muscleGroupEnum = pgEnum("muscle_group", [
   "squat",
   "hinge",
   "carry",
+  "isometric",
 ]);
 
 export const recordTypeEnum = pgEnum("record_type", [

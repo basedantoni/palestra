@@ -15,6 +15,7 @@ export interface WorkoutSetFormData {
   reps: number | undefined;
   weight: number | undefined;
   rpe: number | undefined;
+  durationSeconds: number | undefined; // for timed/isometric sets; mutually exclusive with reps
 }
 
 export interface WorkoutExerciseFormData {
@@ -58,6 +59,7 @@ export interface ApiWorkoutSet {
   reps: number | null;
   weight: number | null;
   rpe: number | null;
+  durationSeconds: number | null;
 }
 
 export interface ApiWorkoutLog {
@@ -121,6 +123,9 @@ export function normalizeDateToLocalNoon(date: Date): Date {
 
 // Volume calculation (client-side)
 export function calculateSetVolume(set: WorkoutSetFormData): number {
+  if (set.durationSeconds !== undefined && set.reps === undefined) {
+    return set.durationSeconds;
+  }
   const reps = set.reps ?? 0;
   const weight = set.weight ?? 0;
   return reps * weight;
@@ -152,6 +157,7 @@ export function createBlankSet(setNumber: number): WorkoutSetFormData {
     reps: undefined,
     weight: undefined,
     rpe: undefined,
+    durationSeconds: undefined,
   };
 }
 
@@ -205,12 +211,13 @@ export function formDataToApiInput(form: WorkoutFormData) {
       durationMinutes: ex.durationMinutes,
       notes: ex.notes || undefined,
       sets: ex.sets
-        .filter((s) => s.reps !== undefined || s.weight !== undefined)
+        .filter((s) => s.reps !== undefined || s.weight !== undefined || s.durationSeconds !== undefined)
         .map((s) => ({
           setNumber: s.setNumber,
           reps: s.reps,
           weight: s.weight,
           rpe: s.rpe,
+          durationSeconds: s.durationSeconds,
         })),
     })),
   };
@@ -238,6 +245,7 @@ export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormDat
                 reps: set.reps ?? undefined,
                 weight: set.weight ?? undefined,
                 rpe: set.rpe ?? undefined,
+                durationSeconds: set.durationSeconds ?? undefined,
               }))
             : [createBlankSet(1)],
         rounds: log.rounds ?? undefined,
@@ -293,6 +301,10 @@ export function templateToWorkoutFormData(
           suggestion?.details?.unit === "reps"
             ? Math.max(1, Math.round(suggestion.details.suggestedValue))
             : undefined;
+        const suggestedDuration =
+          suggestion?.details?.unit === "s"
+            ? Math.max(5, Math.round(suggestion.details.suggestedValue))
+            : undefined;
 
         return {
           tempId: generateTempId(),
@@ -307,6 +319,7 @@ export function templateToWorkoutFormData(
             reps: suggestedReps,
             weight: suggestedWeight,
             rpe: undefined,
+            durationSeconds: suggestedDuration,
           })),
           rounds: undefined,
           workDurationSeconds: undefined,
