@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
+import { CreateCustomExerciseModal } from "./create-custom-exercise-modal";
 
 interface ExercisePickerProps {
   open: boolean;
@@ -30,6 +31,7 @@ export function ExercisePicker({
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(
     undefined,
   );
+  const [showCreateCustom, setShowCreateCustom] = useState(false);
 
   const { data: exercises, isLoading } = useQuery(
     trpc.exercises.search.queryOptions({
@@ -58,6 +60,7 @@ export function ExercisePicker({
   ] as const;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -134,9 +137,25 @@ export function ExercisePicker({
                 No exercises found
               </div>
             )}
+            <button
+              onClick={() => setShowCreateCustom(true)}
+              className="w-full p-3 text-center text-sm text-primary hover:bg-muted transition-colors border-t"
+            >
+              Can't find your exercise? Create a custom one
+            </button>
           </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>
+    <CreateCustomExerciseModal
+      open={showCreateCustom}
+      onOpenChange={setShowCreateCustom}
+      onCreated={(exercise) => {
+        onSelect(exercise);
+        onOpenChange(false);
+        setShowCreateCustom(false);
+      }}
+    />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
+import { NotificationBadge } from "@/components/notification-badge";
 
 function DrawerLayout() {
   const router = useRouter();
@@ -126,6 +127,27 @@ function DrawerLayout() {
           drawerIcon: ({ size, color, focused }) => (
             <Ionicons
               name="settings-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="notifications"
+        options={{
+          headerTitle: "Notifications",
+          drawerLabel: ({ color, focused }) => (
+            <View className="flex-row items-center gap-2">
+              <Text style={{ color: focused ? color : themeColorForeground }}>
+                Notifications
+              </Text>
+              <NotificationBadge />
+            </View>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="notifications-outline"
               size={size}
               color={focused ? color : themeColorForeground}
             />

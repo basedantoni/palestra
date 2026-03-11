@@ -9,6 +9,7 @@ import {
 
 import { exercise } from "./exercise";
 import { muscleGroupVolume } from "./muscle-group-volume";
+import { notification } from "./notification";
 import { personalRecord } from "./personal-record";
 import { progressiveOverloadState } from "./progressive-overload";
 import { userPreferences } from "./user-preferences";
@@ -97,6 +98,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   overloadStates: many(progressiveOverloadState),
   muscleGroupVolumes: many(muscleGroupVolume),
   exercises: many(exercise),
+  notifications: many(notification),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

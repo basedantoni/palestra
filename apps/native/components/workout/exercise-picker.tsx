@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { trpc } from "@/utils/trpc";
 import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/workout-utils";
+import { CreateCustomExerciseSheet } from "./create-custom-exercise-sheet";
 
 interface ExercisePickerProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export function ExercisePicker({ isOpen, onClose, onSelect }: ExercisePickerProp
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(
     undefined,
   );
+  const [showCreateCustom, setShowCreateCustom] = useState(false);
 
   const { data: exercises, isLoading } = useQuery(
     trpc.exercises.search.queryOptions({
@@ -54,6 +56,7 @@ export function ExercisePicker({ isOpen, onClose, onSelect }: ExercisePickerProp
   };
 
   return (
+    <>
     <Modal
       visible={isOpen}
       animationType="slide"
@@ -143,15 +146,39 @@ export function ExercisePicker({ isOpen, onClose, onSelect }: ExercisePickerProp
                   </View>
                 </Pressable>
               )}
+              ListFooterComponent={
+                <Pressable
+                  onPress={() => setShowCreateCustom(true)}
+                  className="py-4 items-center"
+                >
+                  <Text className="text-primary text-sm">
+                    Can't find your exercise? Create a custom one
+                  </Text>
+                </Pressable>
+              }
               contentContainerStyle={{ paddingBottom: 100 }}
             />
           ) : (
-            <View className="flex-1 justify-center items-center">
+            <View className="flex-1 justify-center items-center gap-3">
               <Text className="text-muted text-center">No exercises found</Text>
+              <Pressable onPress={() => setShowCreateCustom(true)}>
+                <Text className="text-primary text-sm">
+                  Can't find your exercise? Create a custom one
+                </Text>
+              </Pressable>
             </View>
           )}
         </View>
       </View>
     </Modal>
+    <CreateCustomExerciseSheet
+      isOpen={showCreateCustom}
+      onClose={() => setShowCreateCustom(false)}
+      onCreated={(exercise) => {
+        handleSelectExercise(exercise);
+        setShowCreateCustom(false);
+      }}
+    />
+    </>
   );
 }

@@ -1,9 +1,12 @@
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 import { db } from "@src/db";
 import {
   exercise,
+  notification,
+  user,
   workoutTemplate,
   workoutTemplateExercise,
 } from "@src/db/schema/index";
@@ -63,6 +66,7 @@ const templateInput = z.object({
 });
 
 export const adminRouter = router({
+  isAdmin: adminProcedure.query(() => true),
   exercisesList: adminProcedure.query(async () => {
     return db.select().from(exercise).orderBy(exercise.name);
   }),
@@ -113,6 +117,106 @@ export const adminRouter = router({
         .returning();
       return deleted ?? null;
     }),
+  // ---------------------------------------------------------------------------
+  // Pending custom exercise review queue
+  // ---------------------------------------------------------------------------
+  pendingExercises: adminProcedure.query(async () => {
+    return db
+      .select({
+        exercise: exercise,
+        submittedBy: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+      })
+      .from(exercise)
+      .innerJoin(user, eq(exercise.createdByUserId, user.id))
+      .where(
+        and(
+          eq(exercise.isCustom, true),
+          eq(exercise.status, "pending"),
+        ),
+      )
+      .orderBy(exercise.createdAt);
+  }),
+  approveExercise: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(exercise)
+          .set({
+            isCustom: false,
+            status: "approved",
+            approvedAt: new Date(),
+            approvedByUserId: ctx.session.user.id,
+          })
+          .where(
+            and(
+              eq(exercise.id, input.id),
+              eq(exercise.isCustom, true),
+              eq(exercise.status, "pending"),
+            ),
+          )
+          .returning();
+
+        if (!updated) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Pending exercise not found",
+          });
+        }
+
+        if (updated.createdByUserId) {
+          await tx.insert(notification).values({
+            id: crypto.randomUUID(),
+            userId: updated.createdByUserId,
+            type: "custom_exercise_approved",
+            title: "Exercise Approved!",
+            message: `Your exercise "${updated.name}" has been approved and added to the public library.`,
+            payload: { exerciseId: updated.id, exerciseName: updated.name },
+          });
+        }
+
+        return updated;
+      });
+    }),
+  rejectExercise: adminProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        reason: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const [updated] = await db
+        .update(exercise)
+        .set({
+          status: "rejected",
+          rejectedReason: input.reason ?? null,
+        })
+        .where(
+          and(
+            eq(exercise.id, input.id),
+            eq(exercise.isCustom, true),
+            eq(exercise.status, "pending"),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Pending exercise not found",
+        });
+      }
+
+      return updated;
+    }),
+  // ---------------------------------------------------------------------------
+  // Templates
+  // ---------------------------------------------------------------------------
   templatesList: adminProcedure.query(async () => {
     return db
       .select()

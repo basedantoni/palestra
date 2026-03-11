@@ -97,3 +97,14 @@ export const genderEnum = pgEnum("gender", [
   "other",
   "prefer_not_to_say",
 ]);
+
+export const customExerciseStatusEnum = pgEnum("custom_exercise_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "custom_exercise_approved",
+  "custom_exercise_rejected",
+]);

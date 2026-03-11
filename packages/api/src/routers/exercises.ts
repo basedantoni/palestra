@@ -33,8 +33,9 @@ const exerciseInput = z.object({
     )
     .optional(),
   muscleGroupsMovement: z
-    .array(z.enum(["push", "pull", "squat", "hinge", "carry"]))
+    .array(z.enum(["push", "pull", "squat", "hinge", "carry", "isometric"]))
     .optional(),
+  linkedExerciseId: z.string().uuid().optional(),
 });
 
 export const exercisesRouter = router({
@@ -123,6 +124,18 @@ export const exercisesRouter = router({
         .where(and(...clauses))
         .orderBy(exercise.name);
     }),
+  myCustomExercises: protectedProcedure.query(async ({ ctx }) => {
+    return db
+      .select()
+      .from(exercise)
+      .where(
+        and(
+          eq(exercise.isCustom, true),
+          eq(exercise.createdByUserId, ctx.session.user.id),
+        ),
+      )
+      .orderBy(exercise.createdAt);
+  }),
   createCustom: protectedProcedure
     .input(exerciseInput)
     .mutation(async ({ ctx, input }) => {
@@ -137,6 +150,8 @@ export const exercisesRouter = router({
           exerciseType: input.exerciseType,
           isCustom: true,
           createdByUserId: ctx.session.user.id,
+          linkedExerciseId: input.linkedExerciseId ?? null,
+          status: "pending",
         })
         .returning();
       return created!;

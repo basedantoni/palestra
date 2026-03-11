@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import { ModeToggle } from "./mode-toggle";
+import { NotificationBell } from "./notification-bell";
 import UserMenu from "./user-menu";
 
 export default function Header() {
@@ -26,6 +27,7 @@ export default function Header() {
           })}
         </nav>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <ModeToggle />
           <UserMenu />
         </div>

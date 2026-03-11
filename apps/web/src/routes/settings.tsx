@@ -2,14 +2,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 import { authClient } from "@/lib/auth-client";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/utils/trpc";
+import { CustomExerciseStatusBadge } from "@/components/custom-exercise-status-badge";
+import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
 import {
   DISTANCE_UNITS,
   MUSCLE_GROUP_SYSTEMS,
@@ -47,6 +51,9 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
   const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
+  const customExercisesQuery = useQuery(
+    trpc.exercises.myCustomExercises.queryOptions(),
+  );
   const { setTheme } = useTheme();
   const [formData, setFormData] = useState<SettingsFormData>({
     weightUnit: "lbs",
@@ -162,6 +169,8 @@ function RouteComponent() {
       </div>
     );
   }
+
+  const customExercises = customExercisesQuery.data ?? [];
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
@@ -333,6 +342,42 @@ function RouteComponent() {
                 : "Export Templates CSV"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* My Custom Exercises */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>My Custom Exercises</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {customExercisesQuery.isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading...</div>
+          ) : customExercises.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No custom exercises yet. Use the exercise picker in a workout to
+              create one.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {customExercises.map((ex) => (
+                <div key={ex.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <div className="font-medium text-sm">{ex.name}</div>
+                    <div className="mt-1 flex gap-1 flex-wrap">
+                      <Badge variant="secondary" className="text-xs">
+                        {EXERCISE_CATEGORY_LABELS[ex.category]}
+                      </Badge>
+                      <CustomExerciseStatusBadge status={ex.status} />
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {format(new Date(ex.createdAt), "MMM d, yyyy")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

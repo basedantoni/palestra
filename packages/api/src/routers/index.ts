@@ -3,6 +3,7 @@ import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
+import { notificationsRouter } from "./notifications";
 import { preferencesRouter } from "./preferences";
 import { templatesRouter } from "./templates";
 import { workoutsRouter } from "./workouts";
@@ -19,6 +20,7 @@ export const appRouter = router({
   }),
   preferences: preferencesRouter,
   exercises: exercisesRouter,
+  notifications: notificationsRouter,
   workouts: workoutsRouter,
   templates: templatesRouter,
   analytics: analyticsRouter,

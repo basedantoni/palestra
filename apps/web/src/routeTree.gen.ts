@@ -14,12 +14,15 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
 import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 import { Route as TemplatesTemplateIdRouteImport } from './routes/templates/$templateId'
+import { Route as AdminExercisesIndexRouteImport } from './routes/admin/exercises/index'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -46,6 +49,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -60,6 +68,11 @@ const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
   id: '/templates/',
   path: '/templates/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
 } as any)
 const WorkoutsNewRoute = WorkoutsNewRouteImport.update({
   id: '/workouts/new',
@@ -76,9 +89,15 @@ const TemplatesTemplateIdRoute = TemplatesTemplateIdRouteImport.update({
   path: '/templates/$templateId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
+  id: '/exercises/',
+  path: '/exercises/',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
@@ -87,8 +106,10 @@ export interface FileRoutesByFullPath {
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
+  '/admin/': typeof AdminIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
+  '/admin/exercises/': typeof AdminExercisesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -100,12 +121,15 @@ export interface FileRoutesByTo {
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
+  '/admin': typeof AdminIndexRoute
   '/templates': typeof TemplatesIndexRoute
   '/workouts': typeof WorkoutsIndexRoute
+  '/admin/exercises': typeof AdminExercisesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
@@ -114,13 +138,16 @@ export interface FileRoutesById {
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
+  '/admin/': typeof AdminIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
+  '/admin/exercises/': typeof AdminExercisesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/dashboard'
     | '/login'
@@ -129,8 +156,10 @@ export interface FileRouteTypes {
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
+    | '/admin/'
     | '/templates/'
     | '/workouts/'
+    | '/admin/exercises/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -142,11 +171,14 @@ export interface FileRouteTypes {
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
+    | '/admin'
     | '/templates'
     | '/workouts'
+    | '/admin/exercises'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/analytics'
     | '/dashboard'
     | '/login'
@@ -155,12 +187,15 @@ export interface FileRouteTypes {
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
+    | '/admin/'
     | '/templates/'
     | '/workouts/'
+    | '/admin/exercises/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
@@ -210,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -230,6 +272,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/templates/'
       preLoaderRoute: typeof TemplatesIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/workouts/new': {
       id: '/workouts/new'
@@ -252,11 +301,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TemplatesTemplateIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/exercises/': {
+      id: '/admin/exercises/'
+      path: '/exercises'
+      fullPath: '/admin/exercises/'
+      preLoaderRoute: typeof AdminExercisesIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminExercisesIndexRoute: typeof AdminExercisesIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminIndexRoute: AdminIndexRoute,
+  AdminExercisesIndexRoute: AdminExercisesIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
