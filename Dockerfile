@@ -9,7 +9,7 @@ WORKDIR /app
 
 COPY . .
 RUN pnpm install --frozen-lockfile
-RUN cd apps/server && pnpm build
+RUN SKIP_ENV_VALIDATION=1 pnpm --dir apps/server build
 
 # ---- Runtime stage ----
 FROM base AS runner
