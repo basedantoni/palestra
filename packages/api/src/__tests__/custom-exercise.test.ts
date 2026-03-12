@@ -1,132 +1,177 @@
 /**
- * Integration tests for custom exercise library feature.
+ * Unit tests for the custom exercise library and notification features.
  *
- * These tests hit the real database — run with a test/local DB.
- * Each test cleans up its own data using unique IDs.
+ * The database is fully mocked — no real DB connection or secrets required.
+ * Tests call through the actual tRPC procedures to verify behavior, not
+ * implementation details like SQL column values.
  */
-import { describe, it, expect, afterAll } from "vitest";
-import { and, eq, isNull } from "drizzle-orm";
-
-import { db } from "@src/db";
-import {
-  exercise,
-  notification,
-  user,
-} from "@src/db/schema/index";
-
-const ADMIN_EMAIL = "admin@test.internal";
-const USER_EMAIL = "user@test.internal";
-const ADMIN_ID = `test-admin-${crypto.randomUUID()}`;
-const USER_ID = `test-user-${crypto.randomUUID()}`;
-
-// Track rows we create so we can clean up after all tests.
-const createdExerciseIds: string[] = [];
-const createdNotificationIds: string[] = [];
-const createdUserIds: string[] = [ADMIN_ID, USER_ID];
-
-async function seedTestUsers() {
-  await db
-    .insert(user)
-    .values([
-      {
-        id: ADMIN_ID,
-        name: "Admin",
-        email: ADMIN_EMAIL,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        id: USER_ID,
-        name: "Regular User",
-        email: USER_EMAIL,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ])
-    .onConflictDoNothing();
-}
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
-// Cleanup
+// Hoisted mocks — vi.hoisted runs before any module imports, making these
+// values available inside vi.mock factories AND in test bodies.
 // ---------------------------------------------------------------------------
-afterAll(async () => {
-  if (createdExerciseIds.length) {
-    for (const id of createdExerciseIds) {
-      await db.delete(exercise).where(eq(exercise.id, id)).catch(() => {});
-    }
+const { mockDb, mockTx, makeChain } = vi.hoisted(() => {
+  /**
+   * Creates a Drizzle-style chainable query builder.
+   * Any method call (from, where, set, returning, etc.) returns the same
+   * proxy, and the proxy itself is thenable — it resolves with `resolveWith`.
+   */
+  function makeChain(resolveWith: unknown = []) {
+    const proxy: any = new Proxy(
+      {},
+      {
+        get(_, prop: string) {
+          if (prop === "then")
+            return (ok: any) => Promise.resolve(resolveWith).then(ok);
+          if (prop === "catch")
+            return (err: any) => Promise.resolve(resolveWith).catch(err);
+          if (prop === "finally")
+            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
+          return vi.fn(() => proxy);
+        },
+      },
+    );
+    return proxy;
   }
-  if (createdNotificationIds.length) {
-    for (const id of createdNotificationIds) {
-      await db
-        .delete(notification)
-        .where(eq(notification.id, id))
-        .catch(() => {});
-    }
-  }
-  for (const id of createdUserIds) {
-    await db.delete(user).where(eq(user.id, id)).catch(() => {});
-  }
+
+  // Separate tx mock so approve/reject tests can assert on tx.insert calls
+  const mockTx = {
+    update: vi.fn(),
+    insert: vi.fn(),
+    select: vi.fn(),
+  };
+
+  const mockDb = {
+    select: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    transaction: vi.fn(),
+  };
+
+  return { mockDb, mockTx, makeChain };
 });
 
-// ---------------------------------------------------------------------------
-// Lazy-import routers AFTER tests are declared to avoid circular boot issues
-// ---------------------------------------------------------------------------
-async function getExercisesRouter() {
-  const { exercisesRouter } = await import("../routers/exercises");
-  return exercisesRouter;
-}
+vi.mock("@src/db", () => ({ db: mockDb }));
 
+vi.mock("@src/env/server", () => ({
+  env: {
+    ADMIN_EMAILS: "admin@test.internal",
+    NODE_ENV: "test",
+    DATABASE_URL: "postgresql://test:test@localhost:5432/testdb",
+    BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    CORS_ORIGIN: "http://localhost:3001",
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Router import — after mocks are registered
+// ---------------------------------------------------------------------------
+import { appRouter } from "../routers/index";
+
+// ---------------------------------------------------------------------------
+// Shared test fixtures
+// ---------------------------------------------------------------------------
+const USER_ID = "00000000-0000-4000-8000-000000000001";
+const ADMIN_ID = "00000000-0000-4000-8000-000000000002";
+const EXERCISE_ID = "00000000-0000-4000-8000-000000000003";
+const NOTIF_ID = "00000000-0000-4000-8000-000000000004";
+
+const userCaller = appRouter.createCaller({
+  session: {
+    user: { id: USER_ID, email: "user@test.internal", name: "Test User" },
+    session: { id: "sess-user", userId: USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+  },
+  headers: new Headers(),
+} as any);
+
+const adminCaller = appRouter.createCaller({
+  session: {
+    user: { id: ADMIN_ID, email: "admin@test.internal", name: "Admin" },
+    session: { id: "sess-admin", userId: ADMIN_ID, expiresAt: new Date(Date.now() + 86400000) },
+  },
+  headers: new Headers(),
+} as any);
+
+const unauthCaller = appRouter.createCaller({
+  session: null,
+  headers: new Headers(),
+} as any);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+});
 
 // ---------------------------------------------------------------------------
 // exercises.createCustom
 // ---------------------------------------------------------------------------
 describe("exercises.createCustom", () => {
-  it("sets status to 'pending' and stores linkedExerciseId", async () => {
-    await seedTestUsers();
-
-    // First create a public "parent" exercise to link to
-    const parentId = crypto.randomUUID();
-    await db.insert(exercise).values({
-      id: parentId,
-      name: `Test Parent Exercise ${parentId.slice(0, 8)}`,
+  it("returns the created exercise with status pending", async () => {
+    const created = {
+      id: EXERCISE_ID,
+      name: "Zercher Squat",
       category: "legs",
       exerciseType: "weightlifting",
-      isCustom: false,
-    });
-    createdExerciseIds.push(parentId);
-
-    // Manually invoke the procedure's resolver
-    void (await getExercisesRouter()); // ensure router module imports without error
-    const input = {
-      name: `Zercher Squat ${crypto.randomUUID().slice(0, 8)}`,
-      category: "legs" as const,
-      exerciseType: "weightlifting" as const,
-      linkedExerciseId: parentId,
+      isCustom: true,
+      status: "pending",
+      linkedExerciseId: "00000000-0000-4000-8000-000000000010",
+      createdByUserId: USER_ID,
+      createdAt: new Date(),
     };
+    mockDb.insert.mockReturnValue(makeChain([created]));
 
-    // Insert directly (mirrors what the router does) and verify schema
-    const [created] = await db
-      .insert(exercise)
-      .values({
-        id: crypto.randomUUID(),
-        name: input.name,
-        category: input.category,
-        exerciseType: input.exerciseType,
-        isCustom: true,
-        createdByUserId: USER_ID,
-        linkedExerciseId: input.linkedExerciseId,
-        status: "pending",
-      })
-      .returning();
+    const result = await userCaller.exercises.createCustom({
+      name: "Zercher Squat",
+      category: "legs",
+      exerciseType: "weightlifting",
+      linkedExerciseId: "00000000-0000-4000-8000-000000000010",
+    });
 
-    createdExerciseIds.push(created!.id);
+    expect(result.status).toBe("pending");
+    expect(result.isCustom).toBe(true);
+    expect(result.linkedExerciseId).toBe("00000000-0000-4000-8000-000000000010");
+  });
 
-    expect(created!.status).toBe("pending");
-    expect(created!.linkedExerciseId).toBe(parentId);
-    expect(created!.isCustom).toBe(true);
-    expect(created!.createdByUserId).toBe(USER_ID);
+  it("throws UNAUTHORIZED for unauthenticated callers", async () => {
+    await expect(
+      unauthCaller.exercises.createCustom({
+        name: "Test",
+        category: "legs",
+        exerciseType: "weightlifting",
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exercises.myCustomExercises
+// ---------------------------------------------------------------------------
+describe("exercises.myCustomExercises", () => {
+  it("returns the authenticated user's custom exercises", async () => {
+    const exercises = [
+      { id: EXERCISE_ID, name: "My Custom Squat", isCustom: true, status: "pending", createdByUserId: USER_ID },
+    ];
+    mockDb.select.mockReturnValue(makeChain(exercises));
+
+    const result = await userCaller.exercises.myCustomExercises();
+
+    expect(result).toEqual(exercises);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// admin.isAdmin
+// ---------------------------------------------------------------------------
+describe("admin.isAdmin", () => {
+  it("returns true for users in the ADMIN_EMAILS allowlist", async () => {
+    expect(await adminCaller.admin.isAdmin()).toBe(true);
+  });
+
+  it("throws FORBIDDEN for non-admin users", async () => {
+    await expect(userCaller.admin.isAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
@@ -134,104 +179,68 @@ describe("exercises.createCustom", () => {
 // admin.approveExercise
 // ---------------------------------------------------------------------------
 describe("admin.approveExercise", () => {
-  it("flips isCustom to false, status to approved, and creates a notification", async () => {
-    await seedTestUsers();
-
-    // Create a pending exercise
-    const exerciseId = crypto.randomUUID();
-    await db.insert(exercise).values({
-      id: exerciseId,
-      name: `Pending Exercise ${exerciseId.slice(0, 8)}`,
-      category: "back",
-      exerciseType: "weightlifting",
-      isCustom: true,
+  it("returns the exercise promoted to the public library", async () => {
+    const approved = {
+      id: EXERCISE_ID,
+      name: "Zercher Squat",
+      isCustom: false,
+      status: "approved",
       createdByUserId: USER_ID,
-      status: "pending",
-    });
-    createdExerciseIds.push(exerciseId);
+      approvedAt: new Date(),
+      approvedByUserId: ADMIN_ID,
+    };
+    mockTx.update.mockReturnValue(makeChain([approved]));
+    mockTx.insert.mockReturnValue(makeChain([]));
 
-    // Approve it via a DB transaction (mirrors what the router does)
-    const [updated] = await db.transaction(async (tx) => {
-      const [upd] = await tx
-        .update(exercise)
-        .set({
-          isCustom: false,
-          status: "approved",
-          approvedAt: new Date(),
-          approvedByUserId: ADMIN_ID,
-        })
-        .where(
-          and(
-            eq(exercise.id, exerciseId),
-            eq(exercise.isCustom, true),
-            eq(exercise.status, "pending"),
-          ),
-        )
-        .returning();
+    const result = await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
 
-      if (!upd) throw new Error("Exercise not found");
-
-      const notifId = crypto.randomUUID();
-      await tx.insert(notification).values({
-        id: notifId,
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Exercise Approved!",
-        message: `Your exercise "${upd.name}" has been approved.`,
-        payload: { exerciseId: upd.id },
-      });
-      createdNotificationIds.push(notifId);
-
-      return [upd];
-    });
-
-    expect(updated!.isCustom).toBe(false);
-    expect(updated!.status).toBe("approved");
-    expect(updated!.approvedByUserId).toBe(ADMIN_ID);
-
-    // Verify notification was created
-    const [notif] = await db
-      .select()
-      .from(notification)
-      .where(
-        and(
-          eq(notification.userId, USER_ID),
-          eq(notification.type, "custom_exercise_approved"),
-        ),
-      );
-    expect(notif).toBeDefined();
-    expect(notif!.readAt).toBeNull();
+    expect(result.isCustom).toBe(false);
+    expect(result.status).toBe("approved");
   });
 
-  it("throws NOT_FOUND when exercise is not pending", async () => {
-    await seedTestUsers();
-
-    const exerciseId = crypto.randomUUID();
-    await db.insert(exercise).values({
-      id: exerciseId,
-      name: `Already Approved ${exerciseId.slice(0, 8)}`,
-      category: "chest",
-      exerciseType: "weightlifting",
-      isCustom: false, // already approved
-      createdByUserId: USER_ID,
+  it("creates a notification for the original submitter", async () => {
+    const approved = {
+      id: EXERCISE_ID,
+      name: "Zercher Squat",
+      isCustom: false,
       status: "approved",
-    });
-    createdExerciseIds.push(exerciseId);
+      createdByUserId: USER_ID, // has a submitter
+    };
+    mockTx.update.mockReturnValue(makeChain([approved]));
+    mockTx.insert.mockReturnValue(makeChain([]));
 
-    // Trying to approve should update 0 rows
-    const result = await db
-      .update(exercise)
-      .set({ isCustom: false, status: "approved" })
-      .where(
-        and(
-          eq(exercise.id, exerciseId),
-          eq(exercise.isCustom, true),
-          eq(exercise.status, "pending"),
-        ),
-      )
-      .returning();
+    await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
 
-    expect(result).toHaveLength(0);
+    expect(mockTx.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create a notification when exercise has no submitter", async () => {
+    const approved = {
+      id: EXERCISE_ID,
+      name: "Orphan Exercise",
+      isCustom: false,
+      status: "approved",
+      createdByUserId: null, // admin-seeded exercise, no user to notify
+    };
+    mockTx.update.mockReturnValue(makeChain([approved]));
+
+    await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
+
+    expect(mockTx.insert).not.toHaveBeenCalled();
+  });
+
+  it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
+    mockTx.update.mockReturnValue(makeChain([])); // 0 rows updated
+
+    await expect(
+      adminCaller.admin.approveExercise({ id: EXERCISE_ID }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("throws FORBIDDEN for non-admin callers", async () => {
+    await expect(
+      userCaller.admin.approveExercise({ id: EXERCISE_ID }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
@@ -239,37 +248,40 @@ describe("admin.approveExercise", () => {
 // admin.rejectExercise
 // ---------------------------------------------------------------------------
 describe("admin.rejectExercise", () => {
-  it("sets status to rejected and does NOT create a notification (per user decision)", async () => {
-    await seedTestUsers();
-
-    const exerciseId = crypto.randomUUID();
-    await db.insert(exercise).values({
-      id: exerciseId,
-      name: `Reject Me ${exerciseId.slice(0, 8)}`,
-      category: "core",
-      exerciseType: "calisthenics",
+  it("returns the exercise with status rejected and stores the reason", async () => {
+    const rejected = {
+      id: EXERCISE_ID,
+      name: "Bad Exercise",
       isCustom: true,
-      createdByUserId: USER_ID,
-      status: "pending",
+      status: "rejected",
+      rejectedReason: "Duplicate of existing exercise",
+    };
+    mockDb.update.mockReturnValue(makeChain([rejected]));
+
+    const result = await adminCaller.admin.rejectExercise({
+      id: EXERCISE_ID,
+      reason: "Duplicate of existing exercise",
     });
-    createdExerciseIds.push(exerciseId);
 
-    const [updated] = await db
-      .update(exercise)
-      .set({ status: "rejected", rejectedReason: "Duplicate exercise" })
-      .where(
-        and(
-          eq(exercise.id, exerciseId),
-          eq(exercise.isCustom, true),
-          eq(exercise.status, "pending"),
-        ),
-      )
-      .returning();
+    expect(result.status).toBe("rejected");
+    expect(result.rejectedReason).toBe("Duplicate of existing exercise");
+  });
 
-    expect(updated!.status).toBe("rejected");
-    expect(updated!.rejectedReason).toBe("Duplicate exercise");
-    // isCustom stays true — not promoted
-    expect(updated!.isCustom).toBe(true);
+  it("does not create a notification on rejection", async () => {
+    const rejected = { id: EXERCISE_ID, isCustom: true, status: "rejected" };
+    mockDb.update.mockReturnValue(makeChain([rejected]));
+
+    await adminCaller.admin.rejectExercise({ id: EXERCISE_ID });
+
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
+    mockDb.update.mockReturnValue(makeChain([]));
+
+    await expect(
+      adminCaller.admin.rejectExercise({ id: EXERCISE_ID }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 
@@ -277,38 +289,54 @@ describe("admin.rejectExercise", () => {
 // notifications.list
 // ---------------------------------------------------------------------------
 describe("notifications.list", () => {
-  it("returns notifications for the user ordered newest first", async () => {
-    await seedTestUsers();
+  it("returns the authenticated user's notifications", async () => {
+    const notifs = [
+      { id: NOTIF_ID, title: "Exercise Approved!", userId: USER_ID, readAt: null, createdAt: new Date() },
+    ];
+    mockDb.select.mockReturnValue(makeChain(notifs));
 
-    const ids = [crypto.randomUUID(), crypto.randomUUID()];
-    await db.insert(notification).values([
-      {
-        id: ids[0],
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Older",
-        message: "older message",
-        createdAt: new Date("2026-01-01"),
-      },
-      {
-        id: ids[1],
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Newer",
-        message: "newer message",
-        createdAt: new Date("2026-01-02"),
-      },
-    ]);
-    ids.forEach((id) => createdNotificationIds.push(id));
+    const result = await userCaller.notifications.list();
 
-    const rows = await db
-      .select()
-      .from(notification)
-      .where(eq(notification.userId, USER_ID))
-      .orderBy(notification.createdAt);
+    expect(result).toEqual(notifs);
+  });
+});
 
-    const titles = rows.map((r) => r.title);
-    expect(titles.indexOf("Older")).toBeLessThan(titles.indexOf("Newer"));
+// ---------------------------------------------------------------------------
+// notifications.unreadCount
+// ---------------------------------------------------------------------------
+describe("notifications.unreadCount", () => {
+  it("returns the number of unread notifications", async () => {
+    mockDb.select.mockReturnValue(makeChain([{ count: 3 }]));
+
+    expect(await userCaller.notifications.unreadCount()).toBe(3);
+  });
+
+  it("returns 0 when there are no unread notifications", async () => {
+    mockDb.select.mockReturnValue(makeChain([])); // empty result → fallback to 0
+
+    expect(await userCaller.notifications.unreadCount()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// notifications.markRead
+// ---------------------------------------------------------------------------
+describe("notifications.markRead", () => {
+  it("returns the notification with readAt populated", async () => {
+    const updated = { id: NOTIF_ID, userId: USER_ID, readAt: new Date() };
+    mockDb.update.mockReturnValue(makeChain([updated]));
+
+    const result = await userCaller.notifications.markRead({ id: NOTIF_ID });
+
+    expect(result?.readAt).toBeDefined();
+  });
+
+  it("returns null when notification is not found", async () => {
+    mockDb.update.mockReturnValue(makeChain([]));
+
+    const result = await userCaller.notifications.markRead({ id: NOTIF_ID });
+
+    expect(result).toBeNull();
   });
 });
 
@@ -316,129 +344,19 @@ describe("notifications.list", () => {
 // notifications.markAllRead
 // ---------------------------------------------------------------------------
 describe("notifications.markAllRead", () => {
-  it("marks all unread notifications as read and leaves already-read ones unchanged", async () => {
-    await seedTestUsers();
+  it("returns success", async () => {
+    mockDb.update.mockReturnValue(makeChain([]));
 
-    const unreadId1 = crypto.randomUUID();
-    const unreadId2 = crypto.randomUUID();
-    const alreadyReadId = crypto.randomUUID();
-    const readAt = new Date("2026-01-01");
+    const result = await userCaller.notifications.markAllRead();
 
-    await db.insert(notification).values([
-      {
-        id: unreadId1,
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Unread 1",
-        message: "msg",
-        readAt: null,
-      },
-      {
-        id: unreadId2,
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Unread 2",
-        message: "msg",
-        readAt: null,
-      },
-      {
-        id: alreadyReadId,
-        userId: USER_ID,
-        type: "custom_exercise_approved",
-        title: "Already Read",
-        message: "msg",
-        readAt,
-      },
-    ]);
-    [unreadId1, unreadId2, alreadyReadId].forEach((id) =>
-      createdNotificationIds.push(id),
-    );
-
-    // Mirrors what notificationsRouter.markAllRead does
-    await db
-      .update(notification)
-      .set({ readAt: new Date() })
-      .where(
-        and(
-          eq(notification.userId, USER_ID),
-          isNull(notification.readAt),
-        ),
-      );
-
-    const remaining = await db
-      .select()
-      .from(notification)
-      .where(
-        and(
-          eq(notification.userId, USER_ID),
-          isNull(notification.readAt),
-        ),
-      );
-    // No unread left for this user
-    const ourUnread = remaining.filter((r) =>
-      [unreadId1, unreadId2].includes(r.id),
-    );
-    expect(ourUnread).toHaveLength(0);
-
-    // Previously-read notification's timestamp is unchanged
-    const [stillRead] = await db
-      .select()
-      .from(notification)
-      .where(eq(notification.id, alreadyReadId));
-    expect(stillRead!.readAt!.getTime()).toBe(readAt.getTime());
+    expect(result).toEqual({ success: true });
   });
-});
 
-// ---------------------------------------------------------------------------
-// notifications — unread count and mark read
-// ---------------------------------------------------------------------------
-describe("notifications.unreadCount and markRead", () => {
-  it("counts unread notifications and decrements after markRead", async () => {
-    await seedTestUsers();
+  it("only touches the DB once (single update, not per-notification)", async () => {
+    mockDb.update.mockReturnValue(makeChain([]));
 
-    const notifId = crypto.randomUUID();
-    await db.insert(notification).values({
-      id: notifId,
-      userId: USER_ID,
-      type: "custom_exercise_approved",
-      title: "Test Notif",
-      message: "Test message",
-      readAt: null,
-    });
-    createdNotificationIds.push(notifId);
+    await userCaller.notifications.markAllRead();
 
-    // Count unread for this user
-    const unread = await db
-      .select()
-      .from(notification)
-      .where(
-        and(
-          eq(notification.userId, USER_ID),
-          isNull(notification.readAt),
-        ),
-      );
-    expect(unread.length).toBeGreaterThanOrEqual(1);
-
-    // Mark read
-    const [marked] = await db
-      .update(notification)
-      .set({ readAt: new Date() })
-      .where(eq(notification.id, notifId))
-      .returning();
-
-    expect(marked!.readAt).not.toBeNull();
-
-    // Confirm no longer in unread
-    const stillUnread = await db
-      .select()
-      .from(notification)
-      .where(
-        and(
-          eq(notification.userId, USER_ID),
-          eq(notification.id, notifId),
-          isNull(notification.readAt),
-        ),
-      );
-    expect(stillUnread).toHaveLength(0);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
   });
 });
