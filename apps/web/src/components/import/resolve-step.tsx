@@ -93,8 +93,8 @@ function ExerciseRow({
   const isResolved = userResolution !== undefined;
   const isSkipped = userResolution?.type === "skip";
 
-  const filteredMatches = resolution.matches.filter((m) =>
-    m.exerciseName.toLowerCase().includes(searchQuery.toLowerCase()),
+  const { data: searchResults, isLoading: isSearching } = useQuery(
+    trpc.exercises.search.queryOptions({ query: searchQuery || undefined }),
   );
 
   const handleSelectExisting = (match: FuzzyMatchResult) => {
@@ -226,14 +226,24 @@ function ExerciseRow({
             />
             {searchQuery && (
               <div className="max-h-32 overflow-y-auto space-y-0.5 border rounded-none">
-                {filteredMatches.length > 0 ? (
-                  filteredMatches.map((match) => (
+                {isSearching ? (
+                  <p className="text-xs text-muted-foreground px-2 py-1">
+                    Searching...
+                  </p>
+                ) : searchResults && searchResults.length > 0 ? (
+                  searchResults.map((exercise) => (
                     <button
-                      key={match.exerciseId}
+                      key={exercise.id}
                       className="w-full text-left text-xs px-2 py-1 hover:bg-muted/50 flex items-center justify-between"
-                      onClick={() => handleSelectExisting(match)}
+                      onClick={() =>
+                        onChange({
+                          type: "existing",
+                          exerciseId: exercise.id,
+                          exerciseName: exercise.name,
+                        })
+                      }
                     >
-                      <span>{match.exerciseName}</span>
+                      <span>{exercise.name}</span>
                     </button>
                   ))
                 ) : (
