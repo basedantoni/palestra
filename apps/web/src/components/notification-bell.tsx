@@ -59,7 +59,7 @@ export function NotificationBell() {
     <Popover>
       <PopoverTrigger
         render={
-          <Button variant="outline" size="icon" className="relative h-9 w-9" />
+          <Button variant="outline" size="icon" className="relative h-8 w-8" />
         }
       >
         <Bell className="h-4 w-4" />
@@ -70,10 +70,7 @@ export function NotificationBell() {
         ) : null}
         <span className="sr-only">Notifications</span>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-80 p-0"
-        align="end"
-      >
+      <PopoverContent className="w-80 p-0" align="end">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">Notifications</span>
           {unreadCount > 0 ? (

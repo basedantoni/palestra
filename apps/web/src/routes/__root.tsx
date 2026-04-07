@@ -10,11 +10,12 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import type { trpc } from "@/utils/trpc";
 
-import Header from "@/components/header";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 import "../index.css";
+import { AppSidebar } from "@/components/app-sidebar";
 
 export interface RouterAppContext {
   trpc: typeof trpc;
@@ -52,13 +53,16 @@ function RootComponent() {
         disableTransitionOnChange
         storageKey="vite-ui-theme"
       >
-        <div className="container mx-auto px-4">
-          <Header />
-          <Outlet />
-        </div>
-        <Toaster richColors />
+        <SidebarProvider>
+          <AppSidebar />
+          <main className="container py-1 px-2">
+            <SidebarTrigger />
+            <Outlet />
+          </main>
+          <Toaster richColors />
+        </SidebarProvider>
       </ThemeProvider>
-      <TanStackRouterDevtools position="bottom-left" />
+      <TanStackRouterDevtools position="top-right" />
       <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
     </>
   );

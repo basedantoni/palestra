@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useSidebar } from "@/components/ui/sidebar";
 
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import { Skeleton } from "./ui/skeleton";
 
 export default function UserMenu() {
   const navigate = useNavigate();
+  const { setOpenMobile } = useSidebar();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
@@ -24,7 +26,7 @@ export default function UserMenu() {
 
   if (!session) {
     return (
-      <Link to="/login">
+      <Link to="/login" onClick={() => setOpenMobile(false)}>
         <Button variant="outline">Sign In</Button>
       </Link>
     );
@@ -52,6 +54,8 @@ export default function UserMenu() {
                   },
                 },
               });
+
+              setOpenMobile(false);
             }}
           >
             Sign Out
