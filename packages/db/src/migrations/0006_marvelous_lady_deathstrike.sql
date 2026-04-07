@@ -1,0 +1,1 @@
+ALTER TYPE "public"."custom_exercise_status" ADD VALUE 'imported';

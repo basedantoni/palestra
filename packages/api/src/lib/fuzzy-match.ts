@@ -14,6 +14,7 @@ export interface ExerciseResolution {
   // high = best match score >= 80
   // low  = best match score >= 50 and < 80
   // none = best match score < 50 or no matches
+  similarTo: string[]; // other parsed names in this batch with cross-batch score >= 60
 }
 
 // ---- Helpers ----
@@ -117,7 +118,7 @@ export function resolveExerciseNames(
     exerciseType: string;
   }[],
 ): ExerciseResolution[] {
-  return parsedNames.map((parsedName) => {
+  const resolutions: ExerciseResolution[] = parsedNames.map((parsedName) => {
     const scored: FuzzyMatchResult[] = exerciseLibrary.map((ex) => ({
       exerciseId: ex.id,
       exerciseName: ex.name,
@@ -149,6 +150,26 @@ export function resolveExerciseNames(
       matches: top5,
       bestMatch: bestScore >= 50 ? bestMatch : null,
       confidence,
+      similarTo: [],
     };
   });
+
+  // Cross-batch pairwise similarity
+  const CROSS_BATCH_THRESHOLD = 60;
+  for (let i = 0; i < resolutions.length; i++) {
+    const similarNames: string[] = [];
+    for (let j = 0; j < resolutions.length; j++) {
+      if (i === j) continue;
+      const score = computeSimilarity(
+        resolutions[i]!.parsedName,
+        resolutions[j]!.parsedName,
+      );
+      if (score >= CROSS_BATCH_THRESHOLD) {
+        similarNames.push(resolutions[j]!.parsedName);
+      }
+    }
+    resolutions[i]!.similarTo = similarNames;
+  }
+
+  return resolutions;
 }

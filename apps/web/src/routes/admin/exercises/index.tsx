@@ -72,9 +72,9 @@ function AdminExercisesPage() {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-xl font-semibold">Pending Exercise Queue</h2>
+        <h2 className="text-xl font-semibold">Exercise Review Queue</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Review user-submitted custom exercises for public library inclusion.
+          Review user-submitted and imported exercises for public library inclusion.
         </p>
       </div>
 
@@ -82,7 +82,7 @@ function AdminExercisesPage() {
         <div className="text-sm text-muted-foreground">Loading...</div>
       ) : pendingExercises.length === 0 ? (
         <div className="rounded border p-8 text-center text-sm text-muted-foreground">
-          No pending exercises to review.
+          No exercises to review.
         </div>
       ) : (
         <div className="divide-y border">
@@ -100,6 +100,11 @@ function AdminExercisesPage() {
                   <Badge variant="outline" className="text-xs">
                     {ex.exerciseType}
                   </Badge>
+                  {ex.status === "imported" && (
+                    <Badge variant="outline" className="text-xs border-blue-400 text-blue-600">
+                      Imported
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   By {submittedBy.name} ({submittedBy.email}) &middot;{" "}

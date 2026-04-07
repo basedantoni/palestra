@@ -79,10 +79,12 @@ function ExerciseRow({
   resolution,
   userResolution,
   onChange,
+  onApplyToSimilar,
 }: {
   resolution: ExerciseResolution;
   userResolution: Resolution | undefined;
   onChange: (r: Resolution) => void;
+  onApplyToSimilar: (names: string[], resolution: Resolution) => void;
 }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createName, setCreateName] = useState(resolution.parsedName);
@@ -171,6 +173,28 @@ function ExerciseRow({
           </Button>
         </div>
       </div>
+
+      {/* Cross-batch similarity warning */}
+      {resolution.similarTo && resolution.similarTo.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700 rounded-none px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-200">
+          <span className="font-medium">Possible duplicate:</span>{" "}
+          May be the same as{" "}
+          {resolution.similarTo.map((name, i) => (
+            <span key={name}>
+              {i > 0 && ", "}
+              <span className="font-medium">"{name}"</span>
+            </span>
+          ))}
+          {userResolution && userResolution.type !== "skip" && (
+            <button
+              className="ml-2 underline underline-offset-2 font-medium"
+              onClick={() => onApplyToSimilar(resolution.similarTo, userResolution)}
+            >
+              Apply this resolution to similar
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Auto-matched high confidence -- show the match and allow changing */}
       {resolution.confidence === "high" && !userResolution && resolution.bestMatch && (
@@ -477,6 +501,15 @@ export function ResolveStep({
               resolution={r}
               userResolution={resolutionMap[r.parsedName]}
               onChange={(res) => setResolution(r.parsedName, res)}
+              onApplyToSimilar={(names, res) => {
+                setResolutionMap((prev) => {
+                  const next = { ...prev };
+                  for (const name of names) {
+                    next[name] = res;
+                  }
+                  return next;
+                });
+              }}
             />
           ))}
         </Section>
@@ -492,6 +525,15 @@ export function ResolveStep({
               resolution={r}
               userResolution={resolutionMap[r.parsedName]}
               onChange={(res) => setResolution(r.parsedName, res)}
+              onApplyToSimilar={(names, res) => {
+                setResolutionMap((prev) => {
+                  const next = { ...prev };
+                  for (const name of names) {
+                    next[name] = res;
+                  }
+                  return next;
+                });
+              }}
             />
           ))}
         </Section>
@@ -503,6 +545,15 @@ export function ResolveStep({
               resolution={r}
               userResolution={resolutionMap[r.parsedName]}
               onChange={(res) => setResolution(r.parsedName, res)}
+              onApplyToSimilar={(names, res) => {
+                setResolutionMap((prev) => {
+                  const next = { ...prev };
+                  for (const name of names) {
+                    next[name] = res;
+                  }
+                  return next;
+                });
+              }}
             />
           ))}
         </Section>

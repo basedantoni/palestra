@@ -102,6 +102,7 @@ export const customExerciseStatusEnum = pgEnum("custom_exercise_status", [
   "pending",
   "approved",
   "rejected",
+  "imported",
 ]);
 
 export const notificationTypeEnum = pgEnum("notification_type", [

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 import { db } from "@src/db";
@@ -135,7 +135,7 @@ export const adminRouter = router({
       .where(
         and(
           eq(exercise.isCustom, true),
-          eq(exercise.status, "pending"),
+          inArray(exercise.status, ["pending", "imported"]),
         ),
       )
       .orderBy(exercise.createdAt);
@@ -156,7 +156,7 @@ export const adminRouter = router({
             and(
               eq(exercise.id, input.id),
               eq(exercise.isCustom, true),
-              eq(exercise.status, "pending"),
+              inArray(exercise.status, ["pending", "imported"]),
             ),
           )
           .returning();
@@ -200,7 +200,7 @@ export const adminRouter = router({
           and(
             eq(exercise.id, input.id),
             eq(exercise.isCustom, true),
-            eq(exercise.status, "pending"),
+            inArray(exercise.status, ["pending", "imported"]),
           ),
         )
         .returning();

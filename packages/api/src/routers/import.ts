@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { and, eq, gte, lte, or } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 
 import { db } from "@src/db";
 import { exercise, exerciseLog, exerciseSet, workout } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { parseWorkoutMarkdown } from "../lib/workout-import-parser";
-import { resolveExerciseNames } from "../lib/fuzzy-match";
+import { computeSimilarity, resolveExerciseNames } from "../lib/fuzzy-match";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 
@@ -189,20 +189,62 @@ export const importRouter = router({
       const userId = ctx.session.user.id;
 
       // --- Phase A: Create any new exercises (outside the main transaction) ---
-      const createdExerciseMap: Record<string, string> = {}; // parsedName -> new exerciseId
-      for (const [parsedName, resolution] of Object.entries(input.resolutionMap)) {
-        if (resolution.type === "create") {
-          const id = crypto.randomUUID();
-          await db.insert(exercise).values({
-            id,
-            name: resolution.name,
-            category: resolution.category,
-            exerciseType: resolution.exerciseType,
-            isCustom: true,
-            createdByUserId: userId,
-            status: null, // auto-approved -- skip the review queue
-          });
-          createdExerciseMap[parsedName] = id;
+      const createdExerciseMap: Record<string, string> = {}; // parsedName -> exerciseId
+
+      // Collect all names that need creation
+      const namesToCreate = Object.entries(input.resolutionMap).filter(
+        ([, resolution]) => resolution.type === "create",
+      );
+
+      if (namesToCreate.length > 0) {
+        // Fetch pending/imported exercises to check for reuse
+        const pendingExercises = await db
+          .select({
+            id: exercise.id,
+            name: exercise.name,
+            status: exercise.status,
+          })
+          .from(exercise)
+          .where(
+            and(
+              eq(exercise.isCustom, true),
+              inArray(exercise.status, ["pending", "imported"]),
+            ),
+          );
+
+        const REUSE_THRESHOLD = 80;
+
+        for (const [parsedName, resolution] of namesToCreate) {
+          if (resolution.type !== "create") continue;
+
+          // Check for reuse against pending/imported exercises
+          let reusedId: string | null = null;
+          for (const existing of pendingExercises) {
+            const score = computeSimilarity(resolution.name, existing.name);
+            if (score >= REUSE_THRESHOLD) {
+              reusedId = existing.id;
+              break;
+            }
+          }
+
+          if (reusedId) {
+            createdExerciseMap[parsedName] = reusedId;
+          } else {
+            const id = crypto.randomUUID();
+            await db.insert(exercise).values({
+              id,
+              name: resolution.name,
+              category: resolution.category,
+              exerciseType: resolution.exerciseType,
+              isCustom: true,
+              createdByUserId: userId,
+              status: "imported",
+            });
+            createdExerciseMap[parsedName] = id;
+
+            // Add to the pending list so subsequent iterations can reuse it
+            pendingExercises.push({ id, name: resolution.name, status: "imported" });
+          }
         }
       }
 

@@ -43,6 +43,13 @@
       "when": 1773259890003,
       "tag": "0005_third_reptil",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775577403631,
+      "tag": "0006_marvelous_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

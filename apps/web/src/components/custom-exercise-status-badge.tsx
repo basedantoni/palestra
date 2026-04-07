@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 
-type CustomExerciseStatus = "pending" | "approved" | "rejected" | null;
+type CustomExerciseStatus = "pending" | "approved" | "rejected" | "imported" | null;
 
 interface CustomExerciseStatusBadgeProps {
   status: CustomExerciseStatus;
@@ -36,6 +36,16 @@ export function CustomExerciseStatusBadge({
         className="text-xs border-red-500 text-red-600 dark:text-red-400"
       >
         Not Approved
+      </Badge>
+    );
+  }
+  if (status === "imported") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-xs border-blue-500 text-blue-600 dark:text-blue-400"
+      >
+        Pending Review
       </Badge>
     );
   }

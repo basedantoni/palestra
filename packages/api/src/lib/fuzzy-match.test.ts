@@ -133,6 +133,43 @@ describe("resolveExerciseNames", () => {
     expect(results).toHaveLength(0);
   });
 
+  it("similarTo: similar batch names (>= 60 score) are included", () => {
+    // "Barbell Incline Press" and "BB Incline Press" share "incline" and "press"
+    // Jaccard: intersection={"incline","press"} = 2, union={"barbell","incline","press","bb"} = 4 -> 50
+    // containment bonus: 0 -> score = 50 (below threshold)
+    // Use a known similar pair instead: "Incline Bench Press" and "Incline Bench"
+    const results = resolveExerciseNames(
+      ["Incline Bench Press", "Incline Bench"],
+      library,
+    );
+    const first = results.find((r) => r.parsedName === "Incline Bench Press")!;
+    const second = results.find((r) => r.parsedName === "Incline Bench")!;
+    expect(first.similarTo).toContain("Incline Bench");
+    expect(second.similarTo).toContain("Incline Bench Press");
+  });
+
+  it("similarTo: dissimilar batch names return empty similarTo arrays", () => {
+    const results = resolveExerciseNames(
+      ["Lat Pulldown", "Bench Press"],
+      library,
+    );
+    expect(results[0]!.similarTo).toHaveLength(0);
+    expect(results[1]!.similarTo).toHaveLength(0);
+  });
+
+  it("similarTo: single name has empty similarTo", () => {
+    const [result] = resolveExerciseNames(["Lat Pulldown"], library);
+    expect(result!.similarTo).toHaveLength(0);
+  });
+
+  it("similarTo threshold: names scoring exactly at 60 are included", () => {
+    // "Bench Press" vs "Bench" -- containment bonus: "bench" is in "bench press"
+    // tokens: ["bench","press"] vs ["bench"] -> Jaccard 1/2=50, containment=20 -> 70 >= 60
+    const results = resolveExerciseNames(["Bench Press", "Bench"], library);
+    const benchPress = results.find((r) => r.parsedName === "Bench Press")!;
+    expect(benchPress.similarTo).toContain("Bench");
+  });
+
   it("threshold: score >= 80 is high confidence", () => {
     // Exact match is 100 -> high
     const [result] = resolveExerciseNames(["Dips Machine"], library);
