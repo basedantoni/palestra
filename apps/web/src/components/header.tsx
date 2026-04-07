@@ -10,8 +10,9 @@ export default function Header() {
     { to: "/dashboard", label: "Dashboard" },
     { to: "/workouts", label: "Workouts" },
     { to: "/templates", label: "Templates" },
-    { to: "/settings", label: "Settings" },
     { to: "/analytics", label: "Analytics" },
+    { to: "/import", label: "Import" },
+    { to: "/settings", label: "Settings" },
   ] as const;
 
   return (
