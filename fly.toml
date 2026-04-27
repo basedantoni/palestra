@@ -13,7 +13,7 @@ primary_region = 'dfw'
   PORT = '3000'
 
 [deploy]
-  release_command = "sh -c 'cd /app && pnpm -F @src/db db:migrate'"
+  release_command = "sh -c 'cd /app && pnpm -F @src/db db:migrate && pnpm -F @src/db db:seed'"
 
 [http_service]
   internal_port = 3000
