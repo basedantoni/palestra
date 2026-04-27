@@ -314,6 +314,7 @@ describe("workout-utils", () => {
 
     it("should initialize all optional fields to undefined", () => {
       const exercise = createBlankExercise(0);
+      expect(exercise.exerciseType).toBeUndefined();
       expect(exercise.rounds).toBeUndefined();
       expect(exercise.workDurationSeconds).toBeUndefined();
       expect(exercise.restDurationSeconds).toBeUndefined();
@@ -545,6 +546,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "running-id",
             exerciseName: "Running",
+            exerciseType: "cardio",
             order: 0,
             sets: [],
             rounds: undefined,
@@ -565,6 +567,56 @@ describe("workout-utils", () => {
 
       const result = formDataToApiInput(formData);
       expect(result.totalVolume).toBeUndefined();
+    });
+
+    it("should not send sets for cardio-style exercises even if stale sets remain in form state", () => {
+      const formData: WorkoutFormData = {
+        workoutType: "cardio",
+        exercises: [
+          {
+            tempId: "ex-1",
+            exerciseId: "long-run-id",
+            exerciseName: "Long Run",
+            exerciseType: "cardio",
+            order: 0,
+            sets: [
+              {
+                tempId: "set-1",
+                setNumber: 1,
+                reps: 8,
+                weight: 135,
+                rpe: 7,
+                durationSeconds: undefined,
+              },
+            ],
+            rounds: undefined,
+            workDurationSeconds: undefined,
+            restDurationSeconds: undefined,
+            intensity: 7,
+            distance: 8.2,
+            durationSeconds: 2700,
+            pace: 5.49,
+            heartRate: 148,
+            durationMinutes: undefined,
+            notes: "Steady effort",
+          },
+        ],
+        notes: "",
+        templateId: undefined,
+      };
+
+      const result = formDataToApiInput(formData);
+
+      expect(result.totalVolume).toBeUndefined();
+      expect(result.logs[0]?.sets).toEqual([]);
+      expect(result.logs[0]).toMatchObject({
+        distance: 8.2,
+        durationSeconds: 2700,
+        pace: 5.49,
+        heartRate: 148,
+        intensity: 7,
+        notes: "Steady effort",
+      });
     });
 
     it("should use the provided date when set", () => {
@@ -681,6 +733,7 @@ describe("workout-utils", () => {
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("weightlifting");
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("hiit");
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("cardio");
+      expect(WORKOUT_TYPE_LABELS).toHaveProperty("mobility");
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("calisthenics");
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("yoga");
       expect(WORKOUT_TYPE_LABELS).toHaveProperty("sports");
@@ -752,6 +805,7 @@ describe("workout-utils", () => {
           {
             exerciseId: null,
             exerciseName: "Run",
+            exercise: { exerciseType: "cardio" as const },
             order: 0,
             rounds: null,
             workDurationSeconds: null,
@@ -770,10 +824,8 @@ describe("workout-utils", () => {
 
       const form = apiWorkoutToFormData(workout);
 
-      expect(form.exercises[0]?.sets).toHaveLength(1);
-      expect(form.exercises[0]?.sets[0]?.setNumber).toBe(1);
-      expect(form.exercises[0]?.sets[0]?.reps).toBeUndefined();
-      expect(form.exercises[0]?.sets[0]?.weight).toBeUndefined();
+      expect(form.exercises[0]?.exerciseType).toBe("cardio");
+      expect(form.exercises[0]?.sets).toHaveLength(0);
     });
   });
 

@@ -13,6 +13,7 @@ import { notification } from "./notification";
 import { personalRecord } from "./personal-record";
 import { progressiveOverloadState } from "./progressive-overload";
 import { userPreferences } from "./user-preferences";
+import { whoopConnection } from "./whoop";
 import { workout } from "./workout";
 import { workoutTemplate } from "./template";
 
@@ -99,6 +100,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   muscleGroupVolumes: many(muscleGroupVolume),
   exercises: many(exercise),
   notifications: many(notification),
+  whoopConnection: one(whoopConnection),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({

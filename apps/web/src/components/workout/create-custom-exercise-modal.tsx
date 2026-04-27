@@ -33,7 +33,11 @@ type ExerciseResult = {
 interface CreateCustomExerciseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated?: (exercise: { id: string; name: string }) => void;
+  onCreated?: (exercise: {
+    id: string;
+    name: string;
+    exerciseType: (typeof EXERCISE_TYPES)[number];
+  }) => void;
 }
 
 const CATEGORIES = [
@@ -51,6 +55,7 @@ const EXERCISE_TYPES = [
   "weightlifting",
   "hiit",
   "cardio",
+  "mobility",
   "calisthenics",
   "yoga",
   "sports",
@@ -61,6 +66,7 @@ const EXERCISE_TYPE_LABELS: Record<(typeof EXERCISE_TYPES)[number], string> = {
   weightlifting: "Weightlifting",
   hiit: "HIIT",
   cardio: "Cardio",
+  mobility: "Mobility",
   calisthenics: "Calisthenics",
   yoga: "Yoga",
   sports: "Sports",

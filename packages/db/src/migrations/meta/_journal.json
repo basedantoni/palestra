@@ -50,6 +50,20 @@
       "when": 1775577403631,
       "tag": "0006_marvelous_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775781279529,
+      "tag": "0007_nebulous_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776971864846,
+      "tag": "0008_known_newton_destine",
+      "breakpoints": true
     }
   ]
 }

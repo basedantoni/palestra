@@ -1,17 +1,19 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { useTheme } from "@/components/theme-provider";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/utils/trpc";
+import { env } from "@src/env/web";
 import { CustomExerciseStatusBadge } from "@/components/custom-exercise-status-badge";
 import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
 import {
@@ -29,8 +31,14 @@ type SettingsFormData = {
   plateauThreshold: number;
 };
 
+const settingsSearchSchema = z.object({
+  whoop_connected: z.boolean().optional(),
+  whoop_error: z.string().optional(),
+});
+
 export const Route = createFileRoute("/settings")({
   component: RouteComponent,
+  validateSearch: settingsSearchSchema,
   beforeLoad: async ({ context }) => {
     const session = await authClient.getSession();
     if (!session.data) {
@@ -50,10 +58,12 @@ export const Route = createFileRoute("/settings")({
 });
 
 function RouteComponent() {
+  const search = useSearch({ from: "/settings" });
   const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
   const customExercisesQuery = useQuery(
     trpc.exercises.myCustomExercises.queryOptions(),
   );
+  const whoopStatusQuery = useQuery(trpc.whoop.connectionStatus.queryOptions());
   const { setTheme } = useTheme();
   const [formData, setFormData] = useState<SettingsFormData>({
     weightUnit: "lbs",
@@ -74,6 +84,28 @@ function RouteComponent() {
       plateauThreshold: preferences.plateauThreshold,
     });
   }, [preferencesQuery.data]);
+
+  useEffect(() => {
+    if (search.whoop_connected === true) {
+      toast.success("Whoop connected successfully");
+    } else if (search.whoop_error) {
+      toast.error(`Whoop connection failed: ${search.whoop_error}`);
+    }
+  // Only run once on mount to avoid repeated toasts on re-render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const whoopDisconnectMutation = useMutation(
+    trpc.whoop.disconnect.mutationOptions({
+      onSuccess: () => {
+        whoopStatusQuery.refetch();
+        toast.success("Whoop disconnected");
+      },
+      onError: (error) => {
+        toast.error(error.message || "Failed to disconnect Whoop");
+      },
+    }),
+  );
 
   const saveMutation = useMutation(
     trpc.preferences.upsert.mutationOptions({
@@ -341,6 +373,61 @@ function RouteComponent() {
                 ? "Exporting..."
                 : "Export Templates CSV"}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Integrations */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Integrations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Whoop integration card */}
+          <div className="flex items-start justify-between gap-4 border p-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">Whoop</span>
+                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
+                  <Badge variant="secondary" className="text-xs">Connected</Badge>
+                ) : whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid ? (
+                  <Badge variant="destructive" className="text-xs">Reconnect required</Badge>
+                ) : null}
+              </div>
+              {whoopStatusQuery.data?.connected && whoopStatusQuery.data.connectedAt ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Connected since {format(new Date(whoopStatusQuery.data.connectedAt), "MMM d, yyyy")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sync your Whoop workouts automatically.
+                </p>
+              )}
+              {whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid && (
+                <p className="text-xs text-destructive mt-1">
+                  Your Whoop connection expired. Please reconnect to continue syncing.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => whoopDisconnectMutation.mutate()}
+                  disabled={whoopDisconnectMutation.isPending}
+                >
+                  {whoopDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              ) : (
+                <a
+                  href={`${env.VITE_SERVER_URL}/api/whoop/connect`}
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  Connect
+                </a>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

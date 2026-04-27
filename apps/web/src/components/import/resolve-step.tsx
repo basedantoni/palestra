@@ -31,6 +31,7 @@ export type ExerciseType =
   | "weightlifting"
   | "hiit"
   | "cardio"
+  | "mobility"
   | "calisthenics"
   | "yoga"
   | "sports"
@@ -68,6 +69,7 @@ const EXERCISE_TYPES = [
   "weightlifting",
   "hiit",
   "cardio",
+  "mobility",
   "calisthenics",
   "yoga",
   "sports",

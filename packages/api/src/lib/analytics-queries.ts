@@ -44,6 +44,41 @@ export interface VolumeDataPoint {
   workoutCount: number;
 }
 
+export interface WeeklyRunningVolumePoint {
+  period: string;
+  totalDistance: number;
+  totalDurationSeconds: number;
+  workoutCount: number;
+}
+
+export interface RunningPaceTrendPoint {
+  date: string;
+  exerciseId: string;
+  exerciseName: string;
+  averagePace: number;
+  workoutCount: number;
+}
+
+export interface MobilityFrequencyPoint {
+  period: string;
+  sessionCount: number;
+  totalDurationMinutes: number;
+}
+
+export interface WorkoutTypeMixPoint {
+  period: string;
+  workoutType:
+    | "weightlifting"
+    | "hiit"
+    | "cardio"
+    | "mobility"
+    | "calisthenics"
+    | "yoga"
+    | "sports"
+    | "mixed";
+  workoutCount: number;
+}
+
 export interface WorkoutFrequencyDay {
   date: string; // "2026-03-04"
   workoutCount: number;
@@ -57,6 +92,52 @@ export interface StreakResult {
   lastWorkoutDate: string | null;
 }
 
+function toWeekPeriod(date: Date | string): string {
+  const d = toLocalNoon(date);
+  const weekNum = getISOWeek(d);
+  const weekYear = getISOWeekYear(d);
+  return `${weekYear}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+function calculateCardioLogDurationSeconds(input: {
+  durationSeconds?: number | null;
+  rounds?: number | null;
+  workDurationSeconds?: number | null;
+  restDurationSeconds?: number | null;
+}): number {
+  if (input.durationSeconds != null) {
+    return input.durationSeconds;
+  }
+
+  if (
+    input.rounds != null &&
+    (input.workDurationSeconds != null || input.restDurationSeconds != null)
+  ) {
+    return (
+      input.rounds *
+      ((input.workDurationSeconds ?? 0) + (input.restDurationSeconds ?? 0))
+    );
+  }
+
+  return 0;
+}
+
+function calculateMobilityDurationMinutes(input: {
+  durationMinutes?: number | null;
+  durationSeconds?: number | null;
+  rounds?: number | null;
+}): number {
+  if (input.durationMinutes != null) {
+    return input.durationMinutes;
+  }
+
+  if (input.durationSeconds != null) {
+    return ((input.rounds ?? 1) * input.durationSeconds) / 60;
+  }
+
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // aggregateVolumeByWeek
 // ---------------------------------------------------------------------------
@@ -67,11 +148,7 @@ export function aggregateVolumeByWeek(
   const map = new Map<string, { totalVolume: number; workoutCount: number }>();
 
   for (const w of workouts) {
-    const d = toLocalNoon(w.date);
-    const weekNum = getISOWeek(d);
-    const weekYear = getISOWeekYear(d);
-    const period = `${weekYear}-W${String(weekNum).padStart(2, "0")}`;
-
+    const period = toWeekPeriod(w.date);
     const existing = map.get(period) ?? { totalVolume: 0, workoutCount: 0 };
     existing.workoutCount += 1;
     if (w.totalVolume != null) {
@@ -87,6 +164,187 @@ export function aggregateVolumeByWeek(
       workoutCount: data.workoutCount,
     }))
     .sort((a, b) => a.period.localeCompare(b.period));
+}
+
+// ---------------------------------------------------------------------------
+// aggregateRunningVolumeByWeek
+// ---------------------------------------------------------------------------
+
+export function aggregateRunningVolumeByWeek(
+  logs: Array<{
+    date: Date | string;
+    workoutId: string;
+    distance: number | null;
+    durationSeconds?: number | null;
+    rounds?: number | null;
+    workDurationSeconds?: number | null;
+    restDurationSeconds?: number | null;
+  }>,
+): WeeklyRunningVolumePoint[] {
+  const map = new Map<
+    string,
+    {
+      totalDistance: number;
+      totalDurationSeconds: number;
+      workoutIds: Set<string>;
+    }
+  >();
+
+  for (const log of logs) {
+    const period = toWeekPeriod(log.date);
+    const existing = map.get(period) ?? {
+      totalDistance: 0,
+      totalDurationSeconds: 0,
+      workoutIds: new Set<string>(),
+    };
+
+    existing.totalDistance += log.distance ?? 0;
+    existing.totalDurationSeconds += calculateCardioLogDurationSeconds(log);
+    existing.workoutIds.add(log.workoutId);
+    map.set(period, existing);
+  }
+
+  return Array.from(map.entries())
+    .map(([period, data]) => ({
+      period,
+      totalDistance: Math.round(data.totalDistance * 100) / 100,
+      totalDurationSeconds: data.totalDurationSeconds,
+      workoutCount: data.workoutIds.size,
+    }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+}
+
+// ---------------------------------------------------------------------------
+// aggregateRunningPaceTrend
+// ---------------------------------------------------------------------------
+
+export function aggregateRunningPaceTrend(
+  logs: Array<{
+    date: Date | string;
+    workoutId: string;
+    exerciseId: string;
+    exerciseName: string;
+    pace: number | null;
+  }>,
+): RunningPaceTrendPoint[] {
+  const map = new Map<
+    string,
+    {
+      date: string;
+      exerciseId: string;
+      exerciseName: string;
+      totalPace: number;
+      paceEntries: number;
+      workoutIds: Set<string>;
+    }
+  >();
+
+  for (const log of logs) {
+    if (log.pace == null) continue;
+
+    const date = toDateString(log.date);
+    const key = `${date}:${log.exerciseId}`;
+    const existing = map.get(key) ?? {
+      date,
+      exerciseId: log.exerciseId,
+      exerciseName: log.exerciseName,
+      totalPace: 0,
+      paceEntries: 0,
+      workoutIds: new Set<string>(),
+    };
+
+    existing.totalPace += log.pace;
+    existing.paceEntries += 1;
+    existing.workoutIds.add(log.workoutId);
+    map.set(key, existing);
+  }
+
+  return Array.from(map.values())
+    .map((item) => ({
+      date: item.date,
+      exerciseId: item.exerciseId,
+      exerciseName: item.exerciseName,
+      averagePace: Math.round((item.totalPace / item.paceEntries) * 100) / 100,
+      workoutCount: item.workoutIds.size,
+    }))
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || a.exerciseName.localeCompare(b.exerciseName),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// aggregateMobilityFrequencyByWeek
+// ---------------------------------------------------------------------------
+
+export function aggregateMobilityFrequencyByWeek(
+  logs: Array<{
+    date: Date | string;
+    workoutId: string;
+    rounds?: number | null;
+    durationSeconds?: number | null;
+    durationMinutes?: number | null;
+  }>,
+): MobilityFrequencyPoint[] {
+  const map = new Map<
+    string,
+    {
+      totalDurationMinutes: number;
+      workoutIds: Set<string>;
+    }
+  >();
+
+  for (const log of logs) {
+    const period = toWeekPeriod(log.date);
+    const existing = map.get(period) ?? {
+      totalDurationMinutes: 0,
+      workoutIds: new Set<string>(),
+    };
+
+    existing.totalDurationMinutes += calculateMobilityDurationMinutes(log);
+    existing.workoutIds.add(log.workoutId);
+    map.set(period, existing);
+  }
+
+  return Array.from(map.entries())
+    .map(([period, data]) => ({
+      period,
+      sessionCount: data.workoutIds.size,
+      totalDurationMinutes:
+        Math.round(data.totalDurationMinutes * 10) / 10,
+    }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+}
+
+// ---------------------------------------------------------------------------
+// aggregateWorkoutTypeMixByWeek
+// ---------------------------------------------------------------------------
+
+export function aggregateWorkoutTypeMixByWeek(
+  workouts: Array<{
+    date: Date | string;
+    workoutType: WorkoutTypeMixPoint["workoutType"];
+  }>,
+): WorkoutTypeMixPoint[] {
+  const map = new Map<string, WorkoutTypeMixPoint>();
+
+  for (const workout of workouts) {
+    const period = toWeekPeriod(workout.date);
+    const key = `${period}:${workout.workoutType}`;
+    const existing = map.get(key) ?? {
+      period,
+      workoutType: workout.workoutType,
+      workoutCount: 0,
+    };
+    existing.workoutCount += 1;
+    map.set(key, existing);
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) =>
+      a.period.localeCompare(b.period) ||
+      a.workoutType.localeCompare(b.workoutType),
+  );
 }
 
 // ---------------------------------------------------------------------------

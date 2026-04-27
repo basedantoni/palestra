@@ -12,6 +12,7 @@ export const workoutTypeEnum = pgEnum("workout_type", [
   "weightlifting",
   "hiit",
   "cardio",
+  "mobility",
   "calisthenics",
   "yoga",
   "sports",

@@ -16,6 +16,7 @@ import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { ExerciseCard } from "@/components/workout/exercise-card";
 import {
   apiWorkoutToFormData,
+  type ExerciseType,
   formatVolume,
   WORKOUT_TYPE_LABELS,
   calculateTotalVolume,
@@ -152,7 +153,11 @@ function RouteComponent() {
     setShowExercisePicker(true);
   };
 
-  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+  const handleSelectExercise = (exercise: {
+    id: string;
+    name: string;
+    exerciseType?: string;
+  }) => {
     if (!formData || editingExerciseIndex === null) return;
 
     const updatedExercises = [...formData.exercises];
@@ -161,12 +166,14 @@ function RouteComponent() {
         ...createBlankExercise(updatedExercises.length),
         exerciseId: exercise.id,
         exerciseName: exercise.name,
+        exerciseType: exercise.exerciseType as ExerciseType | undefined,
       });
     } else {
       updatedExercises[editingExerciseIndex] = {
         ...updatedExercises[editingExerciseIndex],
         exerciseId: exercise.id,
         exerciseName: exercise.name,
+        exerciseType: exercise.exerciseType as ExerciseType | undefined,
       };
     }
 
@@ -200,6 +207,19 @@ function RouteComponent() {
     });
   };
 
+  const formatLoggedDuration = (seconds: number | null) => {
+    if (seconds == null) return "-";
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  };
+
+  const formatLoggedPace = (pace: number | null) => {
+    if (pace == null) return "-";
+    return `${pace.toFixed(2)} min/unit`;
+  };
+
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
       {/* Header */}
@@ -208,6 +228,11 @@ function RouteComponent() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">Workout Details</h1>
             <Badge>{WORKOUT_TYPE_LABELS[workout.workoutType]}</Badge>
+            {workout.source === "whoop" && (
+              <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs">
+                Whoop
+              </Badge>
+            )}
           </div>
           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
@@ -373,6 +398,11 @@ function RouteComponent() {
             <h2 className="text-lg font-semibold">Exercises</h2>
 
             {workout.logs.map((log) => {
+              const exerciseType = log.exercise?.exerciseType;
+              const cardioStyle =
+                exerciseType === "cardio" ||
+                exerciseType === "hiit" ||
+                exerciseType === "mobility";
               const exerciseVolume = log.sets.reduce(
                 (sum, set) => sum + (set.reps ?? 0) * (set.weight ?? 0),
                 0,
@@ -391,7 +421,66 @@ function RouteComponent() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {log.sets.length > 0 ? (
+                    {cardioStyle ? (
+                      <div className="grid gap-3 text-sm md:grid-cols-2">
+                        {exerciseType === "cardio" && (
+                          <>
+                            <div>
+                              <div className="text-muted-foreground">Distance</div>
+                              <div>{log.distance ?? "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Duration</div>
+                              <div>{formatLoggedDuration(log.durationSeconds)}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Pace</div>
+                              <div>{formatLoggedPace(log.pace)}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Heart Rate</div>
+                              <div>{log.heartRate ?? "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Intensity</div>
+                              <div>{log.intensity ?? "-"}</div>
+                            </div>
+                          </>
+                        )}
+                        {exerciseType === "hiit" && (
+                          <>
+                            <div>
+                              <div className="text-muted-foreground">Rounds</div>
+                              <div>{log.rounds ?? "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Work Duration</div>
+                              <div>{formatLoggedDuration(log.workDurationSeconds)}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Rest Duration</div>
+                              <div>{formatLoggedDuration(log.restDurationSeconds)}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Intensity</div>
+                              <div>{log.intensity ?? "-"}</div>
+                            </div>
+                          </>
+                        )}
+                        {exerciseType === "mobility" && (
+                          <>
+                            <div>
+                              <div className="text-muted-foreground">Rounds</div>
+                              <div>{log.rounds ?? "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">Duration Per Round</div>
+                              <div>{formatLoggedDuration(log.durationSeconds)}</div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : log.sets.length > 0 ? (
                       <div className="space-y-1">
                         <div className="grid grid-cols-[50px_1fr_1fr_1fr] gap-2 text-sm font-medium text-muted-foreground">
                           <div>Set</div>

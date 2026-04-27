@@ -19,7 +19,11 @@ import { CreateCustomExerciseModal } from "./create-custom-exercise-modal";
 interface ExercisePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (exercise: { id: string; name: string }) => void;
+  onSelect: (exercise: {
+    id: string;
+    name: string;
+    exerciseType?: string;
+  }) => void;
 }
 
 export function ExercisePicker({
@@ -40,7 +44,11 @@ export function ExercisePicker({
     }),
   );
 
-  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+  const handleSelectExercise = (exercise: {
+    id: string;
+    name: string;
+    exerciseType?: string;
+  }) => {
     onSelect(exercise);
     onOpenChange(false);
     setSearchQuery("");

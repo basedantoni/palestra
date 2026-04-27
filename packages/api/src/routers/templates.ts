@@ -21,6 +21,7 @@ const templateInput = z.object({
     "weightlifting",
     "hiit",
     "cardio",
+    "mobility",
     "calisthenics",
     "yoga",
     "sports",
@@ -67,7 +68,16 @@ export const templatesRouter = router({
             ),
           ),
         with: {
-          exercises: true,
+          exercises: {
+            with: {
+              exercise: {
+                columns: {
+                  name: true,
+                  exerciseType: true,
+                },
+              },
+            },
+          },
         },
       });
     }),

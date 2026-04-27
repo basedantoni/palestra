@@ -8,6 +8,30 @@ function generateTempId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
+type WorkoutType =
+  | "weightlifting"
+  | "hiit"
+  | "cardio"
+  | "mobility"
+  | "calisthenics"
+  | "yoga"
+  | "sports"
+  | "mixed";
+
+export type ExerciseType = WorkoutType;
+
+export const CARDIO_EXERCISE_TYPES = ["cardio", "hiit", "mobility"] as const;
+
+export function isCardioStyleExerciseType(
+  exerciseType: string | undefined,
+): exerciseType is (typeof CARDIO_EXERCISE_TYPES)[number] {
+  return (
+    exerciseType === "cardio" ||
+    exerciseType === "hiit" ||
+    exerciseType === "mobility"
+  );
+}
+
 // Types for the workout logging form state (client-side)
 export interface WorkoutSetFormData {
   tempId: string; // Client-side temporary ID for React keys
@@ -22,6 +46,7 @@ export interface WorkoutExerciseFormData {
   tempId: string;
   exerciseId: string | undefined;
   exerciseName: string;
+  exerciseType: ExerciseType | undefined;
   order: number;
   sets: WorkoutSetFormData[];
   // HIIT fields
@@ -40,14 +65,7 @@ export interface WorkoutExerciseFormData {
 }
 
 export interface WorkoutFormData {
-  workoutType:
-    | "weightlifting"
-    | "hiit"
-    | "cardio"
-    | "calisthenics"
-    | "yoga"
-    | "sports"
-    | "mixed";
+  workoutType: WorkoutType;
   exercises: WorkoutExerciseFormData[];
   notes: string;
   templateId: string | undefined;
@@ -65,6 +83,7 @@ export interface ApiWorkoutSet {
 export interface ApiWorkoutLog {
   exerciseId: string | null;
   exerciseName: string;
+  exercise?: { exerciseType: ExerciseType } | null;
   order: number;
   rounds: number | null;
   workDurationSeconds: number | null;
@@ -89,6 +108,7 @@ export interface ApiWorkoutForEdit {
 
 export interface ApiTemplateExerciseForPrefill {
   exerciseId: string | null;
+  exercise?: { name: string; exerciseType: ExerciseType } | null;
   order: number;
   defaultSets: number | null;
 }
@@ -134,6 +154,9 @@ export function calculateSetVolume(set: WorkoutSetFormData): number {
 export function calculateExerciseVolume(
   exercise: WorkoutExerciseFormData,
 ): number {
+  if (isCardioStyleExerciseType(exercise.exerciseType)) {
+    return 0;
+  }
   return exercise.sets.reduce(
     (total, set) => total + calculateSetVolume(set),
     0,
@@ -167,6 +190,7 @@ export function createBlankExercise(order: number): WorkoutExerciseFormData {
     tempId: generateTempId(),
     exerciseId: undefined,
     exerciseName: "",
+    exerciseType: undefined,
     order,
     sets: [createBlankSet(1)],
     rounds: undefined,
@@ -196,30 +220,47 @@ export function formDataToApiInput(form: WorkoutFormData) {
     notes: form.notes || undefined,
     templateId: form.templateId,
     totalVolume: totalVolume > 0 ? totalVolume : undefined,
-    logs: exercises.map((ex, idx) => ({
-      ...(ex.exerciseId ? { exerciseId: ex.exerciseId } : {}),
-      exerciseName: ex.exerciseName,
-      order: idx,
-      rounds: ex.rounds,
-      workDurationSeconds: ex.workDurationSeconds,
-      restDurationSeconds: ex.restDurationSeconds,
-      intensity: ex.intensity,
-      distance: ex.distance,
-      durationSeconds: ex.durationSeconds,
-      pace: ex.pace,
-      heartRate: ex.heartRate,
-      durationMinutes: ex.durationMinutes,
-      notes: ex.notes || undefined,
-      sets: ex.sets
-        .filter((s) => s.reps !== undefined || s.weight !== undefined || s.durationSeconds !== undefined)
-        .map((s) => ({
-          setNumber: s.setNumber,
-          reps: s.reps,
-          weight: s.weight,
-          rpe: s.rpe,
-          durationSeconds: s.durationSeconds,
-        })),
-    })),
+    logs: exercises.map((ex, idx) => {
+      const cardioStyle = isCardioStyleExerciseType(ex.exerciseType);
+      const isRunExercise = ex.exerciseType === "cardio";
+      const isHiitExercise = ex.exerciseType === "hiit";
+      const isMobilityExercise = ex.exerciseType === "mobility";
+
+      return {
+        ...(ex.exerciseId ? { exerciseId: ex.exerciseId } : {}),
+        exerciseName: ex.exerciseName,
+        order: idx,
+        rounds:
+          isHiitExercise || isMobilityExercise ? ex.rounds : undefined,
+        workDurationSeconds: isHiitExercise ? ex.workDurationSeconds : undefined,
+        restDurationSeconds: isHiitExercise ? ex.restDurationSeconds : undefined,
+        intensity:
+          isRunExercise || isHiitExercise ? ex.intensity : undefined,
+        distance: isRunExercise ? ex.distance : undefined,
+        durationSeconds:
+          isRunExercise || isMobilityExercise ? ex.durationSeconds : undefined,
+        pace: isRunExercise ? ex.pace : undefined,
+        heartRate: isRunExercise ? ex.heartRate : undefined,
+        durationMinutes: cardioStyle ? undefined : ex.durationMinutes,
+        notes: ex.notes || undefined,
+        sets: cardioStyle
+          ? []
+          : ex.sets
+              .filter(
+                (s) =>
+                  s.reps !== undefined ||
+                  s.weight !== undefined ||
+                  s.durationSeconds !== undefined,
+              )
+              .map((s) => ({
+                setNumber: s.setNumber,
+                reps: s.reps,
+                weight: s.weight,
+                rpe: s.rpe,
+                durationSeconds: s.durationSeconds,
+              })),
+      };
+    }),
   };
 }
 
@@ -232,33 +273,42 @@ export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormDat
     exercises: workout.logs
       .slice()
       .sort((a, b) => a.order - b.order)
-      .map((log, index) => ({
-        tempId: generateTempId(),
-        exerciseId: log.exerciseId ?? undefined,
-        exerciseName: log.exerciseName,
-        order: index,
-        sets:
-          log.sets.length > 0
-            ? log.sets.map((set) => ({
-                tempId: generateTempId(),
-                setNumber: set.setNumber,
-                reps: set.reps ?? undefined,
-                weight: set.weight ?? undefined,
-                rpe: set.rpe ?? undefined,
-                durationSeconds: set.durationSeconds ?? undefined,
-              }))
-            : [createBlankSet(1)],
-        rounds: log.rounds ?? undefined,
-        workDurationSeconds: log.workDurationSeconds ?? undefined,
-        restDurationSeconds: log.restDurationSeconds ?? undefined,
-        intensity: log.intensity ?? undefined,
-        distance: log.distance ?? undefined,
-        durationSeconds: log.durationSeconds ?? undefined,
-        pace: log.pace ?? undefined,
-        heartRate: log.heartRate ?? undefined,
-        durationMinutes: log.durationMinutes ?? undefined,
-        notes: log.notes ?? "",
-      })),
+      .map((log, index) => {
+        const exerciseType = log.exercise?.exerciseType ?? undefined;
+        const shouldCreateBlankSet =
+          log.sets.length === 0 && !isCardioStyleExerciseType(exerciseType);
+
+        return {
+          tempId: generateTempId(),
+          exerciseId: log.exerciseId ?? undefined,
+          exerciseName: log.exerciseName,
+          exerciseType,
+          order: index,
+          sets:
+            log.sets.length > 0
+              ? log.sets.map((set) => ({
+                  tempId: generateTempId(),
+                  setNumber: set.setNumber,
+                  reps: set.reps ?? undefined,
+                  weight: set.weight ?? undefined,
+                  rpe: set.rpe ?? undefined,
+                  durationSeconds: set.durationSeconds ?? undefined,
+                }))
+              : shouldCreateBlankSet
+                ? [createBlankSet(1)]
+                : [],
+          rounds: log.rounds ?? undefined,
+          workDurationSeconds: log.workDurationSeconds ?? undefined,
+          restDurationSeconds: log.restDurationSeconds ?? undefined,
+          intensity: log.intensity ?? undefined,
+          distance: log.distance ?? undefined,
+          durationSeconds: log.durationSeconds ?? undefined,
+          pace: log.pace ?? undefined,
+          heartRate: log.heartRate ?? undefined,
+          durationMinutes: log.durationMinutes ?? undefined,
+          notes: log.notes ?? "",
+        };
+      }),
   };
 }
 
@@ -266,11 +316,13 @@ export function templateToWorkoutFormData(
   template: ApiTemplateForWorkoutPrefill,
   options?: {
     exerciseNameById?: Record<string, string>;
+    exerciseTypeById?: Record<string, ExerciseType>;
     suggestionsByExerciseId?: Record<string, ExerciseProgressionSuggestion | null>;
     date?: Date;
   },
 ): WorkoutFormData {
   const exerciseNameById = options?.exerciseNameById ?? {};
+  const exerciseTypeById = options?.exerciseTypeById ?? {};
   const suggestionsByExerciseId = options?.suggestionsByExerciseId ?? {};
 
   return {
@@ -282,6 +334,12 @@ export function templateToWorkoutFormData(
       .slice()
       .sort((a, b) => a.order - b.order)
       .map((exercise, index) => {
+        const exerciseType =
+          exercise.exercise?.exerciseType ??
+          (exercise.exerciseId
+            ? exerciseTypeById[exercise.exerciseId]
+            : undefined);
+        const cardioStyle = isCardioStyleExerciseType(exerciseType);
         const suggestion = exercise.exerciseId
           ? suggestionsByExerciseId[exercise.exerciseId]
           : null;
@@ -309,18 +367,23 @@ export function templateToWorkoutFormData(
         return {
           tempId: generateTempId(),
           exerciseId: exercise.exerciseId ?? undefined,
-          exerciseName: exercise.exerciseId
-            ? (exerciseNameById[exercise.exerciseId] ?? "Unknown Exercise")
-            : "Custom Exercise",
+          exerciseName:
+            exercise.exercise?.name ??
+            (exercise.exerciseId
+              ? (exerciseNameById[exercise.exerciseId] ?? "Unknown Exercise")
+              : "Custom Exercise"),
+          exerciseType,
           order: index,
-          sets: Array.from({ length: suggestedSets }, (_, setIndex) => ({
-            tempId: generateTempId(),
-            setNumber: setIndex + 1,
-            reps: suggestedReps,
-            weight: suggestedWeight,
-            rpe: undefined,
-            durationSeconds: suggestedDuration,
-          })),
+          sets: cardioStyle
+            ? []
+            : Array.from({ length: suggestedSets }, (_, setIndex) => ({
+                tempId: generateTempId(),
+                setNumber: setIndex + 1,
+                reps: suggestedReps,
+                weight: suggestedWeight,
+                rpe: undefined,
+                durationSeconds: suggestedDuration,
+              })),
           rounds: undefined,
           workDurationSeconds: undefined,
           restDurationSeconds: undefined,
@@ -366,6 +429,7 @@ export const WORKOUT_TYPE_LABELS: Record<string, string> = {
   weightlifting: "Weightlifting",
   hiit: "HIIT",
   cardio: "Cardio",
+  mobility: "Mobility",
   calisthenics: "Calisthenics",
   yoga: "Yoga",
   sports: "Sports",

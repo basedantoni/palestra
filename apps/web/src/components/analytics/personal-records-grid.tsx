@@ -19,6 +19,7 @@ interface ExerciseGroup {
 interface PersonalRecordsGridProps {
   data: ExerciseGroup[];
   isLoading: boolean;
+  distanceUnit?: "mi" | "km";
 }
 
 const RECORD_TYPE_LABELS: Record<string, string> = {
@@ -29,27 +30,50 @@ const RECORD_TYPE_LABELS: Record<string, string> = {
   longest_distance: "Longest Distance",
 };
 
-function formatValue(recordType: string, value: number): string {
+function formatValue(
+  recordType: string,
+  value: number,
+  distanceUnit: "mi" | "km",
+): string {
   if (recordType === "max_weight") return `${value} lbs`;
   if (recordType === "max_reps") return `${value} reps`;
   if (recordType === "max_volume") return `${value.toLocaleString()} lbs`;
-  if (recordType === "best_pace") return `${value} min/mi`;
-  if (recordType === "longest_distance") return `${value} mi`;
+  if (recordType === "best_pace") return `${value} min/${distanceUnit}`;
+  if (recordType === "longest_distance") return `${value} ${distanceUnit}`;
   return String(value);
 }
 
-function formatDelta(recordType: string, delta: number): string {
+function formatDelta(
+  recordType: string,
+  delta: number,
+  distanceUnit: "mi" | "km",
+): string {
   const unit =
     recordType === "max_weight" || recordType === "max_volume"
       ? " lbs"
       : recordType === "max_reps"
         ? " reps"
+        : recordType === "best_pace"
+          ? ` min/${distanceUnit}`
+          : recordType === "longest_distance"
+            ? ` ${distanceUnit}`
         : "";
   const sign = delta >= 0 ? "+" : "";
   return `${sign}${delta}${unit}`;
 }
 
-export function PersonalRecordsGrid({ data, isLoading }: PersonalRecordsGridProps) {
+function isImprovement(recordType: string, delta: number): boolean {
+  if (recordType === "best_pace") {
+    return delta <= 0;
+  }
+  return delta >= 0;
+}
+
+export function PersonalRecordsGrid({
+  data,
+  isLoading,
+  distanceUnit = "mi",
+}: PersonalRecordsGridProps) {
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -86,16 +110,18 @@ export function PersonalRecordsGrid({ data, isLoading }: PersonalRecordsGridProp
                   {RECORD_TYPE_LABELS[record.recordType] ?? record.recordType}
                 </Badge>
                 <span className="text-sm font-medium">
-                  {formatValue(record.recordType, record.value)}
+                  {formatValue(record.recordType, record.value, distanceUnit)}
                 </span>
                 {record.delta != null ? (
                   <span
                     className={cn(
                       "text-xs font-medium",
-                      record.delta >= 0 ? "text-green-600" : "text-destructive",
+                      isImprovement(record.recordType, record.delta)
+                        ? "text-green-600"
+                        : "text-destructive",
                     )}
                   >
-                    {formatDelta(record.recordType, record.delta)}
+                    {formatDelta(record.recordType, record.delta, distanceUnit)}
                   </span>
                 ) : (
                   <span className="text-xs text-muted-foreground">First PR</span>

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { Zap } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadStep } from "@/components/import/upload-step";
 import { ResolveStep } from "@/components/import/resolve-step";
 import { PreviewStep } from "@/components/import/preview-step";
@@ -11,7 +14,7 @@ import { CompleteStep } from "@/components/import/complete-step";
 import type { ParseResult } from "@/components/import/upload-step";
 import type { Resolution } from "@/components/import/resolve-step";
 
-export const Route = createFileRoute("/import")({
+export const Route = createFileRoute("/import/")({
   component: ImportPage,
   beforeLoad: async ({ context }) => {
     const session = await authClient.getSession();
@@ -99,6 +102,52 @@ function ImportPage() {
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-6">
+      {/* Import source picker — shown only on the initial upload step */}
+      {step === "upload" && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">Import Workouts</h1>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choose an import source below.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 mb-6">
+            {/* Whoop import card */}
+            <Card className="border hover:border-primary/50 transition-colors">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-base">Whoop</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Import workout activities directly from your connected Whoop account.
+                </p>
+                <Link to="/import/whoop">
+                  <Button size="sm" className="w-full">
+                    Import from Whoop
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* Markdown / manual import card */}
+            <Card className="border">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Markdown Log</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Upload a structured markdown workout log file.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium mb-3">Upload a Markdown File</p>
+          </div>
+        </div>
+      )}
+
       {/* Step indicator */}
       {step !== "complete" && (
         <div className="flex items-center gap-2 mb-6 text-xs text-muted-foreground">

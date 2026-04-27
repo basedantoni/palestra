@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { endOfWeek, startOfWeek } from "date-fns";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
@@ -35,12 +36,38 @@ export const Route = createFileRoute("/dashboard")({
 
 function RouteComponent() {
   const { session } = Route.useRouteContext();
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
 
   const { data: recentWorkouts } = useQuery(
     trpc.workouts.listWithSummary.queryOptions({ limit: 5 }),
   );
 
   const { data: templates } = useQuery(trpc.templates.list.queryOptions());
+  const { data: preferences } = useQuery(trpc.preferences.get.queryOptions());
+  const { data: runningSummary } = useQuery(
+    trpc.analytics.weeklyRunningVolume.queryOptions({
+      startDate: weekStart,
+      endDate: weekEnd,
+    }),
+  );
+  const { data: mobilitySummary } = useQuery(
+    trpc.analytics.mobilityFrequency.queryOptions({
+      startDate: weekStart,
+      endDate: weekEnd,
+    }),
+  );
+
+  const distanceUnit = preferences?.distanceUnit ?? "mi";
+  const runningWeek = runningSummary?.[0] ?? {
+    totalDistance: 0,
+    workoutCount: 0,
+  };
+  const mobilityWeek = mobilitySummary?.[0] ?? {
+    sessionCount: 0,
+    totalDurationMinutes: 0,
+  };
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
@@ -55,6 +82,53 @@ function RouteComponent() {
           Start New Workout
         </Button>
       </Link>
+
+      <Separator className="my-8" />
+
+      <section>
+        <h2 className="mb-4 text-lg font-semibold">This Week</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Running Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div>
+                <div className="text-sm text-muted-foreground">Distance</div>
+                <div className="text-2xl font-bold">
+                  {runningWeek.totalDistance.toFixed(2)} {distanceUnit}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Run Count</div>
+                <div className="text-lg font-semibold">
+                  {runningWeek.workoutCount}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Mobility Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div>
+                <div className="text-sm text-muted-foreground">Sessions</div>
+                <div className="text-2xl font-bold">
+                  {mobilityWeek.sessionCount}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Duration</div>
+                <div className="text-lg font-semibold">
+                  {mobilityWeek.totalDurationMinutes.toFixed(1)} min
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
       <Separator className="my-8" />
 

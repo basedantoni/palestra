@@ -1,11 +1,13 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
+  exercise,
   exerciseLog,
   exerciseSet,
+  personalRecord,
   workout,
   workoutTemplate,
   workoutTemplateExercise,
@@ -19,6 +21,7 @@ const workoutTypeEnum = z.enum([
   "weightlifting",
   "hiit",
   "cardio",
+  "mobility",
   "calisthenics",
   "yoga",
   "sports",
@@ -76,6 +79,19 @@ function toUtcDayBoundary(date: Date, endOfDay: boolean): Date {
       endOfDay ? 999 : 0,
     ),
   );
+}
+
+type RunningPrRecordType = "best_pace" | "longest_distance";
+
+function isBetterRunningPr(
+  recordType: RunningPrRecordType,
+  candidate: number,
+  currentBest: number | undefined,
+): boolean {
+  if (currentBest == null) return true;
+  return recordType === "best_pace"
+    ? candidate < currentBest
+    : candidate > currentBest;
 }
 
 export const workoutsRouter = router({
@@ -179,6 +195,11 @@ export const workoutsRouter = router({
           logs: {
             with: {
               sets: true,
+              exercise: {
+                columns: {
+                  exerciseType: true,
+                },
+              },
             },
           },
         },
@@ -187,6 +208,71 @@ export const workoutsRouter = router({
   create: protectedProcedure
     .input(workoutInput)
     .mutation(async ({ ctx, input }) => {
+      const exerciseIds = Array.from(
+        new Set(
+          input.logs
+            .map((log) => log.exerciseId)
+            .filter((id): id is string => id != null),
+        ),
+      );
+
+      const runningExerciseIdSet = new Set<string>();
+      const runningPrByKey = new Map<string, number>();
+
+      if (exerciseIds.length > 0) {
+        const exerciseRows = await db
+          .select({
+            id: exercise.id,
+            category: exercise.category,
+          })
+          .from(exercise)
+          .where(inArray(exercise.id, exerciseIds));
+
+        for (const row of exerciseRows) {
+          if (row.category === "cardio") {
+            runningExerciseIdSet.add(row.id);
+          }
+        }
+
+        if (runningExerciseIdSet.size > 0) {
+          const existingRecords = await db
+            .select({
+              exerciseId: personalRecord.exerciseId,
+              recordType: personalRecord.recordType,
+              value: personalRecord.value,
+            })
+            .from(personalRecord)
+            .where(
+              and(
+                eq(personalRecord.userId, ctx.session.user.id),
+                inArray(
+                  personalRecord.exerciseId,
+                  Array.from(runningExerciseIdSet),
+                ),
+              ),
+            );
+
+          for (const record of existingRecords) {
+            if (
+              record.exerciseId == null ||
+              (record.recordType !== "best_pace" &&
+                record.recordType !== "longest_distance")
+            ) {
+              continue;
+            }
+
+            const key = `${record.exerciseId}:${record.recordType}`;
+            const currentBest = runningPrByKey.get(key);
+            if (
+              currentBest == null ||
+              isBetterRunningPr(record.recordType, record.value, currentBest)
+            ) {
+              runningPrByKey.set(key, record.value);
+            }
+          }
+        }
+      }
+
       const createdWorkout = await db.transaction(async (tx) => {
         const workoutId = crypto.randomUUID();
         const [newWorkout] = await tx
@@ -239,19 +325,47 @@ export const workoutsRouter = router({
               })),
             );
           }
+
+          if (
+            createdLog &&
+            log.exerciseId &&
+            runningExerciseIdSet.has(log.exerciseId)
+          ) {
+            const maybeInsertRunningPr = async (
+              recordType: RunningPrRecordType,
+              value: number | undefined,
+            ) => {
+              if (value == null || value <= 0) return;
+
+              const key = `${log.exerciseId}:${recordType}`;
+              const currentBest = runningPrByKey.get(key);
+              if (!isBetterRunningPr(recordType, value, currentBest)) {
+                return;
+              }
+
+              await tx.insert(personalRecord).values({
+                id: crypto.randomUUID(),
+                userId: ctx.session.user.id,
+                exerciseId: log.exerciseId,
+                recordType,
+                value,
+                dateAchieved: input.date,
+                workoutId: newWorkout!.id,
+                previousRecordValue: currentBest ?? null,
+              });
+
+              runningPrByKey.set(key, value);
+            };
+
+            await maybeInsertRunningPr("longest_distance", log.distance);
+            await maybeInsertRunningPr("best_pace", log.pace);
+          }
         }
 
         return newWorkout;
       });
 
       // Fire and forget — don't block the response on recalculation
-      const exerciseIds = Array.from(
-        new Set(
-          input.logs
-            .map((log) => log.exerciseId)
-            .filter((id): id is string => id != null),
-        ),
-      );
       if (exerciseIds.length > 0) {
         recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
           (err) => console.error("Progressive overload recalc failed:", err),

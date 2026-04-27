@@ -1,13 +1,43 @@
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { db } from "./index";
-import { exercise } from "./schema";
+import { exercise, workoutTemplate, workoutTemplateExercise } from "./schema";
 
 type MuscleGroupBodybuilding = "chest" | "back" | "shoulders" | "arms" | "legs" | "core";
 type MuscleGroupMovement = "push" | "pull" | "squat" | "hinge" | "carry";
+type SeedExercise = {
+  name: string;
+  category: "chest" | "back" | "shoulders" | "arms" | "legs" | "core" | "cardio" | "other";
+  exerciseType:
+    | "weightlifting"
+    | "hiit"
+    | "cardio"
+    | "calisthenics"
+    | "yoga"
+    | "sports"
+    | "mixed"
+    | "mobility";
+  muscleGroupsBodybuilding: MuscleGroupBodybuilding[];
+  muscleGroupsMovement: MuscleGroupMovement[];
+  isCustom: false;
+  createdByUserId: null;
+};
+type SeedTemplate = {
+  name: string;
+  workoutType:
+    | "weightlifting"
+    | "hiit"
+    | "cardio"
+    | "calisthenics"
+    | "yoga"
+    | "sports"
+    | "mixed";
+  exercises: string[];
+};
 
 // Create deterministic UUID from exercise name for idempotency
 // Generates a valid UUID v5 format by setting the version and variant bits
-function deterministicUUID(name: string): string {
+export function deterministicUUID(name: string): string {
   const hash = createHash("md5").update(name).digest("hex");
 
   // Split the hash into UUID segments
@@ -28,7 +58,39 @@ function deterministicUUID(name: string): string {
   return `${segment1}-${segment2}-${segment3}-${segment4}-${segment5}`;
 }
 
-const SEED_EXERCISES = [
+function createSeedExercise(
+  name: string,
+  category: SeedExercise["category"],
+  exerciseType: SeedExercise["exerciseType"],
+  muscleGroupsBodybuilding: MuscleGroupBodybuilding[] = [],
+  muscleGroupsMovement: MuscleGroupMovement[] = [],
+): SeedExercise {
+  return {
+    name,
+    category,
+    exerciseType,
+    muscleGroupsBodybuilding,
+    muscleGroupsMovement,
+    isCustom: false,
+    createdByUserId: null,
+  };
+}
+
+function getTemplateId(name: string): string {
+  return deterministicUUID(`template:${name}`);
+}
+
+function getTemplateExerciseId(
+  templateName: string,
+  exerciseName: string,
+  order: number,
+): string {
+  return deterministicUUID(
+    `template-exercise:${templateName}:${order}:${exerciseName}`,
+  );
+}
+
+const BASE_SEED_EXERCISES = [
   // Chest (8 exercises)
   {
     name: "Barbell Bench Press",
@@ -711,19 +773,193 @@ const SEED_EXERCISES = [
   },
 ];
 
-async function seed() {
-  console.log("Seeding exercises...");
+const RUNNING_CARDIO_EXERCISE_NAMES = [
+  "Short Run",
+  "Long Run",
+  "Tempo Run",
+  "Recovery Run",
+  "Warm Up Run",
+  "Cool Down Run",
+  "Fartlek Run",
+  "Progression Run",
+  "Treadmill Run",
+  "Trail Run",
+] as const;
+
+const RUNNING_HIIT_EXERCISE_NAMES = [
+  "Sprint",
+  "Interval Run",
+  "Hill Sprint",
+  "Strides",
+  "400m Repeat",
+  "800m Repeat",
+  "Mile Repeat",
+] as const;
+
+export const RUNNING_SEED_EXERCISES = [
+  ...RUNNING_CARDIO_EXERCISE_NAMES.map((name) =>
+    createSeedExercise(name, "cardio", "cardio"),
+  ),
+  ...RUNNING_HIIT_EXERCISE_NAMES.map((name) =>
+    createSeedExercise(name, "cardio", "hiit"),
+  ),
+];
+
+export const MOBILITY_SEED_EXERCISES = [
+  "Hip Flexor Stretch",
+  "Pigeon Pose",
+  "90/90 Hip Stretch",
+  "Hip Circle",
+  "Lateral Hip Stretch",
+  "Butterfly Stretch",
+  "Frog Stretch",
+  "Couch Stretch",
+  "Hamstring Stretch",
+  "Seated Hamstring Stretch",
+  "Glute Bridge",
+  "Figure Four Stretch",
+  "Supine Hamstring Stretch",
+  "Calf Stretch",
+  "Soleus Stretch",
+  "Ankle Circle",
+  "Ankle Dorsiflexion Stretch",
+  "Standing Quad Stretch",
+  "Lying Quad Stretch",
+  "Cat-Cow",
+  "Child's Pose",
+  "Supine Twist",
+  "Cobra",
+  "Knee to Chest Stretch",
+  "Thoracic Rotation",
+  "Thread the Needle",
+  "Thoracic Extension",
+  "Lat Stretch",
+  "Doorway Chest Stretch",
+  "Shoulder Cross-Body Stretch",
+  "Sleeper Stretch",
+  "Neck Lateral Flexion",
+  "World's Greatest Stretch",
+  "Inchworm",
+  "Leg Swing (Front-Back)",
+  "Leg Swing (Lateral)",
+  "Hip Opener Walk",
+  "Deep Squat Hold",
+  "Lunge with Rotation",
+].map((name) => createSeedExercise(name, "other", "mobility"));
+
+export const SEED_EXERCISES = [
+  ...BASE_SEED_EXERCISES,
+  ...RUNNING_SEED_EXERCISES,
+  ...MOBILITY_SEED_EXERCISES,
+];
+
+export const SYSTEM_TEMPLATES: SeedTemplate[] = [
+  {
+    name: "Sprint Session",
+    workoutType: "hiit",
+    exercises: ["Warm Up Run", "Sprint", "Cool Down Run"],
+  },
+  {
+    name: "Short Run",
+    workoutType: "cardio",
+    exercises: ["Warm Up Run", "Short Run", "Cool Down Run"],
+  },
+  {
+    name: "Long Run",
+    workoutType: "cardio",
+    exercises: ["Warm Up Run", "Long Run", "Cool Down Run"],
+  },
+  {
+    name: "Interval Session",
+    workoutType: "hiit",
+    exercises: ["Warm Up Run", "Interval Run", "Strides", "Cool Down Run"],
+  },
+  {
+    name: "Full-Body Mobility",
+    workoutType: "yoga",
+    exercises: [
+      "Cat-Cow",
+      "World's Greatest Stretch",
+      "Hip Flexor Stretch",
+      "Pigeon Pose",
+      "90/90 Hip Stretch",
+      "Thoracic Rotation",
+      "Hamstring Stretch",
+      "Couch Stretch",
+      "Child's Pose",
+      "Supine Twist",
+    ],
+  },
+];
+
+export const SEED_WORKOUT_TEMPLATES = SYSTEM_TEMPLATES.map((template) => ({
+  id: getTemplateId(template.name),
+  userId: null,
+  name: template.name,
+  workoutType: template.workoutType,
+  notes: null,
+  isSystemTemplate: true,
+}));
+
+export const SEED_WORKOUT_TEMPLATE_EXERCISES = SYSTEM_TEMPLATES.flatMap(
+  (template) =>
+    template.exercises.map((exerciseName, order) => ({
+      id: getTemplateExerciseId(template.name, exerciseName, order),
+      workoutTemplateId: getTemplateId(template.name),
+      exerciseId: deterministicUUID(exerciseName),
+      order,
+      defaultSets: null,
+    })),
+);
+
+export async function seed() {
+  console.log("Seeding exercises and templates...");
+
   const exercisesWithIds = SEED_EXERCISES.map((ex) => ({
     ...ex,
     id: deterministicUUID(ex.name),
   }));
-  await db.insert(exercise).values(exercisesWithIds).onConflictDoNothing();
+
+  await db.transaction(async (tx) => {
+    for (const seededExercise of exercisesWithIds) {
+      await tx
+        .insert(exercise)
+        .values(seededExercise)
+        .onConflictDoUpdate({
+          target: exercise.id,
+          set: {
+            category: seededExercise.category,
+            exerciseType: seededExercise.exerciseType,
+            muscleGroupsBodybuilding: seededExercise.muscleGroupsBodybuilding,
+            muscleGroupsMovement: seededExercise.muscleGroupsMovement,
+            isCustom: seededExercise.isCustom,
+            createdByUserId: seededExercise.createdByUserId,
+          },
+        });
+    }
+    await tx
+      .insert(workoutTemplate)
+      .values(SEED_WORKOUT_TEMPLATES)
+      .onConflictDoNothing();
+    await tx
+      .insert(workoutTemplateExercise)
+      .values(SEED_WORKOUT_TEMPLATE_EXERCISES)
+      .onConflictDoNothing();
+  });
+
   console.log(`Seeded ${SEED_EXERCISES.length} exercises`);
+  console.log(`Seeded ${SEED_WORKOUT_TEMPLATES.length} system templates`);
 }
 
-seed()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+const isDirectExecution =
+  process.argv[1] != null &&
+  fileURLToPath(import.meta.url) === process.argv[1];
+
+if (isDirectExecution) {
+  seed()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}

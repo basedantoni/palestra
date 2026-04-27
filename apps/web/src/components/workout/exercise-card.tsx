@@ -5,7 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SuggestionBadge } from "@/components/workout/suggestion-badge";
 import { useExerciseSuggestion } from "@/components/workout/use-exercise-suggestion";
-import { calculateExerciseVolume, formatVolume } from "@src/api/lib/index";
+import {
+  calculateExerciseVolume,
+  formatVolume,
+  isCardioStyleExerciseType,
+} from "@src/api/lib/index";
 import type { WorkoutExerciseFormData, WorkoutSetFormData } from "@src/api/lib/index";
 
 function ExerciseSuggestionBadge({ exerciseId }: { exerciseId: string }) {
@@ -26,6 +30,26 @@ function isTimedSet(set: WorkoutSetFormData): boolean {
   return set.durationSeconds !== undefined && set.reps === undefined;
 }
 
+function parseNumber(value: string): number | undefined {
+  return value === "" ? undefined : Number(value);
+}
+
+function calculateAutoPace(
+  distance: number | undefined,
+  durationSeconds: number | undefined,
+): number | undefined {
+  if (
+    distance === undefined ||
+    durationSeconds === undefined ||
+    distance <= 0 ||
+    durationSeconds <= 0
+  ) {
+    return undefined;
+  }
+
+  return Math.round(((durationSeconds / 60) / distance) * 100) / 100;
+}
+
 interface ExerciseCardProps {
   exercise: WorkoutExerciseFormData;
   onUpdate: (updated: WorkoutExerciseFormData) => void;
@@ -39,12 +63,55 @@ export function ExerciseCard({
   onRemove,
   onChangeExercise,
 }: ExerciseCardProps) {
+  const cardioStyle = isCardioStyleExerciseType(exercise.exerciseType);
+
+  const updateExerciseField = (
+    field:
+      | "rounds"
+      | "workDurationSeconds"
+      | "restDurationSeconds"
+      | "intensity"
+      | "distance"
+      | "durationSeconds"
+      | "pace"
+      | "heartRate",
+    value: string,
+  ) => {
+    const numericValue = parseNumber(value);
+    const updatedExercise: WorkoutExerciseFormData = {
+      ...exercise,
+      [field]: numericValue,
+    };
+
+    if (exercise.exerciseType === "cardio") {
+      const distance =
+        field === "distance" ? numericValue : updatedExercise.distance;
+      const durationSeconds =
+        field === "durationSeconds"
+          ? numericValue
+          : updatedExercise.durationSeconds;
+
+      if (field === "distance" || field === "durationSeconds") {
+        updatedExercise.pace = calculateAutoPace(distance, durationSeconds);
+      }
+    }
+
+    onUpdate(updatedExercise);
+  };
+
+  const updateNotes = (notes: string) => {
+    onUpdate({
+      ...exercise,
+      notes,
+    });
+  };
+
   const updateSet = (
     index: number,
     field: "reps" | "weight" | "rpe" | "durationSeconds",
     value: string,
   ) => {
-    const numValue = value === "" ? undefined : Number(value);
+    const numValue = parseNumber(value);
     const updatedSets = [...exercise.sets];
     updatedSets[index] = { ...updatedSets[index], [field]: numValue };
     onUpdate({ ...exercise, sets: updatedSets });
@@ -78,15 +145,209 @@ export function ExerciseCard({
   const removeSet = (index: number) => {
     if (exercise.sets.length === 1) return;
     const updatedSets = exercise.sets
-      .filter((_: any, i: number) => i !== index)
-      .map((set: any, i: number) => ({ ...set, setNumber: i + 1 }));
+      .filter((_, i) => i !== index)
+      .map((set, i) => ({ ...set, setNumber: i + 1 }));
     onUpdate({ ...exercise, sets: updatedSets });
   };
 
   const volume = calculateExerciseVolume(exercise);
   const anyTimed = exercise.sets.some(isTimedSet);
-  const anyWeighted = exercise.sets.some((s) => !isTimedSet(s));
+  const anyWeighted = exercise.sets.some((set) => !isTimedSet(set));
   const mixedModes = anyTimed && anyWeighted;
+
+  const renderCardioFields = () => {
+    if (exercise.exerciseType === "cardio") {
+      return (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Distance</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="3.1"
+                value={exercise.distance ?? ""}
+                onChange={(e) => updateExerciseField("distance", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Duration (seconds)</label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="1800"
+                value={exercise.durationSeconds ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("durationSeconds", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Pace</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="9.5"
+                value={exercise.pace ?? ""}
+                onChange={(e) => updateExerciseField("pace", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Auto-calculated from distance and duration.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Heart Rate</label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="150"
+                value={exercise.heartRate ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("heartRate", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Intensity</label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                placeholder="7"
+                value={exercise.intensity ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("intensity", e.target.value)
+                }
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Notes</label>
+            <textarea
+              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              placeholder="Terrain, weather, perceived effort..."
+              value={exercise.notes}
+              onChange={(e) => updateNotes(e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (exercise.exerciseType === "hiit") {
+      return (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Rounds</label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="8"
+                value={exercise.rounds ?? ""}
+                onChange={(e) => updateExerciseField("rounds", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Work Duration (seconds)</label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="30"
+                value={exercise.workDurationSeconds ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("workDurationSeconds", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Rest Duration (seconds)</label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="60"
+                value={exercise.restDurationSeconds ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("restDurationSeconds", e.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Intensity</label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                placeholder="8"
+                value={exercise.intensity ?? ""}
+                onChange={(e) =>
+                  updateExerciseField("intensity", e.target.value)
+                }
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Notes</label>
+            <textarea
+              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              placeholder="Surface, target pace, recovery notes..."
+              value={exercise.notes}
+              onChange={(e) => updateNotes(e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Rounds</label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="2"
+              value={exercise.rounds ?? ""}
+              onChange={(e) => updateExerciseField("rounds", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Duration Per Round (seconds)</label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="45"
+              value={exercise.durationSeconds ?? ""}
+              onChange={(e) =>
+                updateExerciseField("durationSeconds", e.target.value)
+              }
+            />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Notes</label>
+          <textarea
+            className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="Areas of focus, soreness, mobility notes..."
+            value={exercise.notes}
+            onChange={(e) => updateNotes(e.target.value)}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Card>
@@ -106,9 +367,11 @@ export function ExerciseCard({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {volume > 0 && (
+            {!cardioStyle && volume > 0 && (
               <span className="text-sm text-muted-foreground">
-                {anyTimed && !anyWeighted ? `${volume}s total` : `Volume: ${formatVolume(volume)}`}
+                {anyTimed && !anyWeighted
+                  ? `${volume}s total`
+                  : `Volume: ${formatVolume(volume)}`}
               </span>
             )}
             <Button
@@ -123,93 +386,98 @@ export function ExerciseCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
-          {/* Column headers */}
-          <div className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2 text-sm font-medium text-muted-foreground">
-            <div>Set</div>
-            <div>{mixedModes ? "Reps/Dur" : anyTimed ? "Duration (s)" : "Reps"}</div>
-            <div>Weight (lbs)</div>
-            <div>RPE</div>
-            <div title="Toggle timed mode"><Timer className="h-4 w-4" /></div>
-            <div></div>
-          </div>
+        {cardioStyle ? (
+          renderCardioFields()
+        ) : (
+          <div className="space-y-2">
+            <div className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2 text-sm font-medium text-muted-foreground">
+              <div>Set</div>
+              <div>{mixedModes ? "Reps/Dur" : anyTimed ? "Duration (s)" : "Reps"}</div>
+              <div>Weight (lbs)</div>
+              <div>RPE</div>
+              <div title="Toggle timed mode"><Timer className="h-4 w-4" /></div>
+              <div></div>
+            </div>
 
-          {exercise.sets.map((set: any, index: number) => {
-            const timed = isTimedSet(set);
-            return (
-              <div
-                key={set.tempId}
-                className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2"
-              >
-                <div className="flex items-center text-sm">{set.setNumber}</div>
-                {timed ? (
+            {exercise.sets.map((set, index) => {
+              const timed = isTimedSet(set);
+              return (
+                <div
+                  key={set.tempId}
+                  className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2"
+                >
+                  <div className="flex items-center text-sm">{set.setNumber}</div>
+                  {timed ? (
+                    <Input
+                      type="number"
+                      placeholder="30"
+                      min="1"
+                      value={set.durationSeconds ?? ""}
+                      onChange={(e) =>
+                        updateSet(index, "durationSeconds", e.target.value)
+                      }
+                      className="h-8"
+                      title="Duration in seconds"
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      placeholder="10"
+                      value={set.reps ?? ""}
+                      onChange={(e) => updateSet(index, "reps", e.target.value)}
+                      className="h-8"
+                    />
+                  )}
                   <Input
                     type="number"
-                    placeholder="30"
+                    placeholder="135"
+                    value={set.weight ?? ""}
+                    onChange={(e) => updateSet(index, "weight", e.target.value)}
+                    className="h-8"
+                    disabled={timed}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="7"
                     min="1"
-                    value={set.durationSeconds ?? ""}
-                    onChange={(e) => updateSet(index, "durationSeconds", e.target.value)}
-                    className="h-8"
-                    title="Duration in seconds"
-                  />
-                ) : (
-                  <Input
-                    type="number"
-                    placeholder="10"
-                    value={set.reps ?? ""}
-                    onChange={(e) => updateSet(index, "reps", e.target.value)}
+                    max="10"
+                    value={set.rpe ?? ""}
+                    onChange={(e) => updateSet(index, "rpe", e.target.value)}
                     className="h-8"
                   />
-                )}
-                <Input
-                  type="number"
-                  placeholder="135"
-                  value={set.weight ?? ""}
-                  onChange={(e) => updateSet(index, "weight", e.target.value)}
-                  className="h-8"
-                  disabled={timed}
-                />
-                <Input
-                  type="number"
-                  placeholder="7"
-                  min="1"
-                  max="10"
-                  value={set.rpe ?? ""}
-                  onChange={(e) => updateSet(index, "rpe", e.target.value)}
-                  className="h-8"
-                />
-                <Button
-                  variant={timed ? "secondary" : "ghost"}
-                  size="icon"
-                  onClick={() => toggleSetMode(index)}
-                  title={timed ? "Switch to reps" : "Switch to timed"}
-                  className="h-8 w-8"
-                >
-                  <Timer className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeSet(index)}
-                  disabled={exercise.sets.length === 1}
-                  className="h-8 w-8"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            );
-          })}
+                  <Button
+                    variant={timed ? "secondary" : "ghost"}
+                    size="icon"
+                    onClick={() => toggleSetMode(index)}
+                    title={timed ? "Switch to reps" : "Switch to timed"}
+                    className="h-8 w-8"
+                  >
+                    <Timer className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSet(index)}
+                    disabled={exercise.sets.length === 1}
+                    className="h-8 w-8"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={addSet}
-            className="w-full"
-          >
-            <Plus className="h-4 w-4" />
-            Add Set
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addSet}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4" />
+              Add Set
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

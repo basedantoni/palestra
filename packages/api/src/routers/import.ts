@@ -170,6 +170,7 @@ export const importRouter = router({
                 "weightlifting",
                 "hiit",
                 "cardio",
+                "mobility",
                 "calisthenics",
                 "yoga",
                 "sports",

@@ -10,7 +10,12 @@ export const env = createEnv({
     CORS_ORIGIN: z.url(),
     ADMIN_EMAILS: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    WHOOP_CLIENT_ID: z.string().min(1).optional(),
+    WHOOP_CLIENT_SECRET: z.string().min(1).optional(),
+    WHOOP_REDIRECT_URI: z.string().url().optional(),
+    TOKEN_ENCRYPTION_KEY: z.string().length(64).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

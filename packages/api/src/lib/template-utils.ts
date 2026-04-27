@@ -20,6 +20,7 @@ export interface TemplateFormData {
     | "weightlifting"
     | "hiit"
     | "cardio"
+    | "mobility"
     | "calisthenics"
     | "yoga"
     | "sports"

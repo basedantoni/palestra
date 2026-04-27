@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   aggregateVolumeByWeek,
   aggregateVolumeByMonth,
+  aggregateRunningPaceTrend,
+  aggregateRunningVolumeByWeek,
+  aggregateMobilityFrequencyByWeek,
+  aggregateWorkoutTypeMixByWeek,
   calculateStreaks,
   buildFrequencyMap,
   groupPersonalRecordsByExercise,
@@ -120,6 +124,195 @@ describe("aggregateVolumeByMonth", () => {
     expect(result[0]!.period).toBe("2026-01");
     expect(result[1]!.period).toBe("2026-02");
     expect(result[2]!.period).toBe("2026-03");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// aggregateRunningVolumeByWeek
+// ---------------------------------------------------------------------------
+
+describe("aggregateRunningVolumeByWeek", () => {
+  it("returns empty array for empty input", () => {
+    expect(aggregateRunningVolumeByWeek([])).toEqual([]);
+  });
+
+  it("aggregates distance, duration, and unique workouts by ISO week", () => {
+    const result = aggregateRunningVolumeByWeek([
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        distance: 5,
+        durationSeconds: 1800,
+      },
+      {
+        date: localNoon(2026, 3, 3),
+        workoutId: "w-2",
+        distance: null,
+        rounds: 8,
+        workDurationSeconds: 30,
+        restDurationSeconds: 60,
+      },
+      {
+        date: localNoon(2026, 3, 10),
+        workoutId: "w-3",
+        distance: 10,
+        durationSeconds: 3600,
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        period: "2026-W10",
+        totalDistance: 5,
+        totalDurationSeconds: 2520,
+        workoutCount: 2,
+      },
+      {
+        period: "2026-W11",
+        totalDistance: 10,
+        totalDurationSeconds: 3600,
+        workoutCount: 1,
+      },
+    ]);
+  });
+
+  it("handles null distance and duration inputs without crashing", () => {
+    const result = aggregateRunningVolumeByWeek([
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        distance: null,
+        durationSeconds: null,
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        period: "2026-W10",
+        totalDistance: 0,
+        totalDurationSeconds: 0,
+        workoutCount: 1,
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// aggregateRunningPaceTrend
+// ---------------------------------------------------------------------------
+
+describe("aggregateRunningPaceTrend", () => {
+  it("averages pace by date and exercise", () => {
+    const result = aggregateRunningPaceTrend([
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        pace: 8,
+      },
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-2",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        pace: 7.5,
+      },
+      {
+        date: localNoon(2026, 3, 4),
+        workoutId: "w-3",
+        exerciseId: "ex-2",
+        exerciseName: "Tempo Run",
+        pace: 6.25,
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        date: "2026-03-02",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        averagePace: 7.75,
+        workoutCount: 2,
+      },
+      {
+        date: "2026-03-04",
+        exerciseId: "ex-2",
+        exerciseName: "Tempo Run",
+        averagePace: 6.25,
+        workoutCount: 1,
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// aggregateMobilityFrequencyByWeek
+// ---------------------------------------------------------------------------
+
+describe("aggregateMobilityFrequencyByWeek", () => {
+  it("returns empty array for empty input", () => {
+    expect(aggregateMobilityFrequencyByWeek([])).toEqual([]);
+  });
+
+  it("aggregates unique sessions and total duration by week", () => {
+    const result = aggregateMobilityFrequencyByWeek([
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        rounds: 2,
+        durationSeconds: 60,
+      },
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        rounds: 1,
+        durationSeconds: 120,
+      },
+      {
+        date: localNoon(2026, 3, 10),
+        workoutId: "w-2",
+        durationMinutes: 18,
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        period: "2026-W10",
+        sessionCount: 1,
+        totalDurationMinutes: 4,
+      },
+      {
+        period: "2026-W11",
+        sessionCount: 1,
+        totalDurationMinutes: 18,
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// aggregateWorkoutTypeMixByWeek
+// ---------------------------------------------------------------------------
+
+describe("aggregateWorkoutTypeMixByWeek", () => {
+  it("returns empty array for empty input", () => {
+    expect(aggregateWorkoutTypeMixByWeek([])).toEqual([]);
+  });
+
+  it("counts workout types per week", () => {
+    const result = aggregateWorkoutTypeMixByWeek([
+      { date: localNoon(2026, 3, 2), workoutType: "cardio" },
+      { date: localNoon(2026, 3, 3), workoutType: "cardio" },
+      { date: localNoon(2026, 3, 4), workoutType: "mobility" },
+      { date: localNoon(2026, 3, 10), workoutType: "weightlifting" },
+    ]);
+
+    expect(result).toEqual([
+      { period: "2026-W10", workoutType: "cardio", workoutCount: 2 },
+      { period: "2026-W10", workoutType: "mobility", workoutCount: 1 },
+      { period: "2026-W11", workoutType: "weightlifting", workoutCount: 1 },
+    ]);
   });
 });
 

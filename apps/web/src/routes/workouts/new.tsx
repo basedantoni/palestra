@@ -30,6 +30,7 @@ import {
   createBlankExercise,
   formDataToApiInput,
   calculateTotalVolume,
+  type ExerciseType,
   formatVolume,
   normalizeDateToLocalNoon,
   reconcileUnknownExerciseNames,
@@ -105,6 +106,15 @@ function RouteComponent() {
     );
   }, [exercisesQuery.data]);
 
+  const exerciseTypeById = useMemo(() => {
+    return Object.fromEntries(
+      (exercisesQuery.data ?? []).map((exercise) => [
+        exercise.id,
+        exercise.exerciseType as ExerciseType,
+      ]),
+    );
+  }, [exercisesQuery.data]);
+
   const suggestionsByExerciseId = useMemo(() => {
     const pairs = (overloadQuery.data ?? []).map((item) => [item.exerciseId, item.suggestion]);
     return Object.fromEntries(pairs);
@@ -116,6 +126,7 @@ function RouteComponent() {
     setFormData(
       templateToWorkoutFormData(templateQuery.data as any, {
         exerciseNameById,
+        exerciseTypeById,
         suggestionsByExerciseId,
         date: new Date(),
       }),
@@ -126,6 +137,7 @@ function RouteComponent() {
     selectedTemplateId,
     templateQuery.data,
     exerciseNameById,
+    exerciseTypeById,
     suggestionsByExerciseId,
   ]);
 
@@ -144,7 +156,11 @@ function RouteComponent() {
     setShowExercisePicker(true);
   };
 
-  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+  const handleSelectExercise = (exercise: {
+    id: string;
+    name: string;
+    exerciseType?: string;
+  }) => {
     if (editingExerciseIndex !== null) {
       const updatedExercises = [...formData.exercises];
       if (editingExerciseIndex >= updatedExercises.length) {
@@ -153,6 +169,7 @@ function RouteComponent() {
           ...createBlankExercise(updatedExercises.length),
           exerciseId: exercise.id,
           exerciseName: exercise.name,
+          exerciseType: exercise.exerciseType as ExerciseType | undefined,
         });
       } else {
         // Changing existing exercise
@@ -160,6 +177,7 @@ function RouteComponent() {
           ...updatedExercises[editingExerciseIndex],
           exerciseId: exercise.id,
           exerciseName: exercise.name,
+          exerciseType: exercise.exerciseType as ExerciseType | undefined,
         };
       }
       setFormData({ ...formData, exercises: updatedExercises });

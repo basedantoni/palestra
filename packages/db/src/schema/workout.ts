@@ -27,6 +27,8 @@ export const workout = pgTable(
     templateId: uuid("template_id").references(() => workoutTemplate.id),
     notes: text("notes"),
     totalVolume: real("total_volume"),
+    source: text("source"),
+    whoopActivityId: text("whoop_activity_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -36,6 +38,7 @@ export const workout = pgTable(
   (table) => [
     index("workout_userId_idx").on(table.userId),
     index("workout_userId_date_idx").on(table.userId, table.date),
+    index("workout_whoopActivityId_idx").on(table.whoopActivityId),
   ],
 );
 

@@ -46,9 +46,34 @@ function dateFromLocalKey(localKey: string): Date {
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0);
 }
 
+type WorkoutHistoryFilter = "all" | "running" | "mobility" | "lifting" | "other";
+
+function matchesWorkoutTypeFilter(
+  workout: { workoutType: string },
+  filter: WorkoutHistoryFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "running") {
+    return workout.workoutType === "cardio" || workout.workoutType === "hiit";
+  }
+  if (filter === "mobility") {
+    return workout.workoutType === "mobility" || workout.workoutType === "yoga";
+  }
+  if (filter === "lifting") {
+    return (
+      workout.workoutType === "weightlifting" ||
+      workout.workoutType === "calisthenics"
+    );
+  }
+  return !matchesWorkoutTypeFilter(workout, "running") &&
+    !matchesWorkoutTypeFilter(workout, "mobility") &&
+    !matchesWorkoutTypeFilter(workout, "lifting");
+}
+
 function RouteComponent() {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [typeFilter, setTypeFilter] = useState<WorkoutHistoryFilter>("all");
 
   const monthRange = useMemo(() => getLocalMonthRange(visibleMonth), [visibleMonth]);
 
@@ -67,9 +92,23 @@ function RouteComponent() {
     () => groupWorkoutsByLocalDay(workouts ?? []),
     [workouts],
   );
+  const filteredGroupedByDay: typeof groupedByDay = useMemo(() => {
+    if (typeFilter === "all") return groupedByDay;
+
+    return Object.fromEntries(
+      Object.entries(groupedByDay)
+        .map(([day, dayWorkouts]) => [
+          day,
+          dayWorkouts.filter((workout: (typeof dayWorkouts)[number]) =>
+            matchesWorkoutTypeFilter(workout, typeFilter),
+          ),
+        ])
+        .filter(([, dayWorkouts]) => dayWorkouts.length > 0),
+    );
+  }, [groupedByDay, typeFilter]);
   const dayMetadata = useMemo(
-    () => buildCalendarDayMetadata(groupedByDay),
-    [groupedByDay],
+    () => buildCalendarDayMetadata(filteredGroupedByDay),
+    [filteredGroupedByDay],
   );
 
   const daysWithWorkouts = useMemo(() => {
@@ -83,30 +122,28 @@ function RouteComponent() {
     const todayKey = getLocalDateKey(today);
     const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : null;
 
-    if (selectedKey && groupedByDay[selectedKey]) {
+    if (selectedKey && filteredGroupedByDay[selectedKey]) {
       return;
     }
 
-    if (groupedByDay[todayKey]) {
+    if (filteredGroupedByDay[todayKey]) {
       setSelectedDate(today);
       return;
     }
 
-    const firstWorkoutDate = workouts[0]?.date;
-    if (firstWorkoutDate) {
-      const normalized =
-        typeof firstWorkoutDate === "string"
-          ? new Date(firstWorkoutDate)
-          : firstWorkoutDate;
-      setSelectedDate(normalized);
+    const firstVisibleDay = Object.keys(filteredGroupedByDay)[0];
+    if (firstVisibleDay) {
+      setSelectedDate(dateFromLocalKey(firstVisibleDay));
       return;
     }
 
     setSelectedDate(today);
-  }, [workouts, groupedByDay, selectedDate]);
+  }, [workouts, filteredGroupedByDay, selectedDate]);
 
   const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : undefined;
-  const workoutsForSelectedDay = selectedKey ? groupedByDay[selectedKey] ?? [] : [];
+  const workoutsForSelectedDay = selectedKey
+    ? filteredGroupedByDay[selectedKey] ?? []
+    : [];
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-6">
@@ -125,6 +162,26 @@ function RouteComponent() {
           <CardTitle>Calendar</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "All"],
+                ["running", "Running"],
+                ["mobility", "Mobility"],
+                ["lifting", "Lifting"],
+                ["other", "Other"],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={typeFilter === value ? "default" : "outline"}
+                onClick={() => setTypeFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading calendar...</div>
           ) : (
@@ -203,6 +260,11 @@ function RouteComponent() {
                           <Badge variant="secondary">
                             {WORKOUT_TYPE_LABELS[workout.workoutType]}
                           </Badge>
+                          {workout.source === "whoop" && (
+                            <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs">
+                              Whoop
+                            </Badge>
+                          )}
                         </div>
                         {workout.totalVolume ? (
                           <div className="text-sm text-muted-foreground">

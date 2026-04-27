@@ -34,16 +34,16 @@ Token refresh is handled transparently: before any Whoop API call, the server ch
 
 ### Acceptance criteria
 
-- [ ] Settings page has a generic Integrations section rendering a Whoop card
-- [ ] Whoop card shows connected status, connected-since date, and Disconnect button when connected
-- [ ] Whoop card shows Connect button when disconnected or `isValid = false`
-- [ ] Clicking Connect redirects to Whoop OAuth and returns to Settings on success
-- [ ] Cancelled or failed OAuth redirects back to Settings with a visible error message
-- [ ] `whoopConnection` row is created with AES-GCM encrypted tokens after successful OAuth
-- [ ] Clicking Disconnect deletes the connection row; card returns to disconnected state
-- [ ] An expired access token is refreshed automatically before being used
-- [ ] A failed refresh sets `isValid = false`; card prompts re-connect instead of silently failing
-- [ ] New env vars (`WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, `WHOOP_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY`) are validated at startup
+- [x] Settings page has a generic Integrations section rendering a Whoop card
+- [x] Whoop card shows connected status, connected-since date, and Disconnect button when connected
+- [x] Whoop card shows Connect button when disconnected or `isValid = false`
+- [x] Clicking Connect redirects to Whoop OAuth and returns to Settings on success
+- [x] Cancelled or failed OAuth redirects back to Settings with a visible error message
+- [x] `whoopConnection` row is created with AES-GCM encrypted tokens after successful OAuth
+- [x] Clicking Disconnect deletes the connection row; card returns to disconnected state
+- [x] An expired access token is refreshed automatically before being used
+- [x] A failed refresh sets `isValid = false`; card prompts re-connect instead of silently failing
+- [x] New env vars (`WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, `WHOOP_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY`) are validated at startup
 
 ---
 
@@ -59,15 +59,15 @@ A secondary "Select all activities in date range" button (no count shown — Who
 
 ### Acceptance criteria
 
-- [ ] `/import/whoop` is accessible from the existing `/import` page
-- [ ] If the Whoop connection is missing or `isValid = false`, the page shows a prompt to connect instead of the list
-- [ ] Activity list loads the first page on mount and shows a load-more control for subsequent pages
-- [ ] Each row shows: date, Whoop sport name, duration (minutes), strain score
-- [ ] Already-imported activities are visually distinguished (matched by `whoopActivityId`)
-- [ ] Date range filter (from / to) narrows the list; changing the filter resets to page 1
-- [ ] "Select All" / "Deselect All" applies to currently loaded activities only
-- [ ] "Select all activities in date range" button sets the `selectAll` flag; selection UI reflects this state
-- [ ] Previously loaded pages remain visible if a subsequent page fetch fails
+- [x] `/import/whoop` is accessible from the existing `/import` page
+- [x] If the Whoop connection is missing or `isValid = false`, the page shows a prompt to connect instead of the list
+- [x] Activity list loads the first page on mount and shows a load-more control for subsequent pages
+- [x] Each row shows: date, Whoop sport name, duration (minutes), strain score
+- [x] Already-imported activities are visually distinguished (matched by `whoopActivityId`)
+- [x] Date range filter (from / to) narrows the list; changing the filter resets to page 1
+- [x] "Select All" / "Deselect All" applies to currently loaded activities only
+- [x] "Select all activities in date range" button sets the `selectAll` flag; selection UI reflects this state
+- [x] Previously loaded pages remain visible if a subsequent page fetch fails
 
 ---
 
@@ -83,19 +83,19 @@ Clicking Commit calls `whoop.commit` with either explicit activity IDs + overrid
 
 ### Acceptance criteria
 
-- [ ] Review step shows proposed workout type for each selected activity, derived from sport_id map
-- [ ] User can override workout type per activity before committing
-- [ ] Preview shows all fields that will be written: date, type, duration, heart rate, intensity (from strain), notes
-- [ ] `whoop.commit` accepts both explicit ID list and `{ selectAll, from, to }` payload
-- [ ] Server deduplicates by `whoopActivityId` before inserting — already-imported activities are silently skipped
-- [ ] Workouts are created transactionally; partial failures do not create partial data
-- [ ] Committed workouts have `source = 'whoop'` and `whoopActivityId` set
-- [ ] `durationMinutes`, `exerciseLog.heartRate`, and `exerciseLog.intensity` are populated from Whoop data
-- [ ] Notes field contains auto-generated Whoop import summary (strain score, etc.)
-- [ ] `lastImportedAt` is updated inside the transaction after inserts succeed, even if some activities were skipped
-- [ ] Progressive overload and muscle group volume recalculation fires after commit
-- [ ] Complete step shows created count and skipped count
-- [ ] Workout list and detail views display a Whoop source badge for imported workouts
+- [x] Review step shows proposed workout type for each selected activity, derived from sport_id map
+- [x] User can override workout type per activity before committing
+- [x] Preview shows all fields that will be written: date, type, duration, heart rate, intensity (from strain), notes
+- [x] `whoop.commit` accepts both explicit ID list and `{ selectAll, from, to }` payload
+- [x] Server deduplicates by `whoopActivityId` before inserting — already-imported activities are silently skipped
+- [x] Workouts are created transactionally; partial failures do not create partial data
+- [x] Committed workouts have `source = 'whoop'` and `whoopActivityId` set
+- [x] `durationMinutes`, `exerciseLog.heartRate`, and `exerciseLog.intensity` are populated from Whoop data
+- [x] Notes field contains auto-generated Whoop import summary (strain score, etc.)
+- [x] `lastImportedAt` is updated inside the transaction after inserts succeed, even if some activities were skipped
+- [x] Progressive overload and muscle group volume recalculation fires after commit
+- [x] Complete step shows created count and skipped count
+- [x] Workout list and detail views display a Whoop source badge for imported workouts
 
 ---
 

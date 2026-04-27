@@ -4,6 +4,7 @@ import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@src/db";
 import {
   exercise,
+  exerciseLog,
   muscleGroupVolume,
   personalRecord,
   progressiveOverloadState,
@@ -14,6 +15,10 @@ import { protectedProcedure, router } from "../index";
 import {
   aggregateVolumeByWeek,
   aggregateVolumeByMonth,
+  aggregateRunningPaceTrend,
+  aggregateRunningVolumeByWeek,
+  aggregateMobilityFrequencyByWeek,
+  aggregateWorkoutTypeMixByWeek,
   calculateStreaks,
   buildFrequencyMap,
   getTodayLocalDateString,
@@ -57,6 +62,167 @@ export const analyticsRouter = router({
         .where(and(...clauses));
 
       return groupPersonalRecordsByExercise(rows);
+    }),
+  weeklyRunningVolume: protectedProcedure
+    .input(
+      z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const clauses = [
+        eq(workout.userId, ctx.session.user.id),
+        eq(exercise.category, "cardio"),
+      ];
+
+      if (input?.startDate) {
+        clauses.push(gte(workout.date, input.startDate));
+      }
+
+      if (input?.endDate) {
+        clauses.push(lte(workout.date, input.endDate));
+      }
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          workoutId: workout.id,
+          distance: exerciseLog.distance,
+          durationSeconds: exerciseLog.durationSeconds,
+          rounds: exerciseLog.rounds,
+          workDurationSeconds: exerciseLog.workDurationSeconds,
+          restDurationSeconds: exerciseLog.restDurationSeconds,
+        })
+        .from(exerciseLog)
+        .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      return aggregateRunningVolumeByWeek(rows);
+    }),
+  runningPaceTrend: protectedProcedure
+    .input(
+      z
+        .object({
+          exerciseId: z.string().uuid().optional(),
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const clauses = [
+        eq(workout.userId, ctx.session.user.id),
+        eq(exercise.category, "cardio"),
+        sql`${exerciseLog.pace} is not null`,
+      ];
+
+      if (input?.exerciseId) {
+        clauses.push(eq(exerciseLog.exerciseId, input.exerciseId));
+      }
+
+      if (input?.startDate) {
+        clauses.push(gte(workout.date, input.startDate));
+      }
+
+      if (input?.endDate) {
+        clauses.push(lte(workout.date, input.endDate));
+      }
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          workoutId: workout.id,
+          exerciseId: exerciseLog.exerciseId,
+          exerciseName: exerciseLog.exerciseName,
+          pace: exerciseLog.pace,
+        })
+        .from(exerciseLog)
+        .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      return aggregateRunningPaceTrend(
+        rows.filter(
+          (row): row is typeof rows[number] & { exerciseId: string } =>
+            row.exerciseId != null,
+        ),
+      );
+    }),
+  mobilityFrequency: protectedProcedure
+    .input(
+      z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const clauses = [
+        eq(workout.userId, ctx.session.user.id),
+        eq(exercise.exerciseType, "mobility"),
+      ];
+
+      if (input?.startDate) {
+        clauses.push(gte(workout.date, input.startDate));
+      }
+
+      if (input?.endDate) {
+        clauses.push(lte(workout.date, input.endDate));
+      }
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          workoutId: workout.id,
+          rounds: exerciseLog.rounds,
+          durationSeconds: exerciseLog.durationSeconds,
+          durationMinutes: exerciseLog.durationMinutes,
+        })
+        .from(exerciseLog)
+        .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      return aggregateMobilityFrequencyByWeek(rows);
+    }),
+  workoutTypeMix: protectedProcedure
+    .input(
+      z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const clauses = [eq(workout.userId, ctx.session.user.id)];
+
+      if (input?.startDate) {
+        clauses.push(gte(workout.date, input.startDate));
+      }
+
+      if (input?.endDate) {
+        clauses.push(lte(workout.date, input.endDate));
+      }
+
+      const rows = await db
+        .select({
+          date: workout.date,
+          workoutType: workout.workoutType,
+        })
+        .from(workout)
+        .where(and(...clauses))
+        .orderBy(asc(workout.date));
+
+      return aggregateWorkoutTypeMixByWeek(rows);
     }),
   progressiveOverload: protectedProcedure
     .input(
@@ -186,6 +352,7 @@ export const analyticsRouter = router({
             "weightlifting",
             "hiit",
             "cardio",
+            "mobility",
             "calisthenics",
             "yoga",
             "sports",

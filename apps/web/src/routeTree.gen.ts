@@ -12,17 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as ImportRouteImport } from './routes/import'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates/index'
+import { Route as ImportIndexRouteImport } from './routes/import/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
 import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 import { Route as TemplatesTemplateIdRouteImport } from './routes/templates/$templateId'
+import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
 import { Route as AdminExercisesIndexRouteImport } from './routes/admin/exercises/index'
 
 const SettingsRoute = SettingsRouteImport.update({
@@ -38,11 +39,6 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ImportRoute = ImportRouteImport.update({
-  id: '/import',
-  path: '/import',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -75,6 +71,11 @@ const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
   path: '/templates/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportIndexRoute = ImportIndexRouteImport.update({
+  id: '/import/',
+  path: '/import/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -95,6 +96,11 @@ const TemplatesTemplateIdRoute = TemplatesTemplateIdRouteImport.update({
   path: '/templates/$templateId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportWhoopRoute = ImportWhoopRouteImport.update({
+  id: '/import/whoop',
+  path: '/import/whoop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   id: '/exercises/',
   path: '/exercises/',
@@ -106,14 +112,15 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
-  '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin/': typeof AdminIndexRoute
+  '/import/': typeof ImportIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -122,14 +129,15 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
-  '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin': typeof AdminIndexRoute
+  '/import': typeof ImportIndexRoute
   '/templates': typeof TemplatesIndexRoute
   '/workouts': typeof WorkoutsIndexRoute
   '/admin/exercises': typeof AdminExercisesIndexRoute
@@ -140,14 +148,15 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
-  '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin/': typeof AdminIndexRoute
+  '/import/': typeof ImportIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -159,14 +168,15 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/dashboard'
-    | '/import'
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin/'
+    | '/import/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -175,14 +185,15 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/dashboard'
-    | '/import'
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin'
+    | '/import'
     | '/templates'
     | '/workouts'
     | '/admin/exercises'
@@ -192,14 +203,15 @@ export interface FileRouteTypes {
     | '/admin'
     | '/analytics'
     | '/dashboard'
-    | '/import'
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin/'
+    | '/import/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -210,13 +222,14 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   DashboardRoute: typeof DashboardRoute
-  ImportRoute: typeof ImportRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
+  ImportWhoopRoute: typeof ImportWhoopRoute
   TemplatesTemplateIdRoute: typeof TemplatesTemplateIdRoute
   WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
   WorkoutsNewRoute: typeof WorkoutsNewRoute
+  ImportIndexRoute: typeof ImportIndexRoute
   TemplatesIndexRoute: typeof TemplatesIndexRoute
   WorkoutsIndexRoute: typeof WorkoutsIndexRoute
 }
@@ -242,13 +255,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/import': {
-      id: '/import'
-      path: '/import'
-      fullPath: '/import'
-      preLoaderRoute: typeof ImportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -293,6 +299,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TemplatesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/import/': {
+      id: '/import/'
+      path: '/import'
+      fullPath: '/import/'
+      preLoaderRoute: typeof ImportIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
@@ -319,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/templates/$templateId'
       fullPath: '/templates/$templateId'
       preLoaderRoute: typeof TemplatesTemplateIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/import/whoop': {
+      id: '/import/whoop'
+      path: '/import/whoop'
+      fullPath: '/import/whoop'
+      preLoaderRoute: typeof ImportWhoopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/exercises/': {
@@ -348,13 +368,14 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   DashboardRoute: DashboardRoute,
-  ImportRoute: ImportRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
+  ImportWhoopRoute: ImportWhoopRoute,
   TemplatesTemplateIdRoute: TemplatesTemplateIdRoute,
   WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,
   WorkoutsNewRoute: WorkoutsNewRoute,
+  ImportIndexRoute: ImportIndexRoute,
   TemplatesIndexRoute: TemplatesIndexRoute,
   WorkoutsIndexRoute: WorkoutsIndexRoute,
 }

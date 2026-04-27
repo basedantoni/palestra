@@ -1,0 +1,1 @@
+ALTER TYPE "public"."workout_type" ADD VALUE 'mobility' BEFORE 'calisthenics';
