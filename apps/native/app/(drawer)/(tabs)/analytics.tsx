@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,20 @@ import { NativeMuscleGroupChart } from "@/components/analytics/NativeMuscleGroup
 import { NativePersonalRecords } from "@/components/analytics/NativePersonalRecords";
 import { NativeWorkoutHeatmap } from "@/components/analytics/NativeWorkoutHeatmap";
 import { NativeOverloadStatus } from "@/components/analytics/NativeOverloadStatus";
+import { NativeWhoopHrTrend } from "@/components/analytics/NativeWhoopHrTrend";
+import { NativeWhoopPaceTrend } from "@/components/analytics/NativeWhoopPaceTrend";
+import { NativeWhoopWeeklyDistance } from "@/components/analytics/NativeWhoopWeeklyDistance";
+
+function useLast30DaysRange(): { from: string; to: string } {
+  return useMemo(() => {
+    const now = new Date();
+    const to = now.toISOString().slice(0, 10);
+    const from30 = new Date(now);
+    from30.setDate(from30.getDate() - 30);
+    const from = from30.toISOString().slice(0, 10);
+    return { from, to };
+  }, []);
+}
 
 export default function AnalyticsTab() {
   const insets = useSafeAreaInsets();
@@ -26,6 +40,8 @@ export default function AnalyticsTab() {
   );
 
   const prData = useQuery(trpc.analytics.personalRecords.queryOptions());
+  const preferencesData = useQuery(trpc.preferences.get.queryOptions());
+  const distanceUnit = preferencesData.data?.distanceUnit ?? "mi";
 
   const frequencyData = useQuery(
     trpc.analytics.workoutFrequency.queryOptions(),
@@ -33,6 +49,18 @@ export default function AnalyticsTab() {
 
   const overloadData = useQuery(
     trpc.analytics.progressiveOverload.queryOptions(),
+  );
+
+  const whoopDateRange = useLast30DaysRange();
+
+  const whoopHrTrend = useQuery(
+    trpc.analytics.runningHrTrend.queryOptions(whoopDateRange),
+  );
+  const whoopPaceTrend = useQuery(
+    trpc.analytics.whoopPaceTrend.queryOptions(whoopDateRange),
+  );
+  const whoopWeeklyDistance = useQuery(
+    trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
   );
 
   return (
@@ -92,6 +120,7 @@ export default function AnalyticsTab() {
         <NativePersonalRecords
           data={prData.data ?? []}
           isLoading={prData.isLoading}
+          distanceUnit={preferencesData.data?.distanceUnit ?? "mi"}
         />
       </View>
 
@@ -127,6 +156,58 @@ export default function AnalyticsTab() {
         <NativeOverloadStatus
           data={overloadData.data ?? []}
           isLoading={overloadData.isLoading}
+        />
+      </View>
+
+      {/* Divider */}
+      <View className="border-t border-border mx-6 mb-8" />
+
+      {/* Whoop Running — Avg HR Trend */}
+      <View className="px-6 mb-8">
+        <Text className="text-lg font-semibold text-foreground mb-1">
+          Whoop Runs — Avg HR
+        </Text>
+        <Text className="text-sm text-muted mb-4">
+          Average heart rate per Whoop-linked run (last 30 days).
+        </Text>
+        <NativeWhoopHrTrend
+          data={whoopHrTrend.data ?? []}
+          isLoading={whoopHrTrend.isLoading}
+        />
+      </View>
+
+      {/* Divider */}
+      <View className="border-t border-border mx-6 mb-8" />
+
+      {/* Whoop Running — Pace Trend */}
+      <View className="px-6 mb-8">
+        <Text className="text-lg font-semibold text-foreground mb-1">
+          Whoop Runs — Pace
+        </Text>
+        <Text className="text-sm text-muted mb-4">
+          Pace per Whoop-linked run. Lower is faster.
+        </Text>
+        <NativeWhoopPaceTrend
+          data={whoopPaceTrend.data ?? []}
+          isLoading={whoopPaceTrend.isLoading}
+        />
+      </View>
+
+      {/* Divider */}
+      <View className="border-t border-border mx-6 mb-8" />
+
+      {/* Whoop Running — Weekly Distance */}
+      <View className="px-6 mb-8">
+        <Text className="text-lg font-semibold text-foreground mb-1">
+          Whoop Runs — Weekly Distance
+        </Text>
+        <Text className="text-sm text-muted mb-4">
+          Total distance from Whoop-linked runs per calendar week.
+        </Text>
+        <NativeWhoopWeeklyDistance
+          data={whoopWeeklyDistance.data ?? []}
+          distanceUnit={distanceUnit}
+          isLoading={whoopWeeklyDistance.isLoading}
         />
       </View>
     </ScrollView>

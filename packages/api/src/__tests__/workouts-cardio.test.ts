@@ -125,6 +125,9 @@ describe("workouts cardio round-trip", () => {
       .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
       .mockReturnValueOnce(makeChain([]));
 
+    // 8.2 miles converted to meters (as if the client sends meters)
+    const distanceInMeters = 8.2 * 1609.344;
+
     mockTx.insert
       .mockReturnValueOnce(
         makeChain([
@@ -152,19 +155,13 @@ describe("workouts cardio round-trip", () => {
             workDurationSeconds: null,
             restDurationSeconds: null,
             intensity: 7,
-            distance: 8.2,
+            distanceMeter: distanceInMeters,
             durationSeconds: 2700,
-            pace: 5.49,
             heartRate: 148,
             durationMinutes: null,
             notes: "Steady effort",
           },
         ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([], (value) => {
-          insertedPrs.push(value as Record<string, unknown>);
-        }),
       )
       .mockReturnValueOnce(
         makeChain([], (value) => {
@@ -191,9 +188,8 @@ describe("workouts cardio round-trip", () => {
           workDurationSeconds: null,
           restDurationSeconds: null,
           intensity: 7,
-          distance: 8.2,
+          distanceMeter: distanceInMeters,
           durationSeconds: 2700,
-          pace: 5.49,
           heartRate: 148,
           durationMinutes: null,
           notes: "Steady effort",
@@ -215,32 +211,24 @@ describe("workouts cardio round-trip", () => {
           exerciseName: "Long Run",
           order: 0,
           intensity: 7,
-          distance: 8.2,
+          distanceMeter: distanceInMeters,
           durationSeconds: 2700,
-          pace: 5.49,
           heartRate: 148,
           notes: "Steady effort",
         },
       ],
     });
 
-    expect(created.id).toBe(WORKOUT_ID);
-    expect(mockTx.insert).toHaveBeenCalledTimes(4);
+    expect(created!.id).toBe(WORKOUT_ID);
+    // 3 inserts: workout + exercise log + 1 PR (longest_distance only; best_pace is derived)
+    expect(mockTx.insert).toHaveBeenCalledTimes(3);
     expect(insertedPrs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           userId: USER_ID,
           exerciseId: EXERCISE_ID,
           recordType: "longest_distance",
-          value: 8.2,
-          workoutId: WORKOUT_ID,
-          previousRecordValue: null,
-        }),
-        expect.objectContaining({
-          userId: USER_ID,
-          exerciseId: EXERCISE_ID,
-          recordType: "best_pace",
-          value: 5.49,
+          value: distanceInMeters,
           workoutId: WORKOUT_ID,
           previousRecordValue: null,
         }),
@@ -254,9 +242,8 @@ describe("workouts cardio round-trip", () => {
       exerciseId: EXERCISE_ID,
       exerciseName: "Long Run",
       intensity: 7,
-      distance: 8.2,
+      distanceMeter: distanceInMeters,
       durationSeconds: 2700,
-      pace: 5.49,
       heartRate: 148,
       notes: "Steady effort",
     });

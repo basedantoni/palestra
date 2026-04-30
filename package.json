@@ -10,6 +10,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
+    "import:nike-tcx": "cd apps/server && tsx ../../scripts/import-nike-tcx.ts",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
@@ -24,13 +25,17 @@
     "db:down": "turbo -F @src/db db:down"
   },
   "dependencies": {
+    "@src/db": "workspace:*",
     "@src/env": "workspace:*",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@src/config": "workspace:*",
     "@types/node": "^22.13.14",
+    "fast-xml-parser": "^4.5.0",
+    "tsx": "^4.21.0",
     "turbo": "^2.6.3",
     "typescript": "catalog:"
   },

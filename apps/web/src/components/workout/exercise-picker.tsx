@@ -23,6 +23,7 @@ interface ExercisePickerProps {
     id: string;
     name: string;
     exerciseType?: string;
+    cardioSubtype?: string | null;
   }) => void;
 }
 
@@ -48,6 +49,7 @@ export function ExercisePicker({
     id: string;
     name: string;
     exerciseType?: string;
+    cardioSubtype?: string | null;
   }) => {
     onSelect(exercise);
     onOpenChange(false);

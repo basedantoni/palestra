@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { Calendar, Pencil, Trash2 } from "lucide-react";
+import { Calendar, Link2, Link2Off, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -12,16 +12,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { ExerciseCard } from "@/components/workout/exercise-card";
+import { WhoopActivityPicker } from "@/components/workout/whoop-activity-picker";
 import {
   apiWorkoutToFormData,
   type ExerciseType,
   formatVolume,
+  formatDistance,
+  derivePace,
   WORKOUT_TYPE_LABELS,
   calculateTotalVolume,
   createBlankExercise,
   formDataToApiInput,
+  metersToDisplayUnit,
 } from "@src/api/lib/index";
 import type { WorkoutFormData } from "@src/api/lib/index";
 
@@ -45,6 +57,373 @@ export const Route = createFileRoute("/workouts/$workoutId")({
   },
 });
 
+// ── HR Zone bar chart ─────────────────────────────────────────────────────────
+
+const HR_ZONE_COLORS = [
+  "#9ca3af", // Zone 0 — rest/very light — gray
+  "#3b82f6", // Zone 1 — blue
+  "#22c55e", // Zone 2 — green
+  "#eab308", // Zone 3 — yellow
+  "#f97316", // Zone 4 — orange
+  "#ef4444", // Zone 5 — red/max
+] as const;
+
+const HR_ZONE_LABELS = [
+  "Zone 0 · Rest",
+  "Zone 1 · Light",
+  "Zone 2 · Moderate",
+  "Zone 3 · Hard",
+  "Zone 4 · Very Hard",
+  "Zone 5 · Max",
+] as const;
+
+interface HrZoneDurations {
+  zone_zero_milli?: number;
+  zone_one_milli?: number;
+  zone_two_milli?: number;
+  zone_three_milli?: number;
+  zone_four_milli?: number;
+  zone_five_milli?: number;
+}
+
+function HrZoneChart({ zones }: { zones: HrZoneDurations }) {
+  const values = [
+    zones.zone_zero_milli ?? 0,
+    zones.zone_one_milli ?? 0,
+    zones.zone_two_milli ?? 0,
+    zones.zone_three_milli ?? 0,
+    zones.zone_four_milli ?? 0,
+    zones.zone_five_milli ?? 0,
+  ];
+
+  const total = values.reduce((s, v) => s + v, 0);
+  if (total === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      {values.map((ms, i) => {
+        const pct = total > 0 ? Math.round((ms / total) * 100) : 0;
+        if (pct === 0) return null;
+        return (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-24 shrink-0 text-muted-foreground">
+              {HR_ZONE_LABELS[i]}
+            </span>
+            <div className="flex-1 rounded-full bg-muted overflow-hidden h-3">
+              <div
+                className="h-3 rounded-full transition-all"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: HR_ZONE_COLORS[i],
+                }}
+              />
+            </div>
+            <span className="w-9 shrink-0 text-right text-muted-foreground">
+              {pct}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Whoop section (view mode only) ───────────────────────────────────────────
+
+interface WhoopSectionProps {
+  workoutId: string;
+  workoutDate: string; // ISO date e.g. "2026-04-29"
+  whoopActivityId: string | null | undefined;
+  /** The first running exercise log with Whoop data */
+  runningLog: {
+    distanceMeter: number | null;
+    durationSeconds: number | null;
+    heartRate: number | null;
+    intensity: number | null;
+    hrZoneDurations: HrZoneDurations | null;
+  } | null;
+  distanceUnit: "mi" | "km";
+}
+
+function WhoopSection({
+  workoutId,
+  workoutDate,
+  whoopActivityId,
+  runningLog,
+  distanceUnit,
+}: WhoopSectionProps) {
+  const queryClient = useQueryClient();
+
+  // Dialog state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [pendingActivityId, setPendingActivityId] = useState<string | null>(null);
+
+  const linkMutation = useMutation(
+    trpc.whoop.linkToWorkout.mutationOptions({
+      onSuccess: (data) => {
+        if (data.metricConflict) {
+          // Store the activity for re-call with force
+          setPendingActivityId(selectedActivityId);
+          setPickerOpen(false);
+          setConflictOpen(true);
+          return;
+        }
+        setPickerOpen(false);
+        setSelectedActivityId(null);
+        toast.success("Whoop run linked");
+        queryClient.invalidateQueries({
+          queryKey: trpc.workouts.get.queryOptions({ id: workoutId }).queryKey,
+        });
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to link Whoop run");
+      },
+    }),
+  );
+
+  const linkForced = useMutation(
+    trpc.whoop.linkToWorkout.mutationOptions({
+      onSuccess: () => {
+        setConflictOpen(false);
+        setPendingActivityId(null);
+        setSelectedActivityId(null);
+        toast.success("Whoop run linked (metrics overwritten)");
+        queryClient.invalidateQueries({
+          queryKey: trpc.workouts.get.queryOptions({ id: workoutId }).queryKey,
+        });
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to link Whoop run");
+      },
+    }),
+  );
+
+  const unlinkMutation = useMutation(
+    trpc.whoop.unlinkFromWorkout.mutationOptions({
+      onSuccess: () => {
+        setUnlinkConfirmOpen(false);
+        toast.success("Whoop run unlinked");
+        queryClient.invalidateQueries({
+          queryKey: trpc.workouts.get.queryOptions({ id: workoutId }).queryKey,
+        });
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to unlink Whoop run");
+      },
+    }),
+  );
+
+  const handleLink = () => {
+    if (!selectedActivityId) return;
+    linkMutation.mutate({ workoutId, whoopActivityId: selectedActivityId });
+  };
+
+  const handleForceLink = () => {
+    if (!pendingActivityId) return;
+    linkForced.mutate({ workoutId, whoopActivityId: pendingActivityId, force: true });
+  };
+
+  const isLinked = !!whoopActivityId;
+
+  return (
+    <>
+      <Separator className="my-6" />
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Link2 className="h-4 w-4" />
+            Whoop
+          </h2>
+          {isLinked ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground gap-1"
+              onClick={() => setUnlinkConfirmOpen(true)}
+              disabled={unlinkMutation.isPending}
+            >
+              <Link2Off className="h-3.5 w-3.5" />
+              Unlink
+            </Button>
+          ) : null}
+        </div>
+
+        {isLinked ? (
+          <LinkedMetrics
+            runningLog={runningLog}
+            distanceUnit={distanceUnit}
+          />
+        ) : (
+          <div className="rounded-md border border-dashed border-border p-4 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">No Whoop run linked</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPickerOpen(true)}
+              className="gap-1.5"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              Link Whoop Run
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Picker dialog */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Link Whoop Run</DialogTitle>
+            <DialogDescription>
+              Select a Whoop activity within 3 days of this workout to link.
+            </DialogDescription>
+          </DialogHeader>
+          <WhoopActivityPicker
+            workoutDate={workoutDate}
+            selectedActivityId={selectedActivityId}
+            onSelect={setSelectedActivityId}
+            distanceUnit={distanceUnit}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedActivityId || linkMutation.isPending}
+              onClick={handleLink}
+            >
+              {linkMutation.isPending ? "Linking…" : "Link Activity"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conflict confirmation dialog */}
+      <Dialog open={conflictOpen} onOpenChange={setConflictOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Overwrite existing metrics?</DialogTitle>
+            <DialogDescription>
+              This workout already has heart rate or intensity data. Linking this
+              Whoop activity will overwrite those values with Whoop data.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConflictOpen(false);
+                setPendingActivityId(null);
+              }}
+            >
+              Keep My Data
+            </Button>
+            <Button
+              onClick={handleForceLink}
+              disabled={linkForced.isPending}
+            >
+              {linkForced.isPending ? "Linking…" : "Use Whoop Data"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unlink confirmation dialog */}
+      <Dialog open={unlinkConfirmOpen} onOpenChange={setUnlinkConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unlink Whoop run?</DialogTitle>
+            <DialogDescription>
+              This will remove the Whoop activity link and clear all Whoop-sourced
+              metrics (distance, heart rate, zones) from this workout.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUnlinkConfirmOpen(false)}
+              disabled={unlinkMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => unlinkMutation.mutate({ workoutId })}
+              disabled={unlinkMutation.isPending}
+            >
+              {unlinkMutation.isPending ? "Unlinking…" : "Unlink"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+interface LinkedMetricsProps {
+  runningLog: WhoopSectionProps["runningLog"];
+  distanceUnit: "mi" | "km";
+}
+
+function LinkedMetrics({ runningLog, distanceUnit }: LinkedMetricsProps) {
+  if (!runningLog) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Whoop metrics not available for this workout.
+      </p>
+    );
+  }
+
+  const pace = derivePace(runningLog.distanceMeter, runningLog.durationSeconds, distanceUnit);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 text-sm md:grid-cols-3">
+        {runningLog.distanceMeter != null && (
+          <div>
+            <div className="text-muted-foreground">Distance</div>
+            <div className="font-medium">
+              {formatDistance(runningLog.distanceMeter, distanceUnit)}
+            </div>
+          </div>
+        )}
+        {pace != null && (
+          <div>
+            <div className="text-muted-foreground">Pace</div>
+            <div className="font-medium">{pace}</div>
+          </div>
+        )}
+        {runningLog.heartRate != null && (
+          <div>
+            <div className="text-muted-foreground">Avg HR</div>
+            <div className="font-medium">{runningLog.heartRate} bpm</div>
+          </div>
+        )}
+        {runningLog.intensity != null && (
+          <div>
+            <div className="text-muted-foreground">Strain / Intensity</div>
+            <div className="font-medium">{runningLog.intensity}</div>
+          </div>
+        )}
+      </div>
+
+      {runningLog.hrZoneDurations && (
+        <div>
+          <div className="mb-2 text-sm text-muted-foreground font-medium">
+            HR Zones
+          </div>
+          <HrZoneChart zones={runningLog.hrZoneDurations} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 function RouteComponent() {
   const { workoutId } = Route.useParams();
   const navigate = useNavigate();
@@ -59,6 +438,8 @@ function RouteComponent() {
   const { data: workout, isLoading, refetch } = useQuery(
     trpc.workouts.get.queryOptions({ id: workoutId }),
   );
+  const { data: preferences } = useQuery(trpc.preferences.get.queryOptions());
+  const distanceUnit = preferences?.distanceUnit ?? "mi";
 
   useEffect(() => {
     if (workout) {
@@ -114,6 +495,29 @@ function RouteComponent() {
       </div>
     );
   }
+
+  // Determine if any exercise log has cardioSubtype === 'running'
+  const hasRunningExercise = workout.logs.some(
+    (log) => log.exercise?.cardioSubtype === "running",
+  );
+
+  // Find the first running exercise log (for Whoop metrics display)
+  const firstRunningLog = hasRunningExercise
+    ? (workout.logs.find((log) => log.exercise?.cardioSubtype === "running") ?? null)
+    : null;
+
+  const whoopRunningLog = firstRunningLog
+    ? {
+        distanceMeter: firstRunningLog.distanceMeter,
+        durationSeconds: firstRunningLog.durationSeconds,
+        heartRate: firstRunningLog.heartRate,
+        intensity: firstRunningLog.intensity,
+        hrZoneDurations: (firstRunningLog as any).hrZoneDurations ?? null,
+      }
+    : null;
+
+  // Workout date string for the picker (ISO date)
+  const workoutDateStr = format(new Date(workout.date), "yyyy-MM-dd");
 
   const handleDelete = () => {
     if (confirm("Are you sure you want to delete this workout?")) {
@@ -215,9 +619,13 @@ function RouteComponent() {
     return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
   };
 
-  const formatLoggedPace = (pace: number | null) => {
-    if (pace == null) return "-";
-    return `${pace.toFixed(2)} min/unit`;
+  const formatLoggedPace = (distanceMeter: number | null, durationSeconds: number | null) => {
+    if (!distanceMeter || !durationSeconds || distanceMeter <= 0 || durationSeconds <= 0) return "-";
+    const displayDist = metersToDisplayUnit(distanceMeter, distanceUnit);
+    const paceMinPerUnit = durationSeconds / 60 / displayDist;
+    const mins = Math.floor(paceMinPerUnit);
+    const secs = Math.round((paceMinPerUnit - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, "0")} /${distanceUnit}`;
   };
 
   return (
@@ -231,6 +639,11 @@ function RouteComponent() {
             {workout.source === "whoop" && (
               <Badge className="bg-red-600 text-white hover:bg-red-700 text-xs">
                 Whoop
+              </Badge>
+            )}
+            {workout.whoopActivityId && !isEditing && (
+              <Badge className="bg-red-600/10 text-red-700 border-red-600/20 hover:bg-red-600/20 text-xs">
+                Linked to Whoop
               </Badge>
             )}
           </div>
@@ -336,6 +749,7 @@ function RouteComponent() {
                   <ExerciseCard
                     key={exercise.tempId}
                     exercise={exercise}
+                    distanceUnit={distanceUnit}
                     onUpdate={(updated) => handleUpdateExercise(index, updated)}
                     onRemove={() => handleRemoveExercise(index)}
                     onChangeExercise={() => handleChangeExercise(index)}
@@ -427,7 +841,7 @@ function RouteComponent() {
                           <>
                             <div>
                               <div className="text-muted-foreground">Distance</div>
-                              <div>{log.distance ?? "-"}</div>
+                              <div>{log.distanceMeter != null ? `${metersToDisplayUnit(log.distanceMeter, distanceUnit).toFixed(2)} ${distanceUnit}` : "-"}</div>
                             </div>
                             <div>
                               <div className="text-muted-foreground">Duration</div>
@@ -435,7 +849,7 @@ function RouteComponent() {
                             </div>
                             <div>
                               <div className="text-muted-foreground">Pace</div>
-                              <div>{formatLoggedPace(log.pace)}</div>
+                              <div>{formatLoggedPace(log.distanceMeter, log.durationSeconds)}</div>
                             </div>
                             <div>
                               <div className="text-muted-foreground">Heart Rate</div>
@@ -515,6 +929,17 @@ function RouteComponent() {
               );
             })}
           </div>
+
+          {/* Whoop section — only for workouts with running exercises */}
+          {hasRunningExercise && (
+            <WhoopSection
+              workoutId={workoutId}
+              workoutDate={workoutDateStr}
+              whoopActivityId={workout.whoopActivityId}
+              runningLog={whoopRunningLog}
+              distanceUnit={distanceUnit}
+            />
+          )}
 
           {/* Workout Notes */}
           {workout.notes && (

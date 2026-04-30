@@ -42,11 +42,14 @@ export interface WorkoutSetFormData {
   durationSeconds: number | undefined; // for timed/isometric sets; mutually exclusive with reps
 }
 
+export type CardioSubtype = "running" | "cycling" | "swimming" | "rowing" | "other";
+
 export interface WorkoutExerciseFormData {
   tempId: string;
   exerciseId: string | undefined;
   exerciseName: string;
   exerciseType: ExerciseType | undefined;
+  cardioSubtype?: CardioSubtype | null;
   order: number;
   sets: WorkoutSetFormData[];
   // HIIT fields
@@ -54,10 +57,9 @@ export interface WorkoutExerciseFormData {
   workDurationSeconds: number | undefined;
   restDurationSeconds: number | undefined;
   intensity: number | undefined;
-  // Cardio fields
-  distance: number | undefined;
+  // Cardio fields — distance stored as meters
+  distanceMeter: number | undefined;
   durationSeconds: number | undefined;
-  pace: number | undefined;
   heartRate: number | undefined;
   // Yoga/Sports
   durationMinutes: number | undefined;
@@ -70,6 +72,7 @@ export interface WorkoutFormData {
   notes: string;
   templateId: string | undefined;
   date?: Date;
+  whoopActivityId?: string | null;
 }
 
 export interface ApiWorkoutSet {
@@ -83,15 +86,14 @@ export interface ApiWorkoutSet {
 export interface ApiWorkoutLog {
   exerciseId: string | null;
   exerciseName: string;
-  exercise?: { exerciseType: ExerciseType } | null;
+  exercise?: { exerciseType: ExerciseType; cardioSubtype?: CardioSubtype | null } | null;
   order: number;
   rounds: number | null;
   workDurationSeconds: number | null;
   restDurationSeconds: number | null;
   intensity: number | null;
-  distance: number | null;
+  distanceMeter: number | null;
   durationSeconds: number | null;
-  pace: number | null;
   heartRate: number | null;
   durationMinutes: number | null;
   notes: string | null;
@@ -191,15 +193,15 @@ export function createBlankExercise(order: number): WorkoutExerciseFormData {
     exerciseId: undefined,
     exerciseName: "",
     exerciseType: undefined,
+    cardioSubtype: undefined,
     order,
     sets: [createBlankSet(1)],
     rounds: undefined,
     workDurationSeconds: undefined,
     restDurationSeconds: undefined,
     intensity: undefined,
-    distance: undefined,
+    distanceMeter: undefined,
     durationSeconds: undefined,
-    pace: undefined,
     heartRate: undefined,
     durationMinutes: undefined,
     notes: "",
@@ -220,6 +222,7 @@ export function formDataToApiInput(form: WorkoutFormData) {
     notes: form.notes || undefined,
     templateId: form.templateId,
     totalVolume: totalVolume > 0 ? totalVolume : undefined,
+    whoopActivityId: form.whoopActivityId ?? undefined,
     logs: exercises.map((ex, idx) => {
       const cardioStyle = isCardioStyleExerciseType(ex.exerciseType);
       const isRunExercise = ex.exerciseType === "cardio";
@@ -236,10 +239,9 @@ export function formDataToApiInput(form: WorkoutFormData) {
         restDurationSeconds: isHiitExercise ? ex.restDurationSeconds : undefined,
         intensity:
           isRunExercise || isHiitExercise ? ex.intensity : undefined,
-        distance: isRunExercise ? ex.distance : undefined,
+        distanceMeter: isRunExercise ? ex.distanceMeter : undefined,
         durationSeconds:
           isRunExercise || isMobilityExercise ? ex.durationSeconds : undefined,
-        pace: isRunExercise ? ex.pace : undefined,
         heartRate: isRunExercise ? ex.heartRate : undefined,
         durationMinutes: cardioStyle ? undefined : ex.durationMinutes,
         notes: ex.notes || undefined,
@@ -283,6 +285,7 @@ export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormDat
           exerciseId: log.exerciseId ?? undefined,
           exerciseName: log.exerciseName,
           exerciseType,
+          cardioSubtype: log.exercise?.cardioSubtype ?? undefined,
           order: index,
           sets:
             log.sets.length > 0
@@ -301,9 +304,8 @@ export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormDat
           workDurationSeconds: log.workDurationSeconds ?? undefined,
           restDurationSeconds: log.restDurationSeconds ?? undefined,
           intensity: log.intensity ?? undefined,
-          distance: log.distance ?? undefined,
+          distanceMeter: log.distanceMeter ?? undefined,
           durationSeconds: log.durationSeconds ?? undefined,
-          pace: log.pace ?? undefined,
           heartRate: log.heartRate ?? undefined,
           durationMinutes: log.durationMinutes ?? undefined,
           notes: log.notes ?? "",
@@ -373,6 +375,7 @@ export function templateToWorkoutFormData(
               ? (exerciseNameById[exercise.exerciseId] ?? "Unknown Exercise")
               : "Custom Exercise"),
           exerciseType,
+          cardioSubtype: undefined,
           order: index,
           sets: cardioStyle
             ? []
@@ -388,9 +391,8 @@ export function templateToWorkoutFormData(
           workDurationSeconds: undefined,
           restDurationSeconds: undefined,
           intensity: undefined,
-          distance: undefined,
+          distanceMeter: undefined,
           durationSeconds: undefined,
-          pace: undefined,
           heartRate: undefined,
           durationMinutes: undefined,
           notes: "",
@@ -446,6 +448,70 @@ export const EXERCISE_CATEGORY_LABELS: Record<string, string> = {
   cardio: "Cardio",
   other: "Other",
 };
+
+// ── Distance conversion helpers ─────────────────────────────────────────────
+
+const METERS_PER_MILE = 1609.344;
+const METERS_PER_KM = 1000;
+
+/**
+ * Convert meters to the user's preferred distance unit.
+ * Returns the numeric value (not formatted).
+ */
+export function metersToDisplayUnit(
+  meters: number,
+  unit: "mi" | "km",
+): number {
+  return unit === "mi"
+    ? meters / METERS_PER_MILE
+    : meters / METERS_PER_KM;
+}
+
+/**
+ * Convert from the user's preferred distance unit back to meters.
+ */
+export function displayUnitToMeters(
+  value: number,
+  unit: "mi" | "km",
+): number {
+  return unit === "mi"
+    ? value * METERS_PER_MILE
+    : value * METERS_PER_KM;
+}
+
+/**
+ * Format a distance for display (1 decimal place).
+ * Example: formatDistance(8046.72, "mi") → "5.0 mi"
+ */
+export function formatDistance(
+  meters: number,
+  unit: "mi" | "km",
+): string {
+  const value = metersToDisplayUnit(meters, unit);
+  return `${value.toFixed(1)} ${unit}`;
+}
+
+/**
+ * Derive pace from distanceMeter and durationSeconds.
+ * Returns pace in min/unit as a formatted string, e.g. "8:30 /mi".
+ * Returns null if inputs are missing or zero.
+ */
+export function derivePace(
+  distanceMeter: number | null | undefined,
+  durationSeconds: number | null | undefined,
+  unit: "mi" | "km",
+): string | null {
+  if (!distanceMeter || !durationSeconds || durationSeconds <= 0) return null;
+  const displayDist = metersToDisplayUnit(distanceMeter, unit);
+  if (displayDist <= 0) return null;
+  const paceSecondsPerUnit = durationSeconds / displayDist;
+  const paceMinutes = Math.floor(paceSecondsPerUnit / 60);
+  const paceSeconds = Math.round(paceSecondsPerUnit % 60);
+  const secondsStr = paceSeconds.toString().padStart(2, "0");
+  return `${paceMinutes}:${secondsStr} /${unit}`;
+}
+
+// ── End distance helpers ─────────────────────────────────────────────────────
 
 export function formatVolume(volume: number): string {
   if (volume >= 1000) {

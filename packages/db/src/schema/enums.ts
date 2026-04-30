@@ -110,3 +110,11 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "custom_exercise_approved",
   "custom_exercise_rejected",
 ]);
+
+export const cardioSubtypeEnum = pgEnum("cardio_subtype", [
+  "running",
+  "cycling",
+  "swimming",
+  "rowing",
+  "other",
+]);

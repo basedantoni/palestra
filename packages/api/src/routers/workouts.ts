@@ -12,10 +12,12 @@ import {
   workoutTemplate,
   workoutTemplateExercise,
 } from "@src/db/schema/index";
+import { whoopActivityToExerciseLog } from "@src/shared";
 
 import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 
 const workoutTypeEnum = z.enum([
   "weightlifting",
@@ -48,9 +50,8 @@ const exerciseLogInput = z.object({
   workDurationSeconds: z.number().int().min(0).optional(),
   restDurationSeconds: z.number().int().min(0).optional(),
   intensity: z.number().int().min(0).max(100).optional(),
-  distance: z.number().min(0).optional(),
+  distanceMeter: z.number().min(0).optional(),
   durationSeconds: z.number().int().min(0).optional(),
-  pace: z.number().min(0).optional(),
   heartRate: z.number().int().min(0).optional(),
   durationMinutes: z.number().int().min(0).optional(),
   notes: z.string().optional(),
@@ -65,6 +66,7 @@ const workoutInput = z.object({
   notes: z.string().optional(),
   totalVolume: z.number().min(0).optional(),
   logs: z.array(exerciseLogInput).default([]),
+  whoopActivityId: z.string().optional(),
 });
 
 function toUtcDayBoundary(date: Date, endOfDay: boolean): Date {
@@ -81,17 +83,16 @@ function toUtcDayBoundary(date: Date, endOfDay: boolean): Date {
   );
 }
 
-type RunningPrRecordType = "best_pace" | "longest_distance";
+type RunningPrRecordType = "longest_distance";
 
 function isBetterRunningPr(
-  recordType: RunningPrRecordType,
+  _recordType: RunningPrRecordType,
   candidate: number,
   currentBest: number | undefined,
 ): boolean {
   if (currentBest == null) return true;
-  return recordType === "best_pace"
-    ? candidate < currentBest
-    : candidate > currentBest;
+  // longest_distance: higher is better
+  return candidate > currentBest;
 }
 
 export const workoutsRouter = router({
@@ -198,6 +199,7 @@ export const workoutsRouter = router({
               exercise: {
                 columns: {
                   exerciseType: true,
+                  cardioSubtype: true,
                 },
               },
             },
@@ -219,11 +221,15 @@ export const workoutsRouter = router({
       const runningExerciseIdSet = new Set<string>();
       const runningPrByKey = new Map<string, number>();
 
+      // Track which exercise has cardioSubtype=running for Whoop metric application
+      const cardioSubtypeByExerciseId = new Map<string, string>();
+
       if (exerciseIds.length > 0) {
         const exerciseRows = await db
           .select({
             id: exercise.id,
             category: exercise.category,
+            cardioSubtype: exercise.cardioSubtype,
           })
           .from(exercise)
           .where(inArray(exercise.id, exerciseIds));
@@ -231,6 +237,9 @@ export const workoutsRouter = router({
         for (const row of exerciseRows) {
           if (row.category === "cardio") {
             runningExerciseIdSet.add(row.id);
+          }
+          if (row.cardioSubtype) {
+            cardioSubtypeByExerciseId.set(row.id, row.cardioSubtype);
           }
         }
 
@@ -255,8 +264,7 @@ export const workoutsRouter = router({
           for (const record of existingRecords) {
             if (
               record.exerciseId == null ||
-              (record.recordType !== "best_pace" &&
-                record.recordType !== "longest_distance")
+              record.recordType !== "longest_distance"
             ) {
               continue;
             }
@@ -273,6 +281,25 @@ export const workoutsRouter = router({
         }
       }
 
+      // If a Whoop activity is being linked, fetch its data before the transaction
+      let whoopPatch: ReturnType<typeof whoopActivityToExerciseLog> | null = null;
+      if (input.whoopActivityId) {
+        try {
+          const accessToken = await getValidWhoopAccessToken(ctx.session.user.id);
+          const response = await fetch(
+            `${WHOOP_API_BASE}/activity/workout/${input.whoopActivityId}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } },
+          );
+          if (response.ok) {
+            const whoopActivity = await response.json() as import("@src/shared").WhoopActivityScore;
+            whoopPatch = whoopActivityToExerciseLog(whoopActivity);
+          }
+          // On fetch failure, proceed without Whoop data — don't block save
+        } catch {
+          // Whoop unavailable: save normally without linking
+        }
+      }
+
       const createdWorkout = await db.transaction(async (tx) => {
         const workoutId = crypto.randomUUID();
         const [newWorkout] = await tx
@@ -286,11 +313,20 @@ export const workoutsRouter = router({
             templateId: input.templateId,
             notes: input.notes,
             totalVolume: input.totalVolume,
+            // Set whoopActivityId only if we successfully fetched the activity
+            whoopActivityId: whoopPatch && input.whoopActivityId ? input.whoopActivityId : undefined,
           })
           .returning();
 
+        // Track the first running exercise log created so we can apply Whoop metrics
+        let firstRunningLogId: string | null = null;
+
         for (const log of input.logs) {
           const logId = crypto.randomUUID();
+          const isRunningExercise =
+            log.exerciseId != null &&
+            cardioSubtypeByExerciseId.get(log.exerciseId) === "running";
+
           const [createdLog] = await tx
             .insert(exerciseLog)
             .values({
@@ -303,14 +339,18 @@ export const workoutsRouter = router({
               workDurationSeconds: log.workDurationSeconds,
               restDurationSeconds: log.restDurationSeconds,
               intensity: log.intensity,
-              distance: log.distance,
+              distanceMeter: log.distanceMeter,
               durationSeconds: log.durationSeconds,
-              pace: log.pace,
               heartRate: log.heartRate,
               durationMinutes: log.durationMinutes,
               notes: log.notes,
             })
             .returning();
+
+          // Track first running exercise log for Whoop metric application
+          if (isRunningExercise && firstRunningLogId === null && createdLog) {
+            firstRunningLogId = createdLog.id;
+          }
 
           if (log.sets?.length && createdLog) {
             await tx.insert(exerciseSet).values(
@@ -357,9 +397,22 @@ export const workoutsRouter = router({
               runningPrByKey.set(key, value);
             };
 
-            await maybeInsertRunningPr("longest_distance", log.distance);
-            await maybeInsertRunningPr("best_pace", log.pace);
+            await maybeInsertRunningPr("longest_distance", log.distanceMeter);
           }
+        }
+
+        // Apply Whoop metrics to the first running exercise log
+        if (whoopPatch && firstRunningLogId) {
+          await tx
+            .update(exerciseLog)
+            .set({
+              heartRate: whoopPatch.heartRate,
+              intensity: whoopPatch.intensity,
+              distanceMeter: whoopPatch.distanceMeter ?? undefined,
+              durationMinutes: whoopPatch.durationMinutes ?? undefined,
+              hrZoneDurations: whoopPatch.hrZoneDurations,
+            })
+            .where(eq(exerciseLog.id, firstRunningLogId));
         }
 
         return newWorkout;
@@ -419,9 +472,8 @@ export const workoutsRouter = router({
               workDurationSeconds: log.workDurationSeconds,
               restDurationSeconds: log.restDurationSeconds,
               intensity: log.intensity,
-              distance: log.distance,
+              distanceMeter: log.distanceMeter,
               durationSeconds: log.durationSeconds,
-              pace: log.pace,
               heartRate: log.heartRate,
               durationMinutes: log.durationMinutes,
               notes: log.notes,

@@ -1,6 +1,8 @@
 import { Card } from "heroui-native";
 import { Text, View } from "react-native";
 
+import { formatDistance } from "@src/api/lib/workout-utils";
+
 interface PersonalRecordEntry {
   recordType: string;
   value: number;
@@ -17,22 +19,26 @@ interface ExerciseGroup {
 interface NativePersonalRecordsProps {
   data: ExerciseGroup[];
   isLoading: boolean;
+  distanceUnit?: "mi" | "km";
 }
 
 const RECORD_TYPE_LABELS: Record<string, string> = {
   max_weight: "Max Weight",
   max_reps: "Max Reps",
   max_volume: "Max Volume",
-  best_pace: "Best Pace",
   longest_distance: "Longest Distance",
 };
 
-function formatValue(recordType: string, value: number): string {
+function formatValue(
+  recordType: string,
+  value: number,
+  distanceUnit: "mi" | "km",
+): string {
   if (recordType === "max_weight") return `${value} lbs`;
   if (recordType === "max_reps") return `${value} reps`;
   if (recordType === "max_volume") return `${value.toLocaleString()} lbs`;
-  if (recordType === "best_pace") return `${value} min/mi`;
-  if (recordType === "longest_distance") return `${value} mi`;
+  // longest_distance stored in meters — convert to user's preferred unit
+  if (recordType === "longest_distance") return formatDistance(value, distanceUnit);
   return String(value);
 }
 
@@ -50,6 +56,7 @@ function formatDelta(recordType: string, delta: number): string {
 export function NativePersonalRecords({
   data,
   isLoading,
+  distanceUnit = "mi",
 }: NativePersonalRecordsProps) {
   if (isLoading) {
     return (
@@ -83,7 +90,7 @@ export function NativePersonalRecords({
                   </Text>
                 </View>
                 <Text className="text-sm font-medium text-foreground">
-                  {formatValue(record.recordType, record.value)}
+                  {formatValue(record.recordType, record.value, distanceUnit)}
                 </Text>
                 {record.delta != null ? (
                   <Text

@@ -155,9 +155,68 @@ export const WHOOP_SPORT_ID_TO_NAME: Record<number, string> = {
   163: "Pickleball",
 };
 
+// Whoop v2 API returns lowercase sport_name strings. sport_id 0 is a generic
+// "Activity" bucket in v2 (not Weightlifting as in v1 docs), so sport_name
+// is the reliable classifier. Use it first, fall back to sport_id.
+const WHOOP_SPORT_NAME_TO_WORKOUT_TYPE: Record<string, WorkoutType> = {
+  running: "cardio",
+  cycling: "cardio",
+  swimming: "cardio",
+  rowing: "cardio",
+  walking: "cardio",
+  hiking: "cardio",
+  skiing: "cardio",
+  snowboarding: "cardio",
+  skating: "cardio",
+  elliptical: "cardio",
+  stairmaster: "cardio",
+  "cross country skiing": "cardio",
+  weightlifting: "weightlifting",
+  powerlifting: "weightlifting",
+  "functional fitness": "weightlifting",
+  hiit: "hiit",
+  yoga: "yoga",
+  pilates: "yoga",
+  gymnastics: "calisthenics",
+  soccer: "sports",
+  football: "sports",
+  "american football": "sports",
+  basketball: "sports",
+  tennis: "sports",
+  baseball: "sports",
+  hockey: "sports",
+  boxing: "sports",
+  mma: "sports",
+  "martial arts": "sports",
+  wrestling: "sports",
+  lacrosse: "sports",
+  volleyball: "sports",
+  rugby: "sports",
+  cricket: "sports",
+  racquetball: "sports",
+  squash: "sports",
+  badminton: "sports",
+  pickleball: "sports",
+  "rock climbing": "sports",
+  surfing: "sports",
+  meditation: "mixed",
+};
+
 /**
- * Returns the app workoutType for a given Whoop sport_id.
- * Defaults to "mixed" for unknown IDs.
+ * Returns the app workoutType using sport_name as primary classifier (Whoop v2
+ * returns lowercase names). Falls back to sport_id lookup, then "mixed".
+ */
+export function whoopSportToWorkoutType(sportId: number, sportName?: string): WorkoutType {
+  if (sportName) {
+    const byName = WHOOP_SPORT_NAME_TO_WORKOUT_TYPE[sportName.toLowerCase().trim()];
+    if (byName) return byName;
+  }
+  return WHOOP_SPORT_ID_TO_WORKOUT_TYPE[sportId] ?? "mixed";
+}
+
+/**
+ * @deprecated Use whoopSportToWorkoutType(sportId, sportName) — sport_name is
+ * the reliable classifier in Whoop v2; sport_id 0 maps incorrectly for running.
  */
 export function whoopSportIdToWorkoutType(sportId: number): WorkoutType {
   return WHOOP_SPORT_ID_TO_WORKOUT_TYPE[sportId] ?? "mixed";

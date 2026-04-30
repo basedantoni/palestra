@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import {
+  cardioSubtypeEnum,
   customExerciseStatusEnum,
   exerciseCategoryEnum,
   muscleGroupBodybuildingEnum,
@@ -45,6 +46,7 @@ export const exercise = pgTable(
     rejectedReason: text("rejected_reason"),
     approvedAt: timestamp("approved_at"),
     approvedByUserId: text("approved_by_user_id").references(() => user.id),
+    cardioSubtype: cardioSubtypeEnum("cardio_subtype"),
   },
   (table) => [
     index("exercise_name_idx").on(table.name),

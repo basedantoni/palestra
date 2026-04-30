@@ -101,6 +101,7 @@ describe("workout-utils", () => {
         tempId: "ex-1",
         exerciseId: "bench-press",
         exerciseName: "Bench Press",
+        exerciseType: undefined,
         order: 0,
         sets: [
           {
@@ -132,9 +133,8 @@ describe("workout-utils", () => {
         workDurationSeconds: undefined,
         restDurationSeconds: undefined,
         intensity: undefined,
-        distance: undefined,
+        distanceMeter: undefined,
         durationSeconds: undefined,
-        pace: undefined,
         heartRate: undefined,
         durationMinutes: undefined,
         notes: "",
@@ -148,15 +148,15 @@ describe("workout-utils", () => {
         tempId: "ex-1",
         exerciseId: "bench-press",
         exerciseName: "Bench Press",
+        exerciseType: undefined,
         order: 0,
         sets: [],
         rounds: undefined,
         workDurationSeconds: undefined,
         restDurationSeconds: undefined,
         intensity: undefined,
-        distance: undefined,
+        distanceMeter: undefined,
         durationSeconds: undefined,
-        pace: undefined,
         heartRate: undefined,
         durationMinutes: undefined,
         notes: "",
@@ -169,6 +169,7 @@ describe("workout-utils", () => {
         tempId: "ex-1",
         exerciseId: "bench-press",
         exerciseName: "Bench Press",
+        exerciseType: undefined,
         order: 0,
         sets: [
           {
@@ -192,9 +193,8 @@ describe("workout-utils", () => {
         workDurationSeconds: undefined,
         restDurationSeconds: undefined,
         intensity: undefined,
-        distance: undefined,
+        distanceMeter: undefined,
         durationSeconds: undefined,
-        pace: undefined,
         heartRate: undefined,
         durationMinutes: undefined,
         notes: "",
@@ -210,6 +210,7 @@ describe("workout-utils", () => {
           tempId: "ex-1",
           exerciseId: "bench-press",
           exerciseName: "Bench Press",
+          exerciseType: undefined,
           order: 0,
           sets: [
             {
@@ -233,9 +234,8 @@ describe("workout-utils", () => {
           workDurationSeconds: undefined,
           restDurationSeconds: undefined,
           intensity: undefined,
-          distance: undefined,
+          distanceMeter: undefined,
           durationSeconds: undefined,
-          pace: undefined,
           heartRate: undefined,
           durationMinutes: undefined,
           notes: "",
@@ -244,6 +244,7 @@ describe("workout-utils", () => {
           tempId: "ex-2",
           exerciseId: "squat",
           exerciseName: "Squat",
+          exerciseType: undefined,
           order: 1,
           sets: [
             {
@@ -259,9 +260,8 @@ describe("workout-utils", () => {
           workDurationSeconds: undefined,
           restDurationSeconds: undefined,
           intensity: undefined,
-          distance: undefined,
+          distanceMeter: undefined,
           durationSeconds: undefined,
-          pace: undefined,
           heartRate: undefined,
           durationMinutes: undefined,
           notes: "",
@@ -319,9 +319,8 @@ describe("workout-utils", () => {
       expect(exercise.workDurationSeconds).toBeUndefined();
       expect(exercise.restDurationSeconds).toBeUndefined();
       expect(exercise.intensity).toBeUndefined();
-      expect(exercise.distance).toBeUndefined();
+      expect(exercise.distanceMeter).toBeUndefined();
       expect(exercise.durationSeconds).toBeUndefined();
-      expect(exercise.pace).toBeUndefined();
       expect(exercise.heartRate).toBeUndefined();
       expect(exercise.durationMinutes).toBeUndefined();
     });
@@ -336,6 +335,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               {
@@ -359,9 +359,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "Good form",
@@ -394,6 +393,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               {
@@ -409,9 +409,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -420,15 +419,15 @@ describe("workout-utils", () => {
             tempId: "ex-2",
             exerciseId: undefined,
             exerciseName: "   ",
+            exerciseType: undefined,
             order: 1,
             sets: [],
             rounds: undefined,
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -451,6 +450,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               {
@@ -482,9 +482,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -506,6 +505,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               {
@@ -521,9 +521,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -553,9 +552,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: 5,
+            distanceMeter: 8046.72,
             durationSeconds: 1800,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -593,9 +591,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: 7,
-            distance: 8.2,
+            distanceMeter: 8046.72,
             durationSeconds: 2700,
-            pace: 5.49,
             heartRate: 148,
             durationMinutes: undefined,
             notes: "Steady effort",
@@ -610,9 +607,8 @@ describe("workout-utils", () => {
       expect(result.totalVolume).toBeUndefined();
       expect(result.logs[0]?.sets).toEqual([]);
       expect(result.logs[0]).toMatchObject({
-        distance: 8.2,
+        distanceMeter: 8046.72,
         durationSeconds: 2700,
-        pace: 5.49,
         heartRate: 148,
         intensity: 7,
         notes: "Steady effort",
@@ -629,6 +625,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7, durationSeconds: undefined },
@@ -637,9 +634,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -661,6 +657,7 @@ describe("workout-utils", () => {
             tempId: "ex-1",
             exerciseId: "bench-press-id",
             exerciseName: "Bench Press",
+            exerciseType: undefined,
             order: 0,
             sets: [
               { tempId: "set-1", setNumber: 1, reps: 10, weight: 135, rpe: 7, durationSeconds: undefined },
@@ -669,9 +666,8 @@ describe("workout-utils", () => {
             workDurationSeconds: undefined,
             restDurationSeconds: undefined,
             intensity: undefined,
-            distance: undefined,
+            distanceMeter: undefined,
             durationSeconds: undefined,
-            pace: undefined,
             heartRate: undefined,
             durationMinutes: undefined,
             notes: "",
@@ -768,9 +764,8 @@ describe("workout-utils", () => {
             workDurationSeconds: null,
             restDurationSeconds: null,
             intensity: null,
-            distance: null,
+            distanceMeter: null,
             durationSeconds: null,
-            pace: null,
             heartRate: null,
             durationMinutes: null,
             notes: "Top set felt good",
@@ -811,9 +806,8 @@ describe("workout-utils", () => {
             workDurationSeconds: null,
             restDurationSeconds: null,
             intensity: null,
-            distance: 5,
+            distanceMeter: 8046.72,
             durationSeconds: 1800,
-            pace: 6,
             heartRate: 150,
             durationMinutes: 30,
             notes: null,

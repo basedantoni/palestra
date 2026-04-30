@@ -1,11 +1,14 @@
 import { relations } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  jsonb,
   pgTable,
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -39,6 +42,9 @@ export const workout = pgTable(
     index("workout_userId_idx").on(table.userId),
     index("workout_userId_date_idx").on(table.userId, table.date),
     index("workout_whoopActivityId_idx").on(table.whoopActivityId),
+    uniqueIndex("workout_userId_whoopActivityId_unique_idx")
+      .on(table.userId, table.whoopActivityId)
+      .where(sql`"whoop_activity_id" IS NOT NULL`),
   ],
 );
 
@@ -56,12 +62,19 @@ export const exerciseLog = pgTable(
     workDurationSeconds: integer("work_duration_seconds"),
     restDurationSeconds: integer("rest_duration_seconds"),
     intensity: integer("intensity"),
-    distance: real("distance"),
+    distanceMeter: real("distance_meter"),
     durationSeconds: integer("duration_seconds"),
-    pace: real("pace"),
     heartRate: integer("heart_rate"),
     durationMinutes: integer("duration_minutes"),
     notes: text("notes"),
+    hrZoneDurations: jsonb("hr_zone_durations").$type<{
+      zone_zero_milli?: number;
+      zone_one_milli?: number;
+      zone_two_milli?: number;
+      zone_three_milli?: number;
+      zone_four_milli?: number;
+      zone_five_milli?: number;
+    }>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { format } from "date-fns";
@@ -25,12 +25,14 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
 import { ExerciseCard } from "@/components/workout/exercise-card";
+import { WhoopLinkCard } from "@/components/workout/whoop-link-card";
 import { cn } from "@/lib/utils";
 import {
   createBlankExercise,
   formDataToApiInput,
   calculateTotalVolume,
   type ExerciseType,
+  type CardioSubtype,
   formatVolume,
   normalizeDateToLocalNoon,
   reconcileUnknownExerciseNames,
@@ -74,6 +76,10 @@ function RouteComponent() {
   );
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | undefined>();
 
+  // Whoop linking state
+  const [selectedWhoopActivityId, setSelectedWhoopActivityId] = useState<string | null>(null);
+  const [whoopCardOpen, setWhoopCardOpen] = useState(false);
+
   const [formData, setFormData] = useState<WorkoutFormData>({
     workoutType: "weightlifting",
     exercises: [],
@@ -99,6 +105,8 @@ function RouteComponent() {
   );
   const exercisesQuery = useQuery(trpc.exercises.list.queryOptions());
   const overloadQuery = useQuery(trpc.analytics.progressiveOverload.queryOptions());
+  const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
+  const distanceUnit = preferencesQuery.data?.distanceUnit ?? "mi";
 
   const exerciseNameById = useMemo(() => {
     return Object.fromEntries(
@@ -119,6 +127,49 @@ function RouteComponent() {
     const pairs = (overloadQuery.data ?? []).map((item) => [item.exerciseId, item.suggestion]);
     return Object.fromEntries(pairs);
   }, [overloadQuery.data]);
+
+  // Detect whether any exercise in the form has cardioSubtype === 'running'
+  const hasRunningExercise = formData.exercises.some(
+    (ex) => ex.cardioSubtype === "running",
+  );
+
+  // Clear Whoop selection when no running exercise is present
+  useEffect(() => {
+    if (!hasRunningExercise && selectedWhoopActivityId !== null) {
+      setSelectedWhoopActivityId(null);
+      setWhoopCardOpen(false);
+    }
+  }, [hasRunningExercise, selectedWhoopActivityId]);
+
+  // ISO date string for the Whoop picker (YYYY-MM-DD)
+  const workoutDateIso = formData.date
+    ? format(formData.date, "yyyy-MM-dd")
+    : format(new Date(), "yyyy-MM-dd");
+
+  // Reset Whoop selection when workout date changes
+  const prevWorkoutDateRef = useRef(workoutDateIso);
+  useEffect(() => {
+    if (prevWorkoutDateRef.current !== workoutDateIso) {
+      prevWorkoutDateRef.current = workoutDateIso;
+      setSelectedWhoopActivityId(null);
+    }
+  }, [workoutDateIso]);
+
+  // Fetch selected Whoop activity detail for summary display
+  const whoopActivitiesQuery = useQuery(
+    trpc.whoop.listUnlinkedCardioActivities.queryOptions(
+      { date: workoutDateIso },
+      { enabled: hasRunningExercise && whoopCardOpen },
+    ),
+  );
+  const selectedWhoopActivity = useMemo(() => {
+    if (!selectedWhoopActivityId) return null;
+    return (
+      whoopActivitiesQuery.data?.activities.find(
+        (a) => a.id === selectedWhoopActivityId,
+      ) ?? null
+    );
+  }, [selectedWhoopActivityId, whoopActivitiesQuery.data]);
 
   useEffect(() => {
     if (!selectedTemplateId || !templateQuery.data) return;
@@ -160,6 +211,7 @@ function RouteComponent() {
     id: string;
     name: string;
     exerciseType?: string;
+    cardioSubtype?: string | null;
   }) => {
     if (editingExerciseIndex !== null) {
       const updatedExercises = [...formData.exercises];
@@ -170,15 +222,28 @@ function RouteComponent() {
           exerciseId: exercise.id,
           exerciseName: exercise.name,
           exerciseType: exercise.exerciseType as ExerciseType | undefined,
+          cardioSubtype: exercise.cardioSubtype as CardioSubtype | undefined,
         });
       } else {
-        // Changing existing exercise
+        // Changing existing exercise — clear Whoop if running subtype changes
+        const prevSubtype = updatedExercises[editingExerciseIndex]?.cardioSubtype;
         updatedExercises[editingExerciseIndex] = {
-          ...updatedExercises[editingExerciseIndex],
+          ...updatedExercises[editingExerciseIndex]!,
           exerciseId: exercise.id,
           exerciseName: exercise.name,
           exerciseType: exercise.exerciseType as ExerciseType | undefined,
+          cardioSubtype: exercise.cardioSubtype as CardioSubtype | undefined,
         };
+        if (prevSubtype === "running" && exercise.cardioSubtype !== "running") {
+          // Check if any other exercise is still running
+          const stillHasRunning = updatedExercises.some(
+            (ex, i) => i !== editingExerciseIndex && ex.cardioSubtype === "running",
+          );
+          if (!stillHasRunning) {
+            setSelectedWhoopActivityId(null);
+            setWhoopCardOpen(false);
+          }
+        }
       }
       setFormData({ ...formData, exercises: updatedExercises });
     }
@@ -194,14 +259,30 @@ function RouteComponent() {
   };
 
   const handleRemoveExercise = (index: number) => {
+    const removedExercise = formData.exercises[index];
     const updatedExercises = formData.exercises
       .filter((_, i) => i !== index)
       .map((ex, i) => ({ ...ex, order: i }));
+
+    // Clear Whoop if the removed exercise was running and no others are running
+    if (removedExercise?.cardioSubtype === "running") {
+      const stillHasRunning = updatedExercises.some(
+        (ex) => ex.cardioSubtype === "running",
+      );
+      if (!stillHasRunning) {
+        setSelectedWhoopActivityId(null);
+        setWhoopCardOpen(false);
+      }
+    }
+
     setFormData({ ...formData, exercises: updatedExercises });
   };
 
   const handleSave = () => {
-    const apiInput = formDataToApiInput(formData);
+    const apiInput = formDataToApiInput({
+      ...formData,
+      whoopActivityId: selectedWhoopActivityId ?? undefined,
+    });
     createWorkout.mutate(apiInput);
   };
 
@@ -343,6 +424,7 @@ function RouteComponent() {
               <ExerciseCard
                 key={exercise.tempId}
                 exercise={exercise}
+                distanceUnit={distanceUnit}
                 onUpdate={(updated) => handleUpdateExercise(index, updated)}
                 onRemove={() => handleRemoveExercise(index)}
                 onChangeExercise={() => handleChangeExercise(index)}
@@ -356,6 +438,19 @@ function RouteComponent() {
           Add Exercise
         </Button>
       </div>
+
+      {/* Whoop Linking Card — only visible when a running exercise is present */}
+      {hasRunningExercise && (
+        <WhoopLinkCard
+          workoutDate={workoutDateIso}
+          selectedActivityId={selectedWhoopActivityId}
+          selectedActivity={selectedWhoopActivity}
+          isOpen={whoopCardOpen}
+          distanceUnit={distanceUnit}
+          onToggle={() => setWhoopCardOpen((open) => !open)}
+          onSelect={setSelectedWhoopActivityId}
+        />
+      )}
 
       {/* Notes */}
       <div className="mt-6">

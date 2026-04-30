@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { formatVolume, WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import {
+  formatVolume,
+  metersToDisplayUnit,
+  WORKOUT_TYPE_LABELS,
+} from "@src/api/lib/index";
 
 export const Route = createFileRoute("/dashboard")({
   component: RouteComponent,
@@ -23,7 +27,7 @@ export const Route = createFileRoute("/dashboard")({
 
     // Check if onboarding is complete
     const isComplete = await context.queryClient.fetchQuery(
-      context.trpc.preferences.isOnboardingComplete.queryOptions()
+      context.trpc.preferences.isOnboardingComplete.queryOptions(),
     );
 
     if (!isComplete) {
@@ -96,7 +100,8 @@ function RouteComponent() {
               <div>
                 <div className="text-sm text-muted-foreground">Distance</div>
                 <div className="text-2xl font-bold">
-                  {runningWeek.totalDistance.toFixed(2)} {distanceUnit}
+                  {metersToDisplayUnit(runningWeek.totalDistance, distanceUnit).toFixed(2)}{" "}
+                  {distanceUnit}
                 </div>
               </div>
               <div>

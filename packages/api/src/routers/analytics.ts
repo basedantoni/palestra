@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, lte, sql, sum } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
@@ -90,7 +90,7 @@ export const analyticsRouter = router({
         .select({
           date: workout.date,
           workoutId: workout.id,
-          distance: exerciseLog.distance,
+          distanceMeter: exerciseLog.distanceMeter,
           durationSeconds: exerciseLog.durationSeconds,
           rounds: exerciseLog.rounds,
           workDurationSeconds: exerciseLog.workDurationSeconds,
@@ -118,7 +118,6 @@ export const analyticsRouter = router({
       const clauses = [
         eq(workout.userId, ctx.session.user.id),
         eq(exercise.category, "cardio"),
-        sql`${exerciseLog.pace} is not null`,
       ];
 
       if (input?.exerciseId) {
@@ -139,7 +138,8 @@ export const analyticsRouter = router({
           workoutId: workout.id,
           exerciseId: exerciseLog.exerciseId,
           exerciseName: exerciseLog.exerciseName,
-          pace: exerciseLog.pace,
+          distanceMeter: exerciseLog.distanceMeter,
+          durationSeconds: exerciseLog.durationSeconds,
         })
         .from(exerciseLog)
         .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
@@ -446,4 +446,149 @@ export const analyticsRouter = router({
 
     return calculateStreaks(dates, today);
   }),
+
+  /**
+   * Avg HR per run, scoped to workouts with a running exercise and a linked
+   * Whoop activity. One entry per run; avgHr is null when HR was not recorded.
+   */
+  runningHrTrend: protectedProcedure
+    .input(
+      z.object({
+        from: z.string(), // ISO date "YYYY-MM-DD"
+        to: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const rows = await db
+        .select({
+          date: workout.date,
+          avgHr: exerciseLog.heartRate,
+        })
+        .from(exerciseLog)
+        .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .where(
+          and(
+            eq(workout.userId, ctx.session.user.id),
+            isNotNull(workout.whoopActivityId),
+            sql`${workout.date} >= ${input.from}::date`,
+            sql`${workout.date} <= ${input.to}::date`,
+          ),
+        )
+        .orderBy(asc(workout.date));
+
+      return rows.map((row) => ({
+        date: toLocalDateKey(row.date),
+        avgHr: row.avgHr ?? null,
+      }));
+    }),
+
+  /**
+   * Pace per run (seconds per display unit), scoped to Whoop-linked running
+   * exercises. Unit is derived from user's distanceUnit preference.
+   */
+  whoopPaceTrend: protectedProcedure
+    .input(
+      z.object({
+        from: z.string(),
+        to: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const [prefs, rows] = await Promise.all([
+        db.query.userPreferences.findFirst({
+          where: (table, { eq }) => eq(table.userId, userId),
+        }),
+        db
+          .select({
+            date: workout.date,
+            distanceMeter: exerciseLog.distanceMeter,
+            durationSeconds: exerciseLog.durationSeconds,
+            durationMinutes: exerciseLog.durationMinutes,
+          })
+          .from(exerciseLog)
+          .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+          .where(
+            and(
+              eq(workout.userId, userId),
+              isNotNull(workout.whoopActivityId),
+              sql`${workout.date} >= ${input.from}::date`,
+              sql`${workout.date} <= ${input.to}::date`,
+            ),
+          )
+          .orderBy(asc(workout.date)),
+      ]);
+
+      const unit: "mi" | "km" = prefs?.distanceUnit ?? "mi";
+      const metersPerUnit = unit === "mi" ? 1609.344 : 1000;
+
+      return rows.map((row) => {
+        // Prefer durationSeconds; fall back to durationMinutes * 60 (Whoop DTO writes minutes)
+        const totalSeconds =
+          row.durationSeconds != null
+            ? row.durationSeconds
+            : row.durationMinutes != null
+              ? row.durationMinutes * 60
+              : null;
+
+        let paceSecPerUnit: number | null = null;
+        if (
+          row.distanceMeter != null &&
+          row.distanceMeter > 0 &&
+          totalSeconds != null &&
+          totalSeconds > 0
+        ) {
+          const displayDist = row.distanceMeter / metersPerUnit;
+          paceSecPerUnit = totalSeconds / displayDist;
+        }
+        return {
+          date: toLocalDateKey(row.date),
+          paceSecPerUnit,
+          unit,
+        };
+      });
+    }),
+
+  /**
+   * Total distance per calendar week (Monday = week start), scoped to
+   * Whoop-linked running exercises. Weeks with zero distance are excluded.
+   */
+  weeklyRunDistance: protectedProcedure
+    .input(
+      z.object({
+        from: z.string(),
+        to: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const rows = await db
+        .select({
+          // ISO week start (Monday) as a date string
+          weekStart: sql<string>`to_char(
+            date_trunc('week', ${workout.date}::date),
+            'YYYY-MM-DD'
+          )`,
+          distanceMeter: sum(exerciseLog.distanceMeter),
+        })
+        .from(exerciseLog)
+        .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .where(
+          and(
+            eq(workout.userId, ctx.session.user.id),
+            isNotNull(workout.whoopActivityId),
+            sql`${workout.date} >= ${input.from}::date`,
+            sql`${workout.date} <= ${input.to}::date`,
+          ),
+        )
+        .groupBy(sql`date_trunc('week', ${workout.date}::date)`)
+        .orderBy(asc(sql`date_trunc('week', ${workout.date}::date)`));
+
+      return rows
+        .filter((row) => row.distanceMeter != null && Number(row.distanceMeter) > 0)
+        .map((row) => ({
+          weekStart: row.weekStart,
+          distanceMeter: Number(row.distanceMeter),
+        }));
+    }),
 });

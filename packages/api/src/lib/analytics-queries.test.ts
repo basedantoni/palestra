@@ -136,18 +136,18 @@ describe("aggregateRunningVolumeByWeek", () => {
     expect(aggregateRunningVolumeByWeek([])).toEqual([]);
   });
 
-  it("aggregates distance, duration, and unique workouts by ISO week", () => {
+  it("aggregates distanceMeter, duration, and unique workouts by ISO week", () => {
     const result = aggregateRunningVolumeByWeek([
       {
         date: localNoon(2026, 3, 2),
         workoutId: "w-1",
-        distance: 5,
+        distanceMeter: 8046.72, // 5 miles in meters
         durationSeconds: 1800,
       },
       {
         date: localNoon(2026, 3, 3),
         workoutId: "w-2",
-        distance: null,
+        distanceMeter: null,
         rounds: 8,
         workDurationSeconds: 30,
         restDurationSeconds: 60,
@@ -155,7 +155,7 @@ describe("aggregateRunningVolumeByWeek", () => {
       {
         date: localNoon(2026, 3, 10),
         workoutId: "w-3",
-        distance: 10,
+        distanceMeter: 16093.44, // 10 miles in meters
         durationSeconds: 3600,
       },
     ]);
@@ -163,25 +163,25 @@ describe("aggregateRunningVolumeByWeek", () => {
     expect(result).toEqual([
       {
         period: "2026-W10",
-        totalDistance: 5,
+        totalDistance: 8046.72,
         totalDurationSeconds: 2520,
         workoutCount: 2,
       },
       {
         period: "2026-W11",
-        totalDistance: 10,
+        totalDistance: 16093.44,
         totalDurationSeconds: 3600,
         workoutCount: 1,
       },
     ]);
   });
 
-  it("handles null distance and duration inputs without crashing", () => {
+  it("handles null distanceMeter and duration inputs without crashing", () => {
     const result = aggregateRunningVolumeByWeek([
       {
         date: localNoon(2026, 3, 2),
         workoutId: "w-1",
-        distance: null,
+        distanceMeter: null,
         durationSeconds: null,
       },
     ]);
@@ -202,28 +202,35 @@ describe("aggregateRunningVolumeByWeek", () => {
 // ---------------------------------------------------------------------------
 
 describe("aggregateRunningPaceTrend", () => {
-  it("averages pace by date and exercise", () => {
+  it("derives pace from distanceMeter and durationSeconds, averages by date and exercise", () => {
+    // 1000m in 300s → 0.3 sec/m
+    // 1000m in 360s → 0.36 sec/m
+    // average for ex-1 on 2026-03-02: (0.3 + 0.36) / 2 = 0.33 sec/m
+    // 1000m in 375s → 0.375 sec/m  (ex-2 on 2026-03-04)
     const result = aggregateRunningPaceTrend([
       {
         date: localNoon(2026, 3, 2),
         workoutId: "w-1",
         exerciseId: "ex-1",
         exerciseName: "Long Run",
-        pace: 8,
+        distanceMeter: 1000,
+        durationSeconds: 300,
       },
       {
         date: localNoon(2026, 3, 2),
         workoutId: "w-2",
         exerciseId: "ex-1",
         exerciseName: "Long Run",
-        pace: 7.5,
+        distanceMeter: 1000,
+        durationSeconds: 360,
       },
       {
         date: localNoon(2026, 3, 4),
         workoutId: "w-3",
         exerciseId: "ex-2",
         exerciseName: "Tempo Run",
-        pace: 6.25,
+        distanceMeter: 1000,
+        durationSeconds: 375,
       },
     ]);
 
@@ -232,17 +239,55 @@ describe("aggregateRunningPaceTrend", () => {
         date: "2026-03-02",
         exerciseId: "ex-1",
         exerciseName: "Long Run",
-        averagePace: 7.75,
+        averagePace: 0.33,
         workoutCount: 2,
       },
       {
         date: "2026-03-04",
         exerciseId: "ex-2",
         exerciseName: "Tempo Run",
-        averagePace: 6.25,
+        averagePace: 0.375,
         workoutCount: 1,
       },
     ]);
+  });
+
+  it("skips entries where distanceMeter or durationSeconds is null/zero", () => {
+    const result = aggregateRunningPaceTrend([
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-1",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        distanceMeter: null,
+        durationSeconds: 300,
+      },
+      {
+        date: localNoon(2026, 3, 2),
+        workoutId: "w-2",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        distanceMeter: 1000,
+        durationSeconds: null,
+      },
+      {
+        date: localNoon(2026, 3, 3),
+        workoutId: "w-3",
+        exerciseId: "ex-1",
+        exerciseName: "Long Run",
+        distanceMeter: 1000,
+        durationSeconds: 300,
+      },
+    ]);
+
+    // Only the third entry is valid
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      date: "2026-03-03",
+      exerciseId: "ex-1",
+      averagePace: 0.3,
+      workoutCount: 1,
+    });
   });
 });
 

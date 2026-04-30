@@ -2,7 +2,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "heroui-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -21,7 +21,10 @@ import type {
 } from "@src/api/lib/workout-utils";
 import {
   calculateTotalVolume,
+  type CardioSubtype,
+  type ExerciseType,
   createBlankExercise,
+  formatDistance,
   formatVolume,
   formDataToApiInput,
   normalizeDateToLocalNoon,
@@ -32,6 +35,7 @@ import {
 
 import { ExerciseCard } from "@/components/workout/exercise-card";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
+import { WhoopActivityPicker } from "@/components/workout/WhoopActivityPicker";
 
 const WORKOUT_TYPES = [
   "weightlifting",
@@ -43,6 +47,13 @@ const WORKOUT_TYPES = [
   "mixed",
 ] as const;
 
+function formatDateDisplay(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    ", " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export default function NewWorkoutScreen() {
   const { templateId } = useLocalSearchParams<{ templateId?: string }>();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -53,6 +64,10 @@ export default function NewWorkoutScreen() {
     templateId,
   );
   const [appliedTemplateId, setAppliedTemplateId] = useState<string | undefined>();
+
+  // Whoop linking state
+  const [selectedWhoopActivityId, setSelectedWhoopActivityId] = useState<string | null>(null);
+  const [whoopCardOpen, setWhoopCardOpen] = useState(false);
 
   const [formData, setFormData] = useState<WorkoutFormData>({
     workoutType: "weightlifting",
@@ -75,6 +90,8 @@ export default function NewWorkoutScreen() {
   );
   const exercisesQuery = useQuery(trpc.exercises.list.queryOptions());
   const overloadQuery = useQuery(trpc.analytics.progressiveOverload.queryOptions());
+  const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
+  const distanceUnit = preferencesQuery.data?.distanceUnit ?? "mi";
 
   const exerciseNameById = useMemo(() => {
     return Object.fromEntries(
@@ -87,6 +104,50 @@ export default function NewWorkoutScreen() {
     return Object.fromEntries(pairs);
   }, [overloadQuery.data]);
 
+  // Detect whether any exercise in the form has cardioSubtype === 'running'
+  const hasRunningExercise = formData.exercises.some(
+    (ex) => ex.cardioSubtype === "running",
+  );
+
+  // ISO date string for the Whoop picker (YYYY-MM-DD)
+  const workoutDateIso = useMemo(() => {
+    const d = formData.date ?? new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, [formData.date]);
+
+  // Reset Whoop selection when workout date changes
+  const prevDateRef = useRef(workoutDateIso);
+  useEffect(() => {
+    if (prevDateRef.current !== workoutDateIso) {
+      prevDateRef.current = workoutDateIso;
+      setSelectedWhoopActivityId(null);
+    }
+  }, [workoutDateIso]);
+
+  // Clear Whoop selection when no running exercise is present
+  useEffect(() => {
+    if (!hasRunningExercise && selectedWhoopActivityId !== null) {
+      setSelectedWhoopActivityId(null);
+      setWhoopCardOpen(false);
+    }
+  }, [hasRunningExercise, selectedWhoopActivityId]);
+
+  // Fetch activities to show summary of selected activity
+  const whoopActivitiesQuery = useQuery(
+    trpc.whoop.listUnlinkedCardioActivities.queryOptions(
+      { date: workoutDateIso },
+      { enabled: hasRunningExercise && whoopCardOpen },
+    ),
+  );
+  const selectedWhoopActivity = useMemo(() => {
+    if (!selectedWhoopActivityId) return null;
+    return (
+      whoopActivitiesQuery.data?.activities.find(
+        (a) => a.id === selectedWhoopActivityId,
+      ) ?? null
+    );
+  }, [selectedWhoopActivityId, whoopActivitiesQuery.data]);
+
   useEffect(() => {
     if (!selectedTemplateId || !templateQuery.data) return;
     if (appliedTemplateId === selectedTemplateId) return;
@@ -94,10 +155,10 @@ export default function NewWorkoutScreen() {
       templateToWorkoutFormData(
         templateQuery.data as ApiTemplateForWorkoutPrefill,
         {
-        exerciseNameById,
-        suggestionsByExerciseId,
-        date: new Date(),
-      },
+          exerciseNameById,
+          suggestionsByExerciseId,
+          date: new Date(),
+        },
       ),
     );
     setAppliedTemplateId(selectedTemplateId);
@@ -135,7 +196,12 @@ export default function NewWorkoutScreen() {
     setShowExercisePicker(true);
   };
 
-  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+  const handleSelectExercise = (exercise: {
+    id: string;
+    name: string;
+    exerciseType?: string;
+    cardioSubtype?: string | null;
+  }) => {
     if (editingExerciseIndex !== null) {
       const updatedExercises = [...formData.exercises];
       if (editingExerciseIndex >= updatedExercises.length) {
@@ -144,14 +210,28 @@ export default function NewWorkoutScreen() {
           ...createBlankExercise(updatedExercises.length),
           exerciseId: exercise.id,
           exerciseName: exercise.name,
+          exerciseType: exercise.exerciseType as ExerciseType | undefined,
+          cardioSubtype: exercise.cardioSubtype as CardioSubtype | undefined,
         });
       } else {
-        // Changing existing exercise
+        // Changing existing exercise — clear Whoop if running subtype changes
+        const prevSubtype = updatedExercises[editingExerciseIndex]?.cardioSubtype;
         updatedExercises[editingExerciseIndex] = {
-          ...updatedExercises[editingExerciseIndex],
+          ...updatedExercises[editingExerciseIndex]!,
           exerciseId: exercise.id,
           exerciseName: exercise.name,
+          exerciseType: exercise.exerciseType as ExerciseType | undefined,
+          cardioSubtype: exercise.cardioSubtype as CardioSubtype | undefined,
         };
+        if (prevSubtype === "running" && exercise.cardioSubtype !== "running") {
+          const stillHasRunning = updatedExercises.some(
+            (ex, i) => i !== editingExerciseIndex && ex.cardioSubtype === "running",
+          );
+          if (!stillHasRunning) {
+            setSelectedWhoopActivityId(null);
+            setWhoopCardOpen(false);
+          }
+        }
       }
       setFormData((prev) => ({ ...prev, exercises: updatedExercises }));
     }
@@ -168,14 +248,29 @@ export default function NewWorkoutScreen() {
   };
 
   const handleRemoveExercise = (index: number) => {
+    const removedExercise = formData.exercises[index];
     const updatedExercises = formData.exercises
       .filter((_, i) => i !== index)
       .map((ex, i) => ({ ...ex, order: i }));
+
+    if (removedExercise?.cardioSubtype === "running") {
+      const stillHasRunning = updatedExercises.some(
+        (ex) => ex.cardioSubtype === "running",
+      );
+      if (!stillHasRunning) {
+        setSelectedWhoopActivityId(null);
+        setWhoopCardOpen(false);
+      }
+    }
+
     setFormData((prev) => ({ ...prev, exercises: updatedExercises }));
   };
 
   const handleSave = () => {
-    const apiInput = formDataToApiInput(formData);
+    const apiInput = formDataToApiInput({
+      ...formData,
+      whoopActivityId: selectedWhoopActivityId ?? undefined,
+    });
     createWorkout.mutate(apiInput);
   };
 
@@ -375,6 +470,74 @@ export default function NewWorkoutScreen() {
             <Button.Label>Add Exercise</Button.Label>
           </Button>
         </View>
+
+        {/* Whoop Linking Card — only visible when a running exercise is present */}
+        {hasRunningExercise && (
+          <View className="mx-4 mb-4 rounded-lg border border-border overflow-hidden">
+            {/* Card header */}
+            <Pressable
+              onPress={() => setWhoopCardOpen((open) => !open)}
+              className="flex-row items-center justify-between px-4 py-3"
+            >
+              <View className="flex-row items-center gap-2">
+                <Text className="text-sm font-medium text-foreground">
+                  Link Whoop Run
+                </Text>
+                {selectedWhoopActivity && (
+                  <View className="bg-primary/10 rounded px-2 py-0.5">
+                    <Text className="text-xs font-medium text-primary">
+                      Linked
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text className="text-muted text-base">
+                {whoopCardOpen ? "▲" : "▶"}
+              </Text>
+            </Pressable>
+
+            {/* Selected activity summary when collapsed */}
+            {!whoopCardOpen && selectedWhoopActivity && (
+              <View className="border-t border-border bg-muted/20 px-4 py-2.5">
+                <View className="flex-row items-center justify-between gap-2">
+                  <View className="flex-1 min-w-0">
+                    <Text className="text-xs text-foreground" numberOfLines={1}>
+                      <Text className="font-medium">{selectedWhoopActivity.sportName}</Text>
+                      {"  ·  "}
+                      {formatDateDisplay(selectedWhoopActivity.start)}
+                      {"  ·  "}
+                      {selectedWhoopActivity.durationMinutes} min
+                      {selectedWhoopActivity.averageHeartRate != null
+                        ? `  ·  ${selectedWhoopActivity.averageHeartRate} bpm`
+                        : ""}
+                      {selectedWhoopActivity.distanceMeter != null
+                        ? `  ·  ${formatDistance(selectedWhoopActivity.distanceMeter, distanceUnit)}`
+                        : ""}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setSelectedWhoopActivityId(null)}
+                    className="pl-2"
+                  >
+                    <Text className="text-xs text-muted">Remove</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {/* Expanded picker */}
+            {whoopCardOpen && (
+              <View className="border-t border-border px-4 py-3">
+                <WhoopActivityPicker
+                  workoutDate={workoutDateIso}
+                  selectedActivityId={selectedWhoopActivityId}
+                  onSelect={setSelectedWhoopActivityId}
+                  distanceUnit={distanceUnit}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Notes */}
         <View className="px-4 pb-6">

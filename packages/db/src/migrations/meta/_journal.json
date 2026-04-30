@@ -64,6 +64,20 @@
       "when": 1776971864846,
       "tag": "0008_known_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1745769600000,
+      "tag": "0009_distance_normalization",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1745856000000,
+      "tag": "0010_whoop_run_linking",
+      "breakpoints": true
     }
   ]
 }

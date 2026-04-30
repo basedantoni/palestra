@@ -57,17 +57,27 @@ export function RunningVolumeChart({
 
   return (
     <ResponsiveContainer width="100%" height={256}>
-      <BarChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+      <BarChart
+        data={chartData}
+        margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis
           dataKey="label"
           tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
         />
-        <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} width={44} />
+        <YAxis
+          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+          width={44}
+        />
         <Tooltip
+          labelStyle={{ color: "var(--muted-foreground" }}
           formatter={(value, name, item) => {
             if (name === "totalDistance") {
-              return [`${Number(value).toFixed(2)} ${distanceUnit}`, "Distance"];
+              return [
+                `${Number(value).toFixed(2)} ${distanceUnit}`,
+                "Distance",
+              ];
             }
             if (name === "workoutCount") {
               return [String(value), "Runs"];
@@ -75,13 +85,19 @@ export function RunningVolumeChart({
             return [String(value), name];
           }}
           labelFormatter={(_, payload) => {
-            const point = payload?.[0]?.payload as WeeklyRunningVolumePoint | undefined;
+            const point = payload?.[0]?.payload as
+              | WeeklyRunningVolumePoint
+              | undefined;
             if (!point) return "";
             return `${point.period} • ${formatDuration(point.totalDurationSeconds)}`;
           }}
           contentStyle={{ fontSize: 12 }}
         />
-        <Bar dataKey="totalDistance" fill="var(--chart-1)" radius={[0, 0, 0, 0]} />
+        <Bar
+          dataKey="totalDistance"
+          fill="var(--chart-1)"
+          radius={[0, 0, 0, 0]}
+        />
       </BarChart>
     </ResponsiveContainer>
   );

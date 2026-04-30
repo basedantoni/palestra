@@ -174,7 +174,7 @@ export function aggregateRunningVolumeByWeek(
   logs: Array<{
     date: Date | string;
     workoutId: string;
-    distance: number | null;
+    distanceMeter: number | null;
     durationSeconds?: number | null;
     rounds?: number | null;
     workDurationSeconds?: number | null;
@@ -198,7 +198,7 @@ export function aggregateRunningVolumeByWeek(
       workoutIds: new Set<string>(),
     };
 
-    existing.totalDistance += log.distance ?? 0;
+    existing.totalDistance += log.distanceMeter ?? 0;
     existing.totalDurationSeconds += calculateCardioLogDurationSeconds(log);
     existing.workoutIds.add(log.workoutId);
     map.set(period, existing);
@@ -224,7 +224,8 @@ export function aggregateRunningPaceTrend(
     workoutId: string;
     exerciseId: string;
     exerciseName: string;
-    pace: number | null;
+    distanceMeter: number | null;
+    durationSeconds: number | null;
   }>,
 ): RunningPaceTrendPoint[] {
   const map = new Map<
@@ -233,27 +234,36 @@ export function aggregateRunningPaceTrend(
       date: string;
       exerciseId: string;
       exerciseName: string;
-      totalPace: number;
+      // pace stored as seconds per meter (unit-agnostic raw value)
+      totalPaceSecsPerMeter: number;
       paceEntries: number;
       workoutIds: Set<string>;
     }
   >();
 
   for (const log of logs) {
-    if (log.pace == null) continue;
+    // Only include logs where pace can be derived
+    if (
+      log.distanceMeter == null ||
+      log.distanceMeter <= 0 ||
+      log.durationSeconds == null ||
+      log.durationSeconds <= 0
+    )
+      continue;
 
+    const paceSecsPerMeter = log.durationSeconds / log.distanceMeter;
     const date = toDateString(log.date);
     const key = `${date}:${log.exerciseId}`;
     const existing = map.get(key) ?? {
       date,
       exerciseId: log.exerciseId,
       exerciseName: log.exerciseName,
-      totalPace: 0,
+      totalPaceSecsPerMeter: 0,
       paceEntries: 0,
       workoutIds: new Set<string>(),
     };
 
-    existing.totalPace += log.pace;
+    existing.totalPaceSecsPerMeter += paceSecsPerMeter;
     existing.paceEntries += 1;
     existing.workoutIds.add(log.workoutId);
     map.set(key, existing);
@@ -264,7 +274,11 @@ export function aggregateRunningPaceTrend(
       date: item.date,
       exerciseId: item.exerciseId,
       exerciseName: item.exerciseName,
-      averagePace: Math.round((item.totalPace / item.paceEntries) * 100) / 100,
+      // averagePace in seconds per meter — callers convert to display unit
+      averagePace:
+        Math.round(
+          (item.totalPaceSecsPerMeter / item.paceEntries) * 1e6,
+        ) / 1e6,
       workoutCount: item.workoutIds.size,
     }))
     .sort(

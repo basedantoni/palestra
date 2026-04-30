@@ -126,18 +126,23 @@ function RouteComponent() {
       return;
     }
 
+    let nextSelectedKey = todayKey;
+    let nextSelectedDate = today;
+
     if (filteredGroupedByDay[todayKey]) {
-      setSelectedDate(today);
-      return;
+      nextSelectedKey = todayKey;
+      nextSelectedDate = today;
+    } else {
+      const firstVisibleDay = Object.keys(filteredGroupedByDay)[0];
+      if (firstVisibleDay) {
+        nextSelectedKey = firstVisibleDay;
+        nextSelectedDate = dateFromLocalKey(firstVisibleDay);
+      }
     }
 
-    const firstVisibleDay = Object.keys(filteredGroupedByDay)[0];
-    if (firstVisibleDay) {
-      setSelectedDate(dateFromLocalKey(firstVisibleDay));
-      return;
+    if (selectedKey !== nextSelectedKey) {
+      setSelectedDate(nextSelectedDate);
     }
-
-    setSelectedDate(today);
   }, [workouts, filteredGroupedByDay, selectedDate]);
 
   const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : undefined;

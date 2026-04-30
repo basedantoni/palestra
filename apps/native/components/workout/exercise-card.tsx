@@ -237,13 +237,61 @@ export function ExerciseCard({
         </View>
       ) : null}
 
-      {/* Add Set Button */}
-      <Pressable
-        onPress={handleAddSet}
-        className="mt-2 py-2 border border-dashed border-border rounded-lg items-center"
-      >
-        <Text className="text-sm text-primary font-medium">+ Add Set</Text>
-      </Pressable>
+      {/* Cardio fields — distance and duration for cardio/hiit exercises */}
+      {exercise.exerciseType === "cardio" || exercise.exerciseType === "hiit" ? (
+        <View className="mt-3 flex-row gap-3">
+          <View className="flex-1">
+            <Text className="text-xs text-muted mb-1">Distance (m)</Text>
+            <TextInput
+              className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#999"
+              value={exercise.distanceMeter?.toString() ?? ""}
+              onChangeText={(text) => {
+                const val = text === "" ? undefined : Math.max(0, Number(text));
+                onUpdate({ ...exercise, distanceMeter: Number.isNaN(val) ? undefined : val });
+              }}
+            />
+          </View>
+          <View className="flex-1">
+            <Text className="text-xs text-muted mb-1">Duration (s)</Text>
+            <TextInput
+              className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor="#999"
+              value={exercise.durationSeconds?.toString() ?? ""}
+              onChangeText={(text) => {
+                const val = text === "" ? undefined : Math.max(0, Math.round(Number(text)));
+                onUpdate({ ...exercise, durationSeconds: Number.isNaN(val) ? undefined : val });
+              }}
+            />
+          </View>
+          <View className="flex-1">
+            <Text className="text-xs text-muted mb-1">Avg HR</Text>
+            <TextInput
+              className="border border-border rounded px-2 py-1.5 text-center text-foreground bg-background"
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor="#999"
+              value={exercise.heartRate?.toString() ?? ""}
+              onChangeText={(text) => {
+                const val = text === "" ? undefined : Math.max(0, Math.round(Number(text)));
+                onUpdate({ ...exercise, heartRate: Number.isNaN(val) ? undefined : val });
+              }}
+            />
+          </View>
+        </View>
+      ) : (
+        /* Add Set Button — only for non-cardio exercises */
+        <Pressable
+          onPress={handleAddSet}
+          className="mt-2 py-2 border border-dashed border-border rounded-lg items-center"
+        >
+          <Text className="text-sm text-primary font-medium">+ Add Set</Text>
+        </Pressable>
+      )}
     </Card>
   );
 }

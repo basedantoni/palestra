@@ -7,8 +7,10 @@ import { SuggestionBadge } from "@/components/workout/suggestion-badge";
 import { useExerciseSuggestion } from "@/components/workout/use-exercise-suggestion";
 import {
   calculateExerciseVolume,
+  displayUnitToMeters,
   formatVolume,
   isCardioStyleExerciseType,
+  metersToDisplayUnit,
 } from "@src/api/lib/index";
 import type { WorkoutExerciseFormData, WorkoutSetFormData } from "@src/api/lib/index";
 
@@ -34,24 +36,10 @@ function parseNumber(value: string): number | undefined {
   return value === "" ? undefined : Number(value);
 }
 
-function calculateAutoPace(
-  distance: number | undefined,
-  durationSeconds: number | undefined,
-): number | undefined {
-  if (
-    distance === undefined ||
-    durationSeconds === undefined ||
-    distance <= 0 ||
-    durationSeconds <= 0
-  ) {
-    return undefined;
-  }
-
-  return Math.round(((durationSeconds / 60) / distance) * 100) / 100;
-}
 
 interface ExerciseCardProps {
   exercise: WorkoutExerciseFormData;
+  distanceUnit?: "mi" | "km";
   onUpdate: (updated: WorkoutExerciseFormData) => void;
   onRemove: () => void;
   onChangeExercise: () => void;
@@ -59,6 +47,7 @@ interface ExerciseCardProps {
 
 export function ExerciseCard({
   exercise,
+  distanceUnit = "mi",
   onUpdate,
   onRemove,
   onChangeExercise,
@@ -71,32 +60,12 @@ export function ExerciseCard({
       | "workDurationSeconds"
       | "restDurationSeconds"
       | "intensity"
-      | "distance"
       | "durationSeconds"
-      | "pace"
       | "heartRate",
     value: string,
   ) => {
     const numericValue = parseNumber(value);
-    const updatedExercise: WorkoutExerciseFormData = {
-      ...exercise,
-      [field]: numericValue,
-    };
-
-    if (exercise.exerciseType === "cardio") {
-      const distance =
-        field === "distance" ? numericValue : updatedExercise.distance;
-      const durationSeconds =
-        field === "durationSeconds"
-          ? numericValue
-          : updatedExercise.durationSeconds;
-
-      if (field === "distance" || field === "durationSeconds") {
-        updatedExercise.pace = calculateAutoPace(distance, durationSeconds);
-      }
-    }
-
-    onUpdate(updatedExercise);
+    onUpdate({ ...exercise, [field]: numericValue });
   };
 
   const updateNotes = (notes: string) => {
@@ -161,18 +130,28 @@ export function ExerciseCard({
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Distance</label>
+              <label className="text-sm font-medium">Distance ({distanceUnit})</label>
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="3.1"
-                value={exercise.distance ?? ""}
-                onChange={(e) => updateExerciseField("distance", e.target.value)}
+                placeholder={distanceUnit === "mi" ? "3.1" : "5.0"}
+                value={
+                  exercise.distanceMeter != null
+                    ? metersToDisplayUnit(exercise.distanceMeter, distanceUnit).toFixed(2).replace(/\.?0+$/, "")
+                    : ""
+                }
+                onChange={(e) => {
+                  const raw = parseNumber(e.target.value);
+                  onUpdate({
+                    ...exercise,
+                    distanceMeter: raw != null ? Math.round(displayUnitToMeters(raw, distanceUnit)) : undefined,
+                  });
+                }}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Duration (seconds)</label>
+              <label className="text-sm font-medium">Duration (s)</label>
               <Input
                 type="number"
                 min="0"
@@ -185,21 +164,7 @@ export function ExerciseCard({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Pace</label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="9.5"
-                value={exercise.pace ?? ""}
-                onChange={(e) => updateExerciseField("pace", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Auto-calculated from distance and duration.
-              </p>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Heart Rate</label>
+              <label className="text-sm font-medium">Avg HR (bpm)</label>
               <Input
                 type="number"
                 min="0"
@@ -212,7 +177,7 @@ export function ExerciseCard({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Intensity</label>
+              <label className="text-sm font-medium">Intensity (1–10)</label>
               <Input
                 type="number"
                 min="1"

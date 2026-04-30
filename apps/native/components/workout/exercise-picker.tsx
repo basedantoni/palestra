@@ -19,7 +19,7 @@ import { CreateCustomExerciseSheet } from "./create-custom-exercise-sheet";
 interface ExercisePickerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (exercise: { id: string; name: string }) => void;
+  onSelect: (exercise: { id: string; name: string; exerciseType?: string; cardioSubtype?: string | null }) => void;
 }
 
 const CATEGORIES = [
@@ -48,7 +48,7 @@ export function ExercisePicker({ isOpen, onClose, onSelect }: ExercisePickerProp
     }),
   );
 
-  const handleSelectExercise = (exercise: { id: string; name: string }) => {
+  const handleSelectExercise = (exercise: { id: string; name: string; exerciseType?: string; cardioSubtype?: string | null }) => {
     onSelect(exercise);
     setSearchQuery("");
     setCategoryFilter(undefined);

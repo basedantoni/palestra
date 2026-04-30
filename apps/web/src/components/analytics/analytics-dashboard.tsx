@@ -13,6 +13,20 @@ import { RunningVolumeChart } from "./running-volume-chart";
 import { RunningPaceTrendChart } from "./running-pace-trend-chart";
 import { WorkoutTypeMixChart } from "./workout-type-mix-chart";
 import { MobilityFrequencyChart } from "./mobility-frequency-chart";
+import { WhoopHrTrendChart } from "./whoop-hr-trend-chart";
+import { WhoopPaceTrendChart } from "./whoop-pace-trend-chart";
+import { WhoopWeeklyDistanceChart } from "./whoop-weekly-distance-chart";
+
+function useLast30DaysRange(): { from: string; to: string } {
+  return useMemo(() => {
+    const now = new Date();
+    const to = now.toISOString().slice(0, 10);
+    const from30 = new Date(now);
+    from30.setDate(from30.getDate() - 30);
+    const from = from30.toISOString().slice(0, 10);
+    return { from, to };
+  }, []);
+}
 
 export function AnalyticsDashboard() {
   const [granularity, setGranularity] = useState<"weekly" | "monthly">(
@@ -27,6 +41,8 @@ export function AnalyticsDashboard() {
 
   const preferences = useQuery(trpc.preferences.get.queryOptions());
   const distanceUnit = preferences.data?.distanceUnit ?? "mi";
+
+  const whoopDateRange = useLast30DaysRange();
 
   const volumeData = useQuery(
     trpc.analytics.volumeOverTime.queryOptions({ granularity }),
@@ -55,6 +71,16 @@ export function AnalyticsDashboard() {
   );
   const workoutTypeMix = useQuery(
     trpc.analytics.workoutTypeMix.queryOptions(),
+  );
+
+  const whoopHrTrend = useQuery(
+    trpc.analytics.runningHrTrend.queryOptions(whoopDateRange),
+  );
+  const whoopPaceTrend = useQuery(
+    trpc.analytics.whoopPaceTrend.queryOptions(whoopDateRange),
+  );
+  const whoopWeeklyDistance = useQuery(
+    trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
   );
 
   const runningExerciseOptions = useMemo(() => {
@@ -111,9 +137,10 @@ export function AnalyticsDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="running">Running</TabsTrigger>
+          <TabsTrigger value="whoop-running">Whoop Runs</TabsTrigger>
           <TabsTrigger value="mobility">Mobility</TabsTrigger>
         </TabsList>
 
@@ -231,6 +258,46 @@ export function AnalyticsDashboard() {
               data={runningPrData}
               isLoading={prData.isLoading}
               distanceUnit={distanceUnit}
+            />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="whoop-running" className="space-y-10">
+          <section>
+            <h2 className="mb-4 text-lg font-semibold">Avg HR Trend</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Average heart rate per Whoop-linked run over the last 30 days.
+            </p>
+            <WhoopHrTrendChart
+              data={whoopHrTrend.data ?? []}
+              isLoading={whoopHrTrend.isLoading}
+            />
+          </section>
+
+          <Separator />
+
+          <section>
+            <h2 className="mb-4 text-lg font-semibold">Pace Trend</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Pace per Whoop-linked run. Lower is faster.
+            </p>
+            <WhoopPaceTrendChart
+              data={whoopPaceTrend.data ?? []}
+              isLoading={whoopPaceTrend.isLoading}
+            />
+          </section>
+
+          <Separator />
+
+          <section>
+            <h2 className="mb-4 text-lg font-semibold">Weekly Distance</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Total distance from Whoop-linked runs per calendar week.
+            </p>
+            <WhoopWeeklyDistanceChart
+              data={whoopWeeklyDistance.data ?? []}
+              distanceUnit={distanceUnit}
+              isLoading={whoopWeeklyDistance.isLoading}
             />
           </section>
         </TabsContent>

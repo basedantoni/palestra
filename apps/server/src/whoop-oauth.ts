@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { auth } from "@src/auth";
 import { env } from "@src/env/server";
 import { handleWhoopCallback } from "@src/api/lib/whoop-oauth";
+import { getValidWhoopAccessToken, WHOOP_API_BASE } from "@src/api/lib/whoop-client";
 
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
 
@@ -72,6 +73,36 @@ whoopOAuthApp.get("/connect", async (c) => {
 
   return c.redirect(authUrl.toString());
 });
+
+/**
+ * DEV ONLY — GET /api/whoop/raw/:path
+ * Proxies any Whoop API v2 request using the authenticated user's stored token.
+ * Example: GET /api/whoop/raw/activity/workout?limit=5
+ * Remove before deploying to production.
+ */
+if (process.env.NODE_ENV !== "production") {
+  whoopOAuthApp.get("/raw/*", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    // Strip everything up to and including /raw/ to get the Whoop API path
+    const rawPath = c.req.path.replace(/^.*\/raw\//, "");
+    const queryString = new URL(c.req.url).search;
+    const whoopUrl = `${WHOOP_API_BASE}/${rawPath}${queryString}`;
+
+    const accessToken = await getValidWhoopAccessToken(session.user.id);
+    const response = await fetch(whoopUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const body = await response.text();
+    return c.text(body, response.status as any, {
+      "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+    });
+  });
+}
 
 /**
  * GET /api/whoop/callback
