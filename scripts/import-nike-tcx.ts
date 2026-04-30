@@ -5,19 +5,18 @@ import { join, resolve } from "node:path";
 import { db } from "@src/db";
 import { exercise, exerciseLog, workout } from "@src/db/schema/index";
 import { and, eq } from "drizzle-orm";
-import { XMLParser } from "fast-xml-parser";
+import {
+  fingerprintTcxRun,
+  parseTcxRun,
+  type ParsedTcxRun,
+} from "../packages/api/src/lib/tcx-import";
 
 const NIKE_RUN_CLUB_SOURCE = "nike_run_club";
 const LONG_RUN_THRESHOLD_M = 8000;
 
-interface ParsedRun {
+interface ParsedRun extends Omit<ParsedTcxRun, "startedAt"> {
   filePath: string;
   startedAt: Date;
-  durationSeconds: number;
-  distanceMeter: number;
-  calories: number | null;
-  avgHeartRate: number | null;
-  maxHeartRate: number | null;
 }
 
 interface RunningExerciseIds {
@@ -76,10 +75,6 @@ async function loadRunningExercises(): Promise<RunningExerciseIds> {
   return { shortRunId, longRunId };
 }
 
-function fingerprint(startedAt: Date, distanceMeter: number): string {
-  return `${startedAt.toISOString()}|${Math.round(distanceMeter / 10) * 10}`;
-}
-
 async function buildDedupIndex(userId: string): Promise<Set<string>> {
   const existing = await db
     .select({ date: workout.date, distanceMeter: exerciseLog.distanceMeter })
@@ -92,7 +87,7 @@ async function buildDedupIndex(userId: string): Promise<Set<string>> {
   const fingerprints = new Set<string>();
   for (const row of existing) {
     if (row.date && row.distanceMeter != null) {
-      fingerprints.add(fingerprint(row.date, row.distanceMeter));
+      fingerprints.add(fingerprintTcxRun(row.date, row.distanceMeter));
     }
   }
 
@@ -146,87 +141,20 @@ async function importRun(
   });
 }
 
-function toNumber(value: unknown): number | null {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function toValueNumber(node: unknown): number | null {
-  if (node == null) {
-    return null;
-  }
-
-  if (typeof node === "object" && "Value" in node) {
-    return toNumber((node as { Value?: unknown }).Value);
-  }
-
-  return toNumber(node);
-}
-
 function parseTcxFile(filePath: string): ParsedRun | null {
   const xml = readFileSync(filePath, "utf8");
-  const parser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: "@_",
-    parseTagValue: true,
-    trimValues: true,
-  });
-  const doc = parser.parse(xml);
-  const activity = doc?.TrainingCenterDatabase?.Activities?.Activity;
+  const parsed = parseTcxRun(filePath, xml);
+  if (!parsed) return null;
 
-  if (!activity || activity["@_Sport"] !== "Running") {
-    return null;
-  }
-
-  const laps = Array.isArray(activity.Lap) ? activity.Lap : [activity.Lap].filter(Boolean);
-  if (laps.length === 0) {
-    return null;
-  }
-
-  let durationSeconds = 0;
-  let distanceMeter = 0;
-  let calories = 0;
-  let avgHrSum = 0;
-  let avgHrCount = 0;
-  let maxHeartRate: number | null = null;
-
-  for (const lap of laps) {
-    durationSeconds += toNumber(lap.TotalTimeSeconds) ?? 0;
-    distanceMeter += toNumber(lap.DistanceMeters) ?? 0;
-    calories += toNumber(lap.Calories) ?? 0;
-
-    const avgHeartRate = toValueNumber(lap.AverageHeartRateBpm);
-    if (avgHeartRate != null) {
-      avgHrSum += avgHeartRate;
-      avgHrCount += 1;
-    }
-
-    const lapMaxHeartRate = toValueNumber(lap.MaximumHeartRateBpm);
-    if (lapMaxHeartRate != null) {
-      maxHeartRate =
-        maxHeartRate == null
-          ? lapMaxHeartRate
-          : Math.max(maxHeartRate, lapMaxHeartRate);
-    }
-  }
-
-  const startedAt = new Date(String(activity.Id ?? "").trim());
+  const startedAt = new Date(parsed.startedAt);
   if (Number.isNaN(startedAt.getTime())) {
     return null;
   }
 
   return {
+    ...parsed,
     filePath,
     startedAt,
-    durationSeconds: Math.round(durationSeconds),
-    distanceMeter,
-    calories: calories > 0 ? calories : null,
-    avgHeartRate: avgHrCount > 0 ? Math.round(avgHrSum / avgHrCount) : null,
-    maxHeartRate,
   };
 }
 
@@ -288,7 +216,7 @@ async function main() {
   let skippedError = parseErrors;
 
   for (const run of parsed) {
-    const runFingerprint = fingerprint(run.startedAt, run.distanceMeter);
+    const runFingerprint = fingerprintTcxRun(run.startedAt, run.distanceMeter);
     if (dedupIndex.has(runFingerprint)) {
       skippedDuplicate += 1;
       console.warn(

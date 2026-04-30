@@ -34,7 +34,6 @@
   "devDependencies": {
     "@src/config": "workspace:*",
     "@types/node": "^22.13.14",
-    "fast-xml-parser": "^4.5.0",
     "tsx": "^4.21.0",
     "turbo": "^2.6.3",
     "typescript": "catalog:"

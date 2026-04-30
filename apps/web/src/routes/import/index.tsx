@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { Zap } from "lucide-react";
+import { Upload, Zap } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
@@ -109,7 +109,7 @@ function ImportPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Choose an import source below.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 mb-6">
+          <div className="grid gap-3 sm:grid-cols-3 mb-6">
             {/* Whoop import card */}
             <Card className="border hover:border-primary/50 transition-colors">
               <CardHeader className="pb-2">
@@ -125,6 +125,26 @@ function ImportPage() {
                 <Link to="/import/whoop">
                   <Button size="sm" className="w-full">
                     Import from Whoop
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            {/* TCX folder import card */}
+            <Card className="border hover:border-primary/50 transition-colors">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Upload className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-base">TCX Folder</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Import running workouts from a folder of TCX files.
+                </p>
+                <Link to="/import/tcx">
+                  <Button size="sm" className="w-full">
+                    Import TCX Files
                   </Button>
                 </Link>
               </CardContent>

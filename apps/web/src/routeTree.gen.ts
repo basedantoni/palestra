@@ -24,6 +24,7 @@ import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
 import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 import { Route as TemplatesTemplateIdRouteImport } from './routes/templates/$templateId'
 import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
+import { Route as ImportTcxRouteImport } from './routes/import/tcx'
 import { Route as AdminExercisesIndexRouteImport } from './routes/admin/exercises/index'
 
 const SettingsRoute = SettingsRouteImport.update({
@@ -101,6 +102,11 @@ const ImportWhoopRoute = ImportWhoopRouteImport.update({
   path: '/import/whoop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImportTcxRoute = ImportTcxRouteImport.update({
+  id: '/import/tcx',
+  path: '/import/tcx',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   id: '/exercises/',
   path: '/exercises/',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/tcx'
     | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/tcx'
     | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/import/tcx'
     | '/import/whoop'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
+  ImportTcxRoute: typeof ImportTcxRoute
   ImportWhoopRoute: typeof ImportWhoopRoute
   TemplatesTemplateIdRoute: typeof TemplatesTemplateIdRoute
   WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
@@ -341,6 +354,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImportWhoopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/import/tcx': {
+      id: '/import/tcx'
+      path: '/import/tcx'
+      fullPath: '/import/tcx'
+      preLoaderRoute: typeof ImportTcxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/exercises/': {
       id: '/admin/exercises/'
       path: '/exercises'
@@ -371,6 +391,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
+  ImportTcxRoute: ImportTcxRoute,
   ImportWhoopRoute: ImportWhoopRoute,
   TemplatesTemplateIdRoute: TemplatesTemplateIdRoute,
   WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,
