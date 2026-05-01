@@ -66,6 +66,7 @@ export function WhoopHrTrendChart({ data, isLoading }: WhoopHrTrendChartProps) {
             value != null ? [`${value} bpm`, "Avg HR"] : ["—", "Avg HR"]
           }
           labelFormatter={(label) => `Date: ${String(label)}`}
+          labelStyle={{ color: "var(--muted-foreground" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Line

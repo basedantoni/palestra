@@ -101,6 +101,7 @@ export function VolumeOverTimeChart({
                 "Volume",
               ]}
               labelFormatter={(label) => `Period: ${String(label)}`}
+              labelStyle={{ color: "var(--muted-foreground" }}
               contentStyle={{ fontSize: 12 }}
             />
             <Line

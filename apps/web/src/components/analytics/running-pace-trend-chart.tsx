@@ -23,10 +23,7 @@ interface RunningPaceTrendChartProps {
   distanceUnit: "mi" | "km";
   exerciseOptions: Array<{ id: string; name: string }>;
   selectedExerciseId?: string;
-  onExerciseChange: (
-    exerciseId: string | null,
-    eventDetails: unknown,
-  ) => void;
+  onExerciseChange: (exerciseId: string | null, eventDetails: unknown) => void;
   isLoading: boolean;
 }
 
@@ -64,10 +61,19 @@ export function RunningPaceTrendChart({
     );
   }
 
+  const metersPerUnit = distanceUnit === "mi" ? 1609.344 : 1000;
+
   const chartData = data.map((point) => ({
     ...point,
     label: formatDateLabel(point.date),
+    paceMinPerUnit: (point.averagePace * metersPerUnit) / 60,
   }));
+
+  function formatPace(minPerUnit: number): string {
+    const mins = Math.floor(minPerUnit);
+    const secs = Math.round((minPerUnit - mins) * 60);
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  }
 
   return (
     <div className="space-y-3">
@@ -85,21 +91,32 @@ export function RunningPaceTrendChart({
       </Select>
 
       <ResponsiveContainer width="100%" height={256}>
-        <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+        <LineChart
+          data={chartData}
+          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
           />
-          <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} width={56} />
+          <YAxis
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            width={56}
+            tickFormatter={(v: number) => formatPace(v)}
+          />
           <Tooltip
-            formatter={(value) => [`${value} min/${distanceUnit}`, "Average Pace"]}
+            formatter={(value) => [
+              `${formatPace(value as number)} min/${distanceUnit}`,
+              "Average Pace",
+            ]}
             labelFormatter={(label) => `Date: ${String(label)}`}
+            labelStyle={{ color: "var(--muted-foreground" }}
             contentStyle={{ fontSize: 12 }}
           />
           <Line
             type="monotone"
-            dataKey="averagePace"
+            dataKey="paceMinPerUnit"
             stroke="var(--chart-2)"
             strokeWidth={2}
             dot={{ r: 3, fill: "var(--chart-2)" }}

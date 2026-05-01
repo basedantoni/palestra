@@ -84,12 +84,10 @@ export function WhoopPaceTrendChart({
         <Tooltip
           formatter={(value) => {
             if (value == null) return ["—", `Pace (min/${unit})`];
-            return [
-              `${formatPace(Number(value))} /${unit}`,
-              "Pace",
-            ];
+            return [`${formatPace(Number(value))} /${unit}`, "Pace"];
           }}
           labelFormatter={(label) => `Date: ${String(label)}`}
+          labelStyle={{ color: "var(--muted-foreground" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Line

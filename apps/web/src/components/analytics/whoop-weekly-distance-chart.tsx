@@ -82,6 +82,7 @@ export function WhoopWeeklyDistanceChart({
             "Distance",
           ]}
           labelFormatter={(label) => `Week of ${String(label)}`}
+          labelStyle={{ color: "var(--muted-foreground" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Bar dataKey="distance" fill="var(--chart-1)" radius={[2, 2, 0, 0]} />

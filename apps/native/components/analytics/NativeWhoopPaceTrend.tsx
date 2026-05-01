@@ -31,12 +31,12 @@ export function NativeWhoopPaceTrend({ data, isLoading }: NativeWhoopPaceTrendPr
 
   const unit = data[0]?.unit ?? "mi";
 
-  // Filter to entries with pace data; include index for x axis
+  // Filter to entries with pace data; convert sec/unit → min/unit for display
   const chartData = data
     .filter((point) => point.paceSecPerUnit != null)
     .map((point, i) => ({
       x: i,
-      paceSecPerUnit: point.paceSecPerUnit!,
+      paceMinPerUnit: point.paceSecPerUnit! / 60,
     }));
 
   if (chartData.length === 0) {
@@ -56,7 +56,7 @@ export function NativeWhoopPaceTrend({ data, isLoading }: NativeWhoopPaceTrendPr
         <CartesianChart
           data={chartData}
           xKey="x"
-          yKeys={["paceSecPerUnit"]}
+          yKeys={["paceMinPerUnit"]}
           axisOptions={{
             font: null,
             tickCount: { x: Math.min(chartData.length, 5), y: 4 },
@@ -64,7 +64,7 @@ export function NativeWhoopPaceTrend({ data, isLoading }: NativeWhoopPaceTrendPr
         >
           {({ points }) => (
             <Line
-              points={points.paceSecPerUnit}
+              points={points.paceMinPerUnit}
               color="#6366f1"
               strokeWidth={2}
               animate={{ type: "timing", duration: 300 }}

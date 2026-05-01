@@ -52,7 +52,9 @@ export function WorkoutTypeMixChart({
     );
   }
 
-  const workoutTypes = Array.from(new Set(data.map((point) => point.workoutType)));
+  const workoutTypes = Array.from(
+    new Set(data.map((point) => point.workoutType)),
+  );
   const periodMap = new Map<string, Record<string, number | string>>();
 
   for (const point of data) {
@@ -68,17 +70,27 @@ export function WorkoutTypeMixChart({
 
   return (
     <ResponsiveContainer width="100%" height={256}>
-      <BarChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+      <BarChart
+        data={chartData}
+        margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis
           dataKey="label"
           tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
         />
-        <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} width={32} />
-        <Tooltip contentStyle={{ fontSize: 12 }} />
+        <YAxis
+          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+          width={32}
+        />
+        <Tooltip
+          labelStyle={{ color: "var(--muted-foreground" }}
+          contentStyle={{ fontSize: 12 }}
+        />
         <Legend
           formatter={(value) =>
-            WORKOUT_TYPE_LABELS[value as keyof typeof WORKOUT_TYPE_LABELS] ?? value
+            WORKOUT_TYPE_LABELS[value as keyof typeof WORKOUT_TYPE_LABELS] ??
+            value
           }
         />
         {workoutTypes.map((workoutType) => (

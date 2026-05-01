@@ -63,13 +63,16 @@ export function MuscleGroupChart({
   }
 
   const colors =
-    categorizationSystem === "bodybuilding" ? MUSCLE_GROUP_COLORS : MOVEMENT_COLORS;
+    categorizationSystem === "bodybuilding"
+      ? MUSCLE_GROUP_COLORS
+      : MOVEMENT_COLORS;
 
   // Pivot: group by week, one key per muscle group
   const weekMap = new Map<string, Record<string, number>>();
   for (const row of data) {
     const existing = weekMap.get(row.weekStartDate) ?? {};
-    existing[row.muscleGroup] = (existing[row.muscleGroup] ?? 0) + row.totalVolume;
+    existing[row.muscleGroup] =
+      (existing[row.muscleGroup] ?? 0) + row.totalVolume;
     weekMap.set(row.weekStartDate, existing);
   }
 
@@ -89,14 +92,18 @@ export function MuscleGroupChart({
       <div className="flex items-center gap-2">
         <Button
           size="sm"
-          variant={categorizationSystem === "bodybuilding" ? "default" : "outline"}
+          variant={
+            categorizationSystem === "bodybuilding" ? "default" : "outline"
+          }
           onClick={() => onSystemChange("bodybuilding")}
         >
           Bodybuilding
         </Button>
         <Button
           size="sm"
-          variant={categorizationSystem === "movement_patterns" ? "default" : "outline"}
+          variant={
+            categorizationSystem === "movement_patterns" ? "default" : "outline"
+          }
           onClick={() => onSystemChange("movement_patterns")}
         >
           Movement Patterns
@@ -117,7 +124,11 @@ export function MuscleGroupChart({
           >
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 11 }} width={40} />
+            <YAxis
+              tickFormatter={formatYAxis}
+              tick={{ fontSize: 11 }}
+              width={40}
+            />
             <Tooltip
               formatter={(value, name) => [
                 typeof value === "number"
@@ -125,6 +136,7 @@ export function MuscleGroupChart({
                   : value,
                 name,
               ]}
+              labelStyle={{ color: "var(--muted-foreground" }}
               contentStyle={{ fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />

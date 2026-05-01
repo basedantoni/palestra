@@ -10,6 +10,7 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { WeeklyRunningVolumePoint } from "@src/api/lib/analytics-queries";
+import { metersToDisplayUnit } from "@src/api/lib/index";
 
 interface RunningVolumeChartProps {
   data: WeeklyRunningVolumePoint[];
@@ -71,11 +72,10 @@ export function RunningVolumeChart({
           width={44}
         />
         <Tooltip
-          labelStyle={{ color: "var(--muted-foreground" }}
           formatter={(value, name, item) => {
             if (name === "totalDistance") {
               return [
-                `${Number(value).toFixed(2)} ${distanceUnit}`,
+                metersToDisplayUnit(Number(value), distanceUnit).toFixed(2),
                 "Distance",
               ];
             }
@@ -91,6 +91,7 @@ export function RunningVolumeChart({
             if (!point) return "";
             return `${point.period} • ${formatDuration(point.totalDurationSeconds)}`;
           }}
+          labelStyle={{ color: "var(--muted-foreground" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Bar
