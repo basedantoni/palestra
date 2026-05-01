@@ -509,7 +509,11 @@ function RouteComponent() {
   const whoopRunningLog = firstRunningLog
     ? {
         distanceMeter: firstRunningLog.distanceMeter,
-        durationSeconds: firstRunningLog.durationSeconds,
+        durationSeconds:
+          firstRunningLog.durationSeconds ??
+          (firstRunningLog.durationMinutes != null
+            ? firstRunningLog.durationMinutes * 60
+            : null),
         heartRate: firstRunningLog.heartRate,
         intensity: firstRunningLog.intensity,
         hrZoneDurations: (firstRunningLog as any).hrZoneDurations ?? null,
@@ -845,11 +849,11 @@ function RouteComponent() {
                             </div>
                             <div>
                               <div className="text-muted-foreground">Duration</div>
-                              <div>{formatLoggedDuration(log.durationSeconds)}</div>
+                              <div>{formatLoggedDuration(log.durationSeconds ?? (log.durationMinutes != null ? log.durationMinutes * 60 : null))}</div>
                             </div>
                             <div>
                               <div className="text-muted-foreground">Pace</div>
-                              <div>{formatLoggedPace(log.distanceMeter, log.durationSeconds)}</div>
+                              <div>{formatLoggedPace(log.distanceMeter, log.durationSeconds ?? (log.durationMinutes != null ? log.durationMinutes * 60 : null))}</div>
                             </div>
                             <div>
                               <div className="text-muted-foreground">Heart Rate</div>

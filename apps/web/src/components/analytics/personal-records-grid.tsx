@@ -38,8 +38,8 @@ function formatValue(
   if (recordType === "max_weight") return `${value} lbs`;
   if (recordType === "max_reps") return `${value} reps`;
   if (recordType === "max_volume") return `${value.toLocaleString()} lbs`;
-  if (recordType === "best_pace") return `${value} min/${distanceUnit}`;
-  if (recordType === "longest_distance") return `${value} ${distanceUnit}`;
+  if (recordType === "best_pace") return `${value.toFixed(2)} min/${distanceUnit}`;
+  if (recordType === "longest_distance") return `${value.toFixed(2)} ${distanceUnit}`;
   return String(value);
 }
 
