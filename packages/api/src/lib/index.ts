@@ -1,4 +1,7 @@
 export * from "./workout-utils";
+export * from "./date-utils";
+export * from "./chart-formatters";
+export * from "./pr-formatters";
 export * from "./template-utils";
 export * from "./export-utils";
 export * from "./workout-history-calendar";

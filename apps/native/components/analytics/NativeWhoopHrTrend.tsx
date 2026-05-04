@@ -1,5 +1,6 @@
 import { Dimensions, Text, View } from "react-native";
 import { CartesianChart, Line } from "victory-native";
+import { formatDateLabel } from "@src/api/lib/chart-formatters";
 
 interface HrTrendPoint {
   date: string;
@@ -12,11 +13,6 @@ interface NativeWhoopHrTrendProps {
 }
 
 const CHART_WIDTH = Dimensions.get("window").width - 48;
-
-function formatDateLabel(date: string): string {
-  const parsed = new Date(`${date}T12:00:00`);
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 export function NativeWhoopHrTrend({ data, isLoading }: NativeWhoopHrTrendProps) {
   if (isLoading) {

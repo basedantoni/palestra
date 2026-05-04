@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { localDateToNoon } from "./date-utils";
+
 // Cross-platform UUID generator for temporary IDs
 function generateTempId(): string {
   // Use crypto.randomUUID if available (web), otherwise use timestamp + random
@@ -8,27 +11,131 @@ function generateTempId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
-type WorkoutType =
-  | "weightlifting"
-  | "hiit"
-  | "cardio"
-  | "mobility"
-  | "calisthenics"
-  | "yoga"
-  | "sports"
-  | "mixed";
+// Keep in sync with the pgEnum in packages/db/src/schema/enums.ts
+export const WORKOUT_TYPE_ENUM = z.enum([
+  "weightlifting",
+  "hiit",
+  "cardio",
+  "mobility",
+  "calisthenics",
+  "yoga",
+  "sports",
+  "mixed",
+]);
 
+export type WorkoutType = z.infer<typeof WORKOUT_TYPE_ENUM>;
 export type ExerciseType = WorkoutType;
 
 export const CARDIO_EXERCISE_TYPES = ["cardio", "hiit", "mobility"] as const;
 
+interface ExerciseFieldConfig {
+  hasSets: boolean;
+  hasRounds: boolean;
+  hasWorkRestDuration: boolean;
+  hasDistance: boolean;
+  hasDurationSeconds: boolean;
+  hasDurationMinutes: boolean;
+  hasIntensity: boolean;
+  hasHeartRate: boolean;
+}
+
+const EXERCISE_TYPE_FIELD_CONFIG: Record<ExerciseType, ExerciseFieldConfig> = {
+  weightlifting: {
+    hasSets: true,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: true,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+  hiit: {
+    hasSets: false,
+    hasRounds: true,
+    hasWorkRestDuration: true,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: false,
+    hasIntensity: true,
+    hasHeartRate: false,
+  },
+  cardio: {
+    hasSets: false,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: true,
+    hasDurationSeconds: true,
+    hasDurationMinutes: false,
+    hasIntensity: true,
+    hasHeartRate: true,
+  },
+  mobility: {
+    hasSets: false,
+    hasRounds: true,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: true,
+    hasDurationMinutes: false,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+  calisthenics: {
+    hasSets: true,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: true,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+  yoga: {
+    hasSets: true,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: true,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+  sports: {
+    hasSets: true,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: true,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+  mixed: {
+    hasSets: true,
+    hasRounds: false,
+    hasWorkRestDuration: false,
+    hasDistance: false,
+    hasDurationSeconds: false,
+    hasDurationMinutes: true,
+    hasIntensity: false,
+    hasHeartRate: false,
+  },
+};
+
+export function getEffectiveDurationSeconds(log: {
+  durationSeconds?: number | null;
+  durationMinutes?: number | null;
+}): number | null {
+  if (log.durationSeconds != null) return log.durationSeconds;
+  if (log.durationMinutes != null) return log.durationMinutes * 60;
+  return null;
+}
+
 export function isCardioStyleExerciseType(
   exerciseType: string | undefined,
 ): exerciseType is (typeof CARDIO_EXERCISE_TYPES)[number] {
-  return (
-    exerciseType === "cardio" ||
-    exerciseType === "hiit" ||
-    exerciseType === "mobility"
+  return CARDIO_EXERCISE_TYPES.includes(
+    exerciseType as (typeof CARDIO_EXERCISE_TYPES)[number],
   );
 }
 
@@ -131,17 +238,6 @@ export interface ExerciseProgressionSuggestion {
   };
 }
 
-export function normalizeDateToLocalNoon(date: Date): Date {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    12,
-    0,
-    0,
-    0,
-  );
-}
 
 // Volume calculation (client-side)
 export function calculateSetVolume(set: WorkoutSetFormData): number {
@@ -214,7 +310,7 @@ export function formDataToApiInput(form: WorkoutFormData) {
     (ex) => ex.exerciseName.trim() !== "",
   );
   const totalVolume = calculateTotalVolume(exercises);
-  const selectedDate = normalizeDateToLocalNoon(form.date ?? new Date());
+  const selectedDate = localDateToNoon(form.date ?? new Date());
 
   return {
     date: selectedDate,
@@ -224,30 +320,25 @@ export function formDataToApiInput(form: WorkoutFormData) {
     totalVolume: totalVolume > 0 ? totalVolume : undefined,
     whoopActivityId: form.whoopActivityId ?? undefined,
     logs: exercises.map((ex, idx) => {
-      const cardioStyle = isCardioStyleExerciseType(ex.exerciseType);
-      const isRunExercise = ex.exerciseType === "cardio";
-      const isHiitExercise = ex.exerciseType === "hiit";
-      const isMobilityExercise = ex.exerciseType === "mobility";
+      const cfg =
+        EXERCISE_TYPE_FIELD_CONFIG[ex.exerciseType ?? "weightlifting"] ??
+        EXERCISE_TYPE_FIELD_CONFIG["weightlifting"];
 
       return {
         ...(ex.exerciseId ? { exerciseId: ex.exerciseId } : {}),
         exerciseName: ex.exerciseName,
         order: idx,
-        rounds:
-          isHiitExercise || isMobilityExercise ? ex.rounds : undefined,
-        workDurationSeconds: isHiitExercise ? ex.workDurationSeconds : undefined,
-        restDurationSeconds: isHiitExercise ? ex.restDurationSeconds : undefined,
-        intensity:
-          isRunExercise || isHiitExercise ? ex.intensity : undefined,
-        distanceMeter: isRunExercise ? ex.distanceMeter : undefined,
-        durationSeconds:
-          isRunExercise || isMobilityExercise ? ex.durationSeconds : undefined,
-        heartRate: isRunExercise ? ex.heartRate : undefined,
-        durationMinutes: cardioStyle ? undefined : ex.durationMinutes,
+        rounds: cfg.hasRounds ? ex.rounds : undefined,
+        workDurationSeconds: cfg.hasWorkRestDuration ? ex.workDurationSeconds : undefined,
+        restDurationSeconds: cfg.hasWorkRestDuration ? ex.restDurationSeconds : undefined,
+        intensity: cfg.hasIntensity ? ex.intensity : undefined,
+        distanceMeter: cfg.hasDistance ? ex.distanceMeter : undefined,
+        durationSeconds: cfg.hasDurationSeconds ? ex.durationSeconds : undefined,
+        heartRate: cfg.hasHeartRate ? ex.heartRate : undefined,
+        durationMinutes: cfg.hasDurationMinutes ? ex.durationMinutes : undefined,
         notes: ex.notes || undefined,
-        sets: cardioStyle
-          ? []
-          : ex.sets
+        sets: cfg.hasSets
+          ? ex.sets
               .filter(
                 (s) =>
                   s.reps !== undefined ||
@@ -260,7 +351,8 @@ export function formDataToApiInput(form: WorkoutFormData) {
                 weight: s.weight,
                 rpe: s.rpe,
                 durationSeconds: s.durationSeconds,
-              })),
+              }))
+          : [],
       };
     }),
   };
@@ -341,7 +433,9 @@ export function templateToWorkoutFormData(
           (exercise.exerciseId
             ? exerciseTypeById[exercise.exerciseId]
             : undefined);
-        const cardioStyle = isCardioStyleExerciseType(exerciseType);
+        const cfg =
+          EXERCISE_TYPE_FIELD_CONFIG[exerciseType ?? "weightlifting"] ??
+          EXERCISE_TYPE_FIELD_CONFIG["weightlifting"];
         const suggestion = exercise.exerciseId
           ? suggestionsByExerciseId[exercise.exerciseId]
           : null;
@@ -377,16 +471,16 @@ export function templateToWorkoutFormData(
           exerciseType,
           cardioSubtype: undefined,
           order: index,
-          sets: cardioStyle
-            ? []
-            : Array.from({ length: suggestedSets }, (_, setIndex) => ({
+          sets: cfg.hasSets
+            ? Array.from({ length: suggestedSets }, (_, setIndex) => ({
                 tempId: generateTempId(),
                 setNumber: setIndex + 1,
                 reps: suggestedReps,
                 weight: suggestedWeight,
                 rpe: undefined,
                 durationSeconds: suggestedDuration,
-              })),
+              }))
+            : [],
           rounds: undefined,
           workDurationSeconds: undefined,
           restDurationSeconds: undefined,

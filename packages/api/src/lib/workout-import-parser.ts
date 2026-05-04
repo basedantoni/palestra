@@ -1,13 +1,7 @@
-// ---- Types ----
+import { type WorkoutType } from "./workout-utils";
+export type { WorkoutType };
 
-export type WorkoutType =
-  | "weightlifting"
-  | "hiit"
-  | "cardio"
-  | "calisthenics"
-  | "yoga"
-  | "sports"
-  | "mixed";
+// ---- Types ----
 
 export interface ParsedSet {
   setNumber: number;

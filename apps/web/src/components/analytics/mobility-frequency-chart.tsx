@@ -11,15 +11,11 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MobilityFrequencyPoint } from "@src/api/lib/analytics-queries";
+import { formatPeriodLabel } from "@src/api/lib/index";
 
 interface MobilityFrequencyChartProps {
   data: MobilityFrequencyPoint[];
   isLoading: boolean;
-}
-
-function formatPeriodLabel(period: string): string {
-  const week = period.split("-W")[1];
-  return week ? `W${Number(week)}` : period;
 }
 
 export function MobilityFrequencyChart({
@@ -72,7 +68,7 @@ export function MobilityFrequencyChart({
               : [`${value} min`, "Duration"]
           }
           contentStyle={{ fontSize: 12 }}
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
         />
         <Bar yAxisId="sessions" dataKey="sessionCount" fill="var(--chart-4)" />
         <Line

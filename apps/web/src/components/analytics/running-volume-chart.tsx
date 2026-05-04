@@ -10,26 +10,12 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { WeeklyRunningVolumePoint } from "@src/api/lib/analytics-queries";
-import { metersToDisplayUnit } from "@src/api/lib/index";
+import { metersToDisplayUnit, formatPeriodLabel, formatChartDuration } from "@src/api/lib/index";
 
 interface RunningVolumeChartProps {
   data: WeeklyRunningVolumePoint[];
   distanceUnit: "mi" | "km";
   isLoading: boolean;
-}
-
-function formatPeriodLabel(period: string): string {
-  const week = period.split("-W")[1];
-  return week ? `W${Number(week)}` : period;
-}
-
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
 }
 
 export function RunningVolumeChart({
@@ -89,9 +75,9 @@ export function RunningVolumeChart({
               | WeeklyRunningVolumePoint
               | undefined;
             if (!point) return "";
-            return `${point.period} • ${formatDuration(point.totalDurationSeconds)}`;
+            return `${point.period} • ${formatChartDuration(point.totalDurationSeconds)}`;
           }}
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Bar

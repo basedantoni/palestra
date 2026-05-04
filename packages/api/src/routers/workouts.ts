@@ -18,17 +18,7 @@ import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
-
-const workoutTypeEnum = z.enum([
-  "weightlifting",
-  "hiit",
-  "cardio",
-  "mobility",
-  "calisthenics",
-  "yoga",
-  "sports",
-  "mixed",
-]);
+import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
 const exerciseSetInput = z
   .object({
@@ -60,7 +50,7 @@ const exerciseLogInput = z.object({
 
 const workoutInput = z.object({
   date: z.coerce.date(),
-  workoutType: workoutTypeEnum,
+  workoutType: WORKOUT_TYPE_ENUM,
   durationMinutes: z.number().int().min(0).optional(),
   templateId: z.string().uuid().optional(),
   notes: z.string().optional(),
@@ -93,6 +83,67 @@ function isBetterRunningPr(
   if (currentBest == null) return true;
   // longest_distance: higher is better
   return candidate > currentBest;
+}
+
+type WorkoutsTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type ExerciseLogInputItem = z.infer<typeof exerciseLogInput>;
+
+async function insertExerciseLogAndSets(
+  tx: WorkoutsTx,
+  workoutId: string,
+  log: ExerciseLogInputItem,
+): Promise<(typeof exerciseLog.$inferSelect) | undefined> {
+  const logId = crypto.randomUUID();
+  const [createdLog] = await tx
+    .insert(exerciseLog)
+    .values({
+      id: logId,
+      workoutId,
+      exerciseId: log.exerciseId,
+      exerciseName: log.exerciseName,
+      order: log.order,
+      rounds: log.rounds,
+      workDurationSeconds: log.workDurationSeconds,
+      restDurationSeconds: log.restDurationSeconds,
+      intensity: log.intensity,
+      distanceMeter: log.distanceMeter,
+      durationSeconds: log.durationSeconds,
+      heartRate: log.heartRate,
+      durationMinutes: log.durationMinutes,
+      notes: log.notes,
+    })
+    .returning();
+
+  if (log.sets?.length && createdLog) {
+    await tx.insert(exerciseSet).values(
+      log.sets.map((set) => ({
+        id: crypto.randomUUID(),
+        exerciseLogId: createdLog.id,
+        setNumber: set.setNumber,
+        reps: set.reps,
+        weight: set.weight,
+        rpe: set.rpe,
+        durationSeconds: set.durationSeconds,
+      })),
+    );
+  }
+
+  return createdLog;
+}
+
+function fireAndForgetRecalcs(
+  userId: string,
+  exerciseIds: string[],
+  date: Date,
+): void {
+  if (exerciseIds.length > 0) {
+    recalculateProgressiveOverload(userId, exerciseIds).catch(
+      (err) => console.error("Progressive overload recalc failed:", err),
+    );
+  }
+  recalculateMuscleGroupVolumeForWeek(userId, date).catch(
+    (err) => console.error("Muscle group volume recalc failed:", err),
+  );
 }
 
 export const workoutsRouter = router({
@@ -322,48 +373,19 @@ export const workoutsRouter = router({
         let firstRunningLogId: string | null = null;
 
         for (const log of input.logs) {
-          const logId = crypto.randomUUID();
           const isRunningExercise =
             log.exerciseId != null &&
             cardioSubtypeByExerciseId.get(log.exerciseId) === "running";
 
-          const [createdLog] = await tx
-            .insert(exerciseLog)
-            .values({
-              id: logId,
-              workoutId: newWorkout!.id,
-              exerciseId: log.exerciseId,
-              exerciseName: log.exerciseName,
-              order: log.order,
-              rounds: log.rounds,
-              workDurationSeconds: log.workDurationSeconds,
-              restDurationSeconds: log.restDurationSeconds,
-              intensity: log.intensity,
-              distanceMeter: log.distanceMeter,
-              durationSeconds: log.durationSeconds,
-              heartRate: log.heartRate,
-              durationMinutes: log.durationMinutes,
-              notes: log.notes,
-            })
-            .returning();
+          const createdLog = await insertExerciseLogAndSets(
+            tx,
+            newWorkout!.id,
+            log,
+          );
 
           // Track first running exercise log for Whoop metric application
           if (isRunningExercise && firstRunningLogId === null && createdLog) {
             firstRunningLogId = createdLog.id;
-          }
-
-          if (log.sets?.length && createdLog) {
-            await tx.insert(exerciseSet).values(
-              log.sets.map((set) => ({
-                id: crypto.randomUUID(),
-                exerciseLogId: createdLog.id,
-                setNumber: set.setNumber,
-                reps: set.reps,
-                weight: set.weight,
-                rpe: set.rpe,
-                durationSeconds: set.durationSeconds,
-              })),
-            );
           }
 
           if (
@@ -418,15 +440,7 @@ export const workoutsRouter = router({
         return newWorkout;
       });
 
-      // Fire and forget — don't block the response on recalculation
-      if (exerciseIds.length > 0) {
-        recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
-          (err) => console.error("Progressive overload recalc failed:", err),
-        );
-      }
-      recalculateMuscleGroupVolumeForWeek(ctx.session.user.id, input.date).catch(
-        (err) => console.error("Muscle group volume recalc failed:", err),
-      );
+      fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);
 
       return createdWorkout;
     }),
@@ -459,46 +473,12 @@ export const workoutsRouter = router({
           .where(eq(exerciseLog.workoutId, updated.id));
 
         for (const log of input.logs) {
-          const logId = crypto.randomUUID();
-          const [createdLog] = await tx
-            .insert(exerciseLog)
-            .values({
-              id: logId,
-              workoutId: updated!.id,
-              exerciseId: log.exerciseId,
-              exerciseName: log.exerciseName,
-              order: log.order,
-              rounds: log.rounds,
-              workDurationSeconds: log.workDurationSeconds,
-              restDurationSeconds: log.restDurationSeconds,
-              intensity: log.intensity,
-              distanceMeter: log.distanceMeter,
-              durationSeconds: log.durationSeconds,
-              heartRate: log.heartRate,
-              durationMinutes: log.durationMinutes,
-              notes: log.notes,
-            })
-            .returning();
-
-          if (log.sets?.length && createdLog) {
-            await tx.insert(exerciseSet).values(
-              log.sets.map((set) => ({
-                id: crypto.randomUUID(),
-                exerciseLogId: createdLog.id,
-                setNumber: set.setNumber,
-                reps: set.reps,
-                weight: set.weight,
-                rpe: set.rpe,
-                durationSeconds: set.durationSeconds,
-              })),
-            );
-          }
+          await insertExerciseLogAndSets(tx, updated!.id, log);
         }
 
         return updated;
       });
 
-      // Fire and forget — don't block the response on recalculation
       if (updatedWorkout) {
         const exerciseIds = Array.from(
           new Set(
@@ -507,14 +487,7 @@ export const workoutsRouter = router({
               .filter((id): id is string => id != null),
           ),
         );
-        if (exerciseIds.length > 0) {
-          recalculateProgressiveOverload(ctx.session.user.id, exerciseIds).catch(
-            (err) => console.error("Progressive overload recalc failed:", err),
-          );
-        }
-        recalculateMuscleGroupVolumeForWeek(ctx.session.user.id, input.date).catch(
-          (err) => console.error("Muscle group volume recalc failed:", err),
-        );
+        fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);
       }
 
       return updatedWorkout;

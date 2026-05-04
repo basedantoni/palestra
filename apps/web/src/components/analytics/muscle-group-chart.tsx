@@ -11,6 +11,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatWeekLabel } from "@src/api/lib/index";
 
 interface MuscleGroupDataRow {
   weekStartDate: string;
@@ -45,11 +46,6 @@ const MOVEMENT_COLORS: Record<string, string> = {
 function formatYAxis(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
   return String(value);
-}
-
-function formatWeekLabel(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleString("en-US", { month: "short", day: "numeric" });
 }
 
 export function MuscleGroupChart({
@@ -136,7 +132,7 @@ export function MuscleGroupChart({
                   : value,
                 name,
               ]}
-              labelStyle={{ color: "var(--muted-foreground" }}
+              labelStyle={{ color: "var(--muted-foreground)" }}
               contentStyle={{ fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />

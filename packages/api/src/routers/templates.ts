@@ -8,6 +8,7 @@ import {
 } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
 const templateExerciseInput = z.object({
   exerciseId: z.string().uuid().optional(),
@@ -17,16 +18,7 @@ const templateExerciseInput = z.object({
 
 const templateInput = z.object({
   name: z.string().min(1),
-  workoutType: z.enum([
-    "weightlifting",
-    "hiit",
-    "cardio",
-    "mobility",
-    "calisthenics",
-    "yoga",
-    "sports",
-    "mixed",
-  ]),
+  workoutType: WORKOUT_TYPE_ENUM,
   notes: z.string().optional(),
   exercises: z.array(templateExerciseInput).default([]),
 });

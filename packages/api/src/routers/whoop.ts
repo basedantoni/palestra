@@ -13,6 +13,12 @@ import { protectedProcedure, router } from "../index";
 import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
+
+const toIsoStart = (s: string) =>
+  s.includes("T") ? s : `${s}T00:00:00.000Z`;
+const toIsoEnd = (s: string) =>
+  s.includes("T") ? s : `${s}T23:59:59.999Z`;
 
 interface WhoopWorkoutRecord {
   id: string;
@@ -108,15 +114,9 @@ export const whoopRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      // Build Whoop API query params
       // Whoop v2 requires full ISO datetime strings, not date-only strings.
       // Use start-of-day for `from` and end-of-day for `to` so the full
       // selected day is included regardless of UTC offset.
-      const toIsoStart = (s: string) =>
-        s.includes("T") ? s : `${s}T00:00:00.000Z`;
-      const toIsoEnd = (s: string) =>
-        s.includes("T") ? s : `${s}T23:59:59.999Z`;
-
       const params = new URLSearchParams();
       if (input.from) params.set("start", toIsoStart(input.from));
       if (input.to) params.set("end", toIsoEnd(input.to));
@@ -210,15 +210,7 @@ export const whoopRouter = router({
           typeOverrides: z
             .record(
               z.string(),
-              z.enum([
-                "weightlifting",
-                "hiit",
-                "cardio",
-                "calisthenics",
-                "yoga",
-                "sports",
-                "mixed",
-              ]),
+              WORKOUT_TYPE_ENUM,
             )
             .optional(),
           from: z.string().optional(),
@@ -231,15 +223,7 @@ export const whoopRouter = router({
           typeOverrides: z
             .record(
               z.string(),
-              z.enum([
-                "weightlifting",
-                "hiit",
-                "cardio",
-                "calisthenics",
-                "yoga",
-                "sports",
-                "mixed",
-              ]),
+              WORKOUT_TYPE_ENUM,
             )
             .optional(),
           from: z.string().optional(),
@@ -254,11 +238,6 @@ export const whoopRouter = router({
       let activitiesToProcess: WhoopWorkoutRecord[] = [];
 
       const accessToken = await getValidWhoopAccessToken(userId);
-
-      const toIsoStart = (s: string) =>
-        s.includes("T") ? s : `${s}T00:00:00.000Z`;
-      const toIsoEnd = (s: string) =>
-        s.includes("T") ? s : `${s}T23:59:59.999Z`;
 
       if (input.selectAll) {
         // Fetch all pages from Whoop API for the given date range

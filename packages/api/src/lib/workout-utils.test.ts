@@ -10,10 +10,10 @@ import {
   templateToWorkoutFormData,
   formatVolume,
   formatDuration,
-  normalizeDateToLocalNoon,
   WORKOUT_TYPE_LABELS,
   EXERCISE_CATEGORY_LABELS,
 } from "./workout-utils";
+import { localDateToNoon } from "./date-utils";
 import type {
   WorkoutSetFormData,
   WorkoutExerciseFormData,
@@ -646,7 +646,7 @@ describe("workout-utils", () => {
       };
 
       const result = formDataToApiInput(formData);
-      expect(result.date).toEqual(normalizeDateToLocalNoon(customDate));
+      expect(result.date).toEqual(localDateToNoon(customDate));
     });
 
     it("should normalize default date to local noon when date is not provided", () => {

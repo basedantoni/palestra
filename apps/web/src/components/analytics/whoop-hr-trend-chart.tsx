@@ -9,6 +9,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDateLabel } from "@src/api/lib/index";
 
 interface HrTrendPoint {
   date: string;
@@ -18,11 +19,6 @@ interface HrTrendPoint {
 interface WhoopHrTrendChartProps {
   data: HrTrendPoint[];
   isLoading: boolean;
-}
-
-function formatDateLabel(date: string): string {
-  const parsed = new Date(`${date}T12:00:00`);
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function WhoopHrTrendChart({ data, isLoading }: WhoopHrTrendChartProps) {
@@ -66,7 +62,7 @@ export function WhoopHrTrendChart({ data, isLoading }: WhoopHrTrendChartProps) {
             value != null ? [`${value} bpm`, "Avg HR"] : ["—", "Avg HR"]
           }
           labelFormatter={(label) => `Date: ${String(label)}`}
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Line

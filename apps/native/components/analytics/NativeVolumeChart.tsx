@@ -3,26 +3,7 @@ import { Dimensions, Pressable, Text, View } from "react-native";
 import { CartesianChart, Line } from "victory-native";
 
 import type { VolumeDataPoint } from "@src/api/lib/analytics-queries";
-
-interface NativeVolumeChartProps {
-  data: VolumeDataPoint[];
-  granularity: "weekly" | "monthly";
-  onGranularityChange: (g: "weekly" | "monthly") => void;
-  isLoading: boolean;
-}
-
-function formatPeriodLabel(period: string): string {
-  if (period.includes("-W")) {
-    const week = period.split("-W")[1];
-    return `W${Number(week)}`;
-  }
-  const parts = period.split("-");
-  if (parts.length < 2) return period;
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  const date = new Date(year, month - 1, 1);
-  return date.toLocaleString("en-US", { month: "short" });
-}
+import { formatPeriodLabel } from "@src/api/lib/chart-formatters";
 
 const CHART_WIDTH = Dimensions.get("window").width - 48;
 

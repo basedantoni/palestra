@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -17,34 +18,57 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { RunningPaceTrendPoint } from "@src/api/lib/analytics-queries";
+import { formatDateLabel, formatPaceFromMinPerUnit } from "@src/api/lib/index";
 
 interface RunningPaceTrendChartProps {
   data: RunningPaceTrendPoint[];
   distanceUnit: "mi" | "km";
-  exerciseOptions: Array<{ id: string; name: string }>;
-  selectedExerciseId?: string;
-  onExerciseChange: (exerciseId: string | null, eventDetails: unknown) => void;
   isLoading: boolean;
-}
-
-function formatDateLabel(date: string): string {
-  const parsed = new Date(`${date}T12:00:00`);
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function RunningPaceTrendChart({
   data,
   distanceUnit,
-  exerciseOptions,
-  selectedExerciseId,
-  onExerciseChange,
   isLoading,
 }: RunningPaceTrendChartProps) {
+  const [selectedRunningExerciseId, setSelectedRunningExerciseId] = useState<
+    string | undefined
+  >(undefined);
+
+  const exerciseOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const point of data) {
+      byId.set(point.exerciseId, point.exerciseName);
+    }
+    return Array.from(byId.entries()).map(([id, name]) => ({ id, name }));
+  }, [data]);
+
+  useEffect(() => {
+    if (exerciseOptions.length === 0) {
+      setSelectedRunningExerciseId(undefined);
+      return;
+    }
+
+    if (
+      !selectedRunningExerciseId ||
+      !exerciseOptions.some((option) => option.id === selectedRunningExerciseId)
+    ) {
+      setSelectedRunningExerciseId(exerciseOptions[0]!.id);
+    }
+  }, [exerciseOptions, selectedRunningExerciseId]);
+
+  const selectedData = useMemo(() => {
+    if (!selectedRunningExerciseId) return [];
+    return data.filter(
+      (point) => point.exerciseId === selectedRunningExerciseId,
+    );
+  }, [data, selectedRunningExerciseId]);
+
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
 
-  if (!selectedExerciseId || data.length === 0) {
+  if (!selectedRunningExerciseId || selectedData.length === 0) {
     return (
       <div className="space-y-3">
         <Select disabled>
@@ -63,21 +87,20 @@ export function RunningPaceTrendChart({
 
   const metersPerUnit = distanceUnit === "mi" ? 1609.344 : 1000;
 
-  const chartData = data.map((point) => ({
+  const chartData = selectedData.map((point) => ({
     ...point,
     label: formatDateLabel(point.date),
     paceMinPerUnit: (point.averagePace * metersPerUnit) / 60,
   }));
 
-  function formatPace(minPerUnit: number): string {
-    const mins = Math.floor(minPerUnit);
-    const secs = Math.round((minPerUnit - mins) * 60);
-    return `${mins}:${String(secs).padStart(2, "0")}`;
-  }
-
   return (
     <div className="space-y-3">
-      <Select value={selectedExerciseId} onValueChange={onExerciseChange}>
+      <Select
+        value={selectedRunningExerciseId}
+        onValueChange={(value) =>
+          setSelectedRunningExerciseId(value ?? undefined)
+        }
+      >
         <SelectTrigger className="w-[220px]">
           <SelectValue placeholder="Select exercise" />
         </SelectTrigger>
@@ -103,15 +126,15 @@ export function RunningPaceTrendChart({
           <YAxis
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             width={56}
-            tickFormatter={(v: number) => formatPace(v)}
+            tickFormatter={(v: number) => formatPaceFromMinPerUnit(v)}
           />
           <Tooltip
             formatter={(value) => [
-              `${formatPace(value as number)} min/${distanceUnit}`,
+              `${formatPaceFromMinPerUnit(value as number)} min/${distanceUnit}`,
               "Average Pace",
             ]}
             labelFormatter={(label) => `Date: ${String(label)}`}
-            labelStyle={{ color: "var(--muted-foreground" }}
+            labelStyle={{ color: "var(--muted-foreground)" }}
             contentStyle={{ fontSize: 12 }}
           />
           <Line

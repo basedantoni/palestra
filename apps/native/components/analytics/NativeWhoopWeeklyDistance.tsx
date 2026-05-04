@@ -1,5 +1,6 @@
 import { Dimensions, Text, View } from "react-native";
 import { CartesianChart, Bar } from "victory-native";
+import { metersToDisplayUnit } from "@src/api/lib/workout-utils";
 
 interface WeeklyDistancePoint {
   weekStart: string;
@@ -13,12 +14,6 @@ interface NativeWhoopWeeklyDistanceProps {
 }
 
 const CHART_WIDTH = Dimensions.get("window").width - 48;
-const METERS_PER_MILE = 1609.344;
-const METERS_PER_KM = 1000;
-
-function metersToUnit(meters: number, unit: "mi" | "km"): number {
-  return unit === "mi" ? meters / METERS_PER_MILE : meters / METERS_PER_KM;
-}
 
 function formatWeekLabel(weekStart: string): string {
   const parsed = new Date(`${weekStart}T12:00:00`);
@@ -46,7 +41,7 @@ export function NativeWhoopWeeklyDistance({
 
   const chartData = data.map((point, i) => ({
     x: i,
-    distance: metersToUnit(point.distanceMeter, distanceUnit),
+    distance: metersToDisplayUnit(point.distanceMeter, distanceUnit),
     label: formatWeekLabel(point.weekStart),
   }));
 

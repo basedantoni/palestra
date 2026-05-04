@@ -24,12 +24,8 @@ import {
   getTodayLocalDateString,
   groupPersonalRecordsByExercise,
 } from "../lib/analytics-queries";
-
-function toLocalDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-}
+import { toLocalDateKey } from "../lib/date-utils";
+import { getEffectiveDurationSeconds, WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
 export const analyticsRouter = router({
   personalRecords: protectedProcedure
@@ -347,18 +343,7 @@ export const analyticsRouter = router({
         granularity: z.enum(["weekly", "monthly"]),
         startDate: z.coerce.date().optional(),
         endDate: z.coerce.date().optional(),
-        workoutType: z
-          .enum([
-            "weightlifting",
-            "hiit",
-            "cardio",
-            "mobility",
-            "calisthenics",
-            "yoga",
-            "sports",
-            "mixed",
-          ])
-          .optional(),
+        workoutType: WORKOUT_TYPE_ENUM.optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -524,13 +509,7 @@ export const analyticsRouter = router({
       const metersPerUnit = unit === "mi" ? 1609.344 : 1000;
 
       return rows.map((row) => {
-        // Prefer durationSeconds; fall back to durationMinutes * 60 (Whoop DTO writes minutes)
-        const totalSeconds =
-          row.durationSeconds != null
-            ? row.durationSeconds
-            : row.durationMinutes != null
-              ? row.durationMinutes * 60
-              : null;
+        const totalSeconds = getEffectiveDurationSeconds(row);
 
         let paceSecPerUnit: number | null = null;
         if (

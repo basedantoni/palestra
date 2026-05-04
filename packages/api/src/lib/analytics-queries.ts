@@ -1,34 +1,5 @@
 import { getISOWeek, getISOWeekYear, differenceInCalendarDays } from "date-fns";
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Convert a Date or date string to a local Date at noon (to avoid DST issues).
- * When databases return timestamps, they're typically UTC midnight. We need
- * to interpret them in UTC to get the correct calendar date, then create a
- * local Date at noon so date-fns functions return the right day.
- */
-function toLocalNoon(date: Date | string): Date {
-  const d = typeof date === "string" ? new Date(date) : date;
-  // Extract the UTC year/month/day and create a local Date at noon
-  const year = d.getUTCFullYear();
-  const month = d.getUTCMonth();
-  const day = d.getUTCDate();
-  return new Date(year, month, day, 12, 0, 0);
-}
-
-/**
- * Format a Date or date string as "yyyy-MM-dd" using UTC components.
- */
-function toDateString(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { toLocalNoon, toDateString } from "./date-utils";
 
 export function getTodayLocalDateString(now = new Date()): string {
   return toDateString(now);

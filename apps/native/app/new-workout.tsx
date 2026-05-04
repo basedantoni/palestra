@@ -27,11 +27,11 @@ import {
   formatDistance,
   formatVolume,
   formDataToApiInput,
-  normalizeDateToLocalNoon,
   reconcileUnknownExerciseNames,
   templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
 } from "@src/api/lib/workout-utils";
+import { localDateToNoon } from "@src/api/lib/date-utils";
 
 import { ExerciseCard } from "@/components/workout/exercise-card";
 import { ExercisePicker } from "@/components/workout/exercise-picker";
@@ -422,7 +422,7 @@ export default function NewWorkoutScreen() {
                 if (selectedDate) {
                   setFormData((prev) => ({
                     ...prev,
-                    date: normalizeDateToLocalNoon(selectedDate),
+                    date: localDateToNoon(selectedDate),
                   }));
                 }
               }}

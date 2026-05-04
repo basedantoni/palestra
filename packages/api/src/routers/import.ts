@@ -5,6 +5,7 @@ import { db } from "@src/db";
 import { exercise, exerciseLog, exerciseSet, workout } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 import { parseWorkoutMarkdown } from "../lib/workout-import-parser";
 import { computeSimilarity, resolveExerciseNames } from "../lib/fuzzy-match";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
@@ -113,15 +114,7 @@ export const importRouter = router({
         workouts: z.array(
           z.object({
             date: z.string(), // ISO date string
-            workoutType: z.enum([
-              "weightlifting",
-              "hiit",
-              "cardio",
-              "calisthenics",
-              "yoga",
-              "sports",
-              "mixed",
-            ]),
+            workoutType: WORKOUT_TYPE_ENUM,
             notes: z.string().optional(),
             exercises: z.array(
               z.object({
@@ -166,16 +159,7 @@ export const importRouter = router({
                 "cardio",
                 "other",
               ]),
-              exerciseType: z.enum([
-                "weightlifting",
-                "hiit",
-                "cardio",
-                "mobility",
-                "calisthenics",
-                "yoga",
-                "sports",
-                "mixed",
-              ]),
+              exerciseType: WORKOUT_TYPE_ENUM,
             }),
             // Skip this exercise (don't import it)
             z.object({

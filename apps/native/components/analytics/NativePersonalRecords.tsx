@@ -1,7 +1,12 @@
 import { Card } from "heroui-native";
 import { Text, View } from "react-native";
 
-import { formatDistance } from "@src/api/lib/workout-utils";
+import {
+  RECORD_TYPE_LABELS,
+  formatPrValue,
+  formatPrDelta,
+  isPrImprovement,
+} from "@src/api/lib/pr-formatters";
 
 interface PersonalRecordEntry {
   recordType: string;
@@ -20,37 +25,6 @@ interface NativePersonalRecordsProps {
   data: ExerciseGroup[];
   isLoading: boolean;
   distanceUnit?: "mi" | "km";
-}
-
-const RECORD_TYPE_LABELS: Record<string, string> = {
-  max_weight: "Max Weight",
-  max_reps: "Max Reps",
-  max_volume: "Max Volume",
-  longest_distance: "Longest Distance",
-};
-
-function formatValue(
-  recordType: string,
-  value: number,
-  distanceUnit: "mi" | "km",
-): string {
-  if (recordType === "max_weight") return `${value} lbs`;
-  if (recordType === "max_reps") return `${value} reps`;
-  if (recordType === "max_volume") return `${value.toLocaleString()} lbs`;
-  // longest_distance stored in meters — convert to user's preferred unit
-  if (recordType === "longest_distance") return formatDistance(value, distanceUnit);
-  return String(value);
-}
-
-function formatDelta(recordType: string, delta: number): string {
-  const unit =
-    recordType === "max_weight" || recordType === "max_volume"
-      ? " lbs"
-      : recordType === "max_reps"
-        ? " reps"
-        : "";
-  const sign = delta >= 0 ? "+" : "";
-  return `${sign}${delta}${unit}`;
 }
 
 export function NativePersonalRecords({
@@ -90,15 +64,17 @@ export function NativePersonalRecords({
                   </Text>
                 </View>
                 <Text className="text-sm font-medium text-foreground">
-                  {formatValue(record.recordType, record.value, distanceUnit)}
+                  {formatPrValue(record.recordType, record.value, distanceUnit)}
                 </Text>
                 {record.delta != null ? (
                   <Text
                     className={`text-xs font-medium ${
-                      record.delta >= 0 ? "text-green-600" : "text-red-500"
+                      isPrImprovement(record.recordType, record.delta)
+                        ? "text-green-600"
+                        : "text-red-500"
                     }`}
                   >
-                    {formatDelta(record.recordType, record.delta)}
+                    {formatPrDelta(record.recordType, record.delta, distanceUnit)}
                   </Text>
                 ) : (
                   <Text className="text-xs text-muted">First PR</Text>

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { metersToDisplayUnit } from "@src/api/lib/index";
+import { metersToDisplayUnit, formatWeekLabel } from "@src/api/lib/index";
 
 interface WeeklyDistancePoint {
   weekStart: string;
@@ -20,11 +20,6 @@ interface WhoopWeeklyDistanceChartProps {
   data: WeeklyDistancePoint[];
   distanceUnit: "mi" | "km";
   isLoading: boolean;
-}
-
-function formatWeekLabel(weekStart: string): string {
-  const parsed = new Date(`${weekStart}T12:00:00`);
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function WhoopWeeklyDistanceChart({
@@ -82,7 +77,7 @@ export function WhoopWeeklyDistanceChart({
             "Distance",
           ]}
           labelFormatter={(label) => `Week of ${String(label)}`}
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Bar dataKey="distance" fill="var(--chart-1)" radius={[2, 2, 0, 0]} />

@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import { WORKOUT_TYPE_LABELS, formatPeriodLabel } from "@src/api/lib/index";
 import type { WorkoutTypeMixPoint } from "@src/api/lib/analytics-queries";
 
 interface WorkoutTypeMixChartProps {
@@ -28,11 +28,6 @@ const TYPE_COLORS: Record<WorkoutTypeMixPoint["workoutType"], string> = {
   sports: "var(--chart-3)",
   mixed: "var(--chart-4)",
 };
-
-function formatPeriodLabel(period: string): string {
-  const week = period.split("-W")[1];
-  return week ? `W${Number(week)}` : period;
-}
 
 export function WorkoutTypeMixChart({
   data,
@@ -84,7 +79,7 @@ export function WorkoutTypeMixChart({
           width={32}
         />
         <Tooltip
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Legend

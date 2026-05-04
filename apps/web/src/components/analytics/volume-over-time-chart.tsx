@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { VolumeDataPoint } from "@src/api/lib/analytics-queries";
+import { formatPeriodLabel } from "@src/api/lib/index";
 
 interface VolumeOverTimeChartProps {
   data: VolumeDataPoint[];
@@ -23,18 +24,6 @@ interface VolumeOverTimeChartProps {
 function formatYAxis(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
   return String(value);
-}
-
-function formatPeriodLabel(period: string): string {
-  // "2026-W09" -> "W9" or "2026-03" -> "Mar"
-  if (period.includes("-W")) {
-    const week = period.split("-W")[1];
-    return `W${Number(week)}`;
-  }
-  const [year, month] = period.split("-");
-  if (!year || !month) return period;
-  const date = new Date(Number(year), Number(month) - 1, 1);
-  return date.toLocaleString("en-US", { month: "short" });
 }
 
 export function VolumeOverTimeChart({
@@ -101,7 +90,7 @@ export function VolumeOverTimeChart({
                 "Volume",
               ]}
               labelFormatter={(label) => `Period: ${String(label)}`}
-              labelStyle={{ color: "var(--muted-foreground" }}
+              labelStyle={{ color: "var(--muted-foreground)" }}
               contentStyle={{ fontSize: 12 }}
             />
             <Line

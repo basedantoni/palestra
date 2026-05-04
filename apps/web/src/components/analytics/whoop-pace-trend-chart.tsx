@@ -9,6 +9,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDateLabel, formatPaceFromSecPerUnit } from "@src/api/lib/index";
 
 interface PaceTrendPoint {
   date: string;
@@ -19,17 +20,6 @@ interface PaceTrendPoint {
 interface WhoopPaceTrendChartProps {
   data: PaceTrendPoint[];
   isLoading: boolean;
-}
-
-function formatDateLabel(date: string): string {
-  const parsed = new Date(`${date}T12:00:00`);
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatPace(secPerUnit: number): string {
-  const minutes = Math.floor(secPerUnit / 60);
-  const seconds = Math.round(secPerUnit % 60);
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export function WhoopPaceTrendChart({
@@ -71,7 +61,7 @@ export function WhoopPaceTrendChart({
           tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
           width={56}
           tickFormatter={(val) =>
-            typeof val === "number" ? formatPace(val) : String(val)
+            typeof val === "number" ? formatPaceFromSecPerUnit(val) : String(val)
           }
           label={{
             value: `min/${unit}`,
@@ -84,10 +74,10 @@ export function WhoopPaceTrendChart({
         <Tooltip
           formatter={(value) => {
             if (value == null) return ["—", `Pace (min/${unit})`];
-            return [`${formatPace(Number(value))} /${unit}`, "Pace"];
+            return [`${formatPaceFromSecPerUnit(Number(value))} /${unit}`, "Pace"];
           }}
           labelFormatter={(label) => `Date: ${String(label)}`}
-          labelStyle={{ color: "var(--muted-foreground" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
           contentStyle={{ fontSize: 12 }}
         />
         <Line

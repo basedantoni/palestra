@@ -34,7 +34,7 @@ import {
   type ExerciseType,
   type CardioSubtype,
   formatVolume,
-  normalizeDateToLocalNoon,
+  localDateToNoon,
   reconcileUnknownExerciseNames,
   templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
@@ -389,7 +389,7 @@ function RouteComponent() {
                 if (date) {
                   setFormData({
                     ...formData,
-                    date: normalizeDateToLocalNoon(date),
+                    date: localDateToNoon(date),
                   });
                 }
               }}

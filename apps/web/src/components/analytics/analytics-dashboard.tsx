@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { trpc } from "@/utils/trpc";
@@ -35,10 +35,6 @@ export function AnalyticsDashboard() {
   const [categorizationSystem, setCategorizationSystem] = useState<
     "bodybuilding" | "movement_patterns"
   >("bodybuilding");
-  const [selectedRunningExerciseId, setSelectedRunningExerciseId] = useState<
-    string | undefined
-  >(undefined);
-
   const preferences = useQuery(trpc.preferences.get.queryOptions());
   const distanceUnit = preferences.data?.distanceUnit ?? "mi";
 
@@ -82,37 +78,6 @@ export function AnalyticsDashboard() {
   const whoopWeeklyDistance = useQuery(
     trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
   );
-
-  const runningExerciseOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const point of runningPaceTrend.data ?? []) {
-      byId.set(point.exerciseId, point.exerciseName);
-    }
-    return Array.from(byId.entries()).map(([id, name]) => ({ id, name }));
-  }, [runningPaceTrend.data]);
-
-  useEffect(() => {
-    if (runningExerciseOptions.length === 0) {
-      setSelectedRunningExerciseId(undefined);
-      return;
-    }
-
-    if (
-      !selectedRunningExerciseId ||
-      !runningExerciseOptions.some(
-        (option) => option.id === selectedRunningExerciseId,
-      )
-    ) {
-      setSelectedRunningExerciseId(runningExerciseOptions[0]!.id);
-    }
-  }, [runningExerciseOptions, selectedRunningExerciseId]);
-
-  const selectedRunningPaceData = useMemo(() => {
-    if (!selectedRunningExerciseId) return [];
-    return (runningPaceTrend.data ?? []).filter(
-      (point) => point.exerciseId === selectedRunningExerciseId,
-    );
-  }, [runningPaceTrend.data, selectedRunningExerciseId]);
 
   const runningPrData = useMemo(() => {
     return (prData.data ?? [])
@@ -239,13 +204,8 @@ export function AnalyticsDashboard() {
           <section>
             <h2 className="mb-4 text-lg font-semibold">Pace Trend</h2>
             <RunningPaceTrendChart
-              data={selectedRunningPaceData}
+              data={runningPaceTrend.data ?? []}
               distanceUnit={distanceUnit}
-              exerciseOptions={runningExerciseOptions}
-              selectedExerciseId={selectedRunningExerciseId}
-              onExerciseChange={(exerciseId) =>
-                setSelectedRunningExerciseId(exerciseId ?? undefined)
-              }
               isLoading={runningPaceTrend.isLoading}
             />
           </section>
