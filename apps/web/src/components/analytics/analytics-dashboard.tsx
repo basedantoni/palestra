@@ -16,6 +16,8 @@ import { MobilityFrequencyChart } from "./mobility-frequency-chart";
 import { WhoopHrTrendChart } from "./whoop-hr-trend-chart";
 import { WhoopPaceTrendChart } from "./whoop-pace-trend-chart";
 import { WhoopWeeklyDistanceChart } from "./whoop-weekly-distance-chart";
+import { WhoopSleepChart } from "./whoop-sleep-chart";
+import { WhoopRecoveryChart } from "./whoop-recovery-chart";
 
 function useLast30DaysRange(): { from: string; to: string } {
   return useMemo(() => {
@@ -79,6 +81,21 @@ export function AnalyticsDashboard() {
     trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
   );
 
+  const whoopConnection = useQuery(trpc.whoop.connectionStatus.queryOptions());
+  const sleepData = useQuery(
+    trpc.whoopSleep.list.queryOptions(
+      { limit: 30, from: whoopDateRange.from, to: whoopDateRange.to },
+      { enabled: whoopConnection.data?.connected === true },
+    ),
+  );
+
+  const recoveryData = useQuery(
+    trpc.whoopRecovery.list.queryOptions(
+      { limit: 30 },
+      { enabled: whoopConnection.data?.connected === true },
+    ),
+  );
+
   const runningPrData = useMemo(() => {
     return (prData.data ?? [])
       .map((exercise) => ({
@@ -102,10 +119,12 @@ export function AnalyticsDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="running">Running</TabsTrigger>
           <TabsTrigger value="whoop-running">Whoop Runs</TabsTrigger>
+          <TabsTrigger value="sleep">Sleep</TabsTrigger>
+          <TabsTrigger value="recovery">Recovery</TabsTrigger>
           <TabsTrigger value="mobility">Mobility</TabsTrigger>
         </TabsList>
 
@@ -260,6 +279,48 @@ export function AnalyticsDashboard() {
               isLoading={whoopWeeklyDistance.isLoading}
             />
           </section>
+        </TabsContent>
+
+        <TabsContent value="sleep" className="space-y-10">
+          {whoopConnection.data?.connected ? (
+            <section>
+              <h2 className="mb-2 text-lg font-semibold">Sleep Performance</h2>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Sleep performance score over the last 30 days, powered by Whoop.
+              </p>
+              <WhoopSleepChart
+                data={sleepData.data?.items ?? []}
+                isLoading={sleepData.isLoading}
+              />
+            </section>
+          ) : (
+            <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                Connect your Whoop device in Settings to view sleep data.
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="recovery" className="space-y-10">
+          {whoopConnection.data?.connected ? (
+            <section>
+              <h2 className="mb-2 text-lg font-semibold">Recovery Score</h2>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Daily recovery score over the last 30 days, powered by Whoop. Green ≥67, yellow 34–66, red ≤33.
+              </p>
+              <WhoopRecoveryChart
+                data={recoveryData.data?.items ?? []}
+                isLoading={recoveryData.isLoading}
+              />
+            </section>
+          ) : (
+            <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                Connect your Whoop device in Settings to view recovery data.
+              </p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="mobility" className="space-y-10">

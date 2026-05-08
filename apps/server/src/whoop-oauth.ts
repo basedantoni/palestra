@@ -6,6 +6,7 @@ import { auth } from "@src/auth";
 import { env } from "@src/env/server";
 import { handleWhoopCallback } from "@src/api/lib/whoop-oauth";
 import { getValidWhoopAccessToken, WHOOP_API_BASE } from "@src/api/lib/whoop-client";
+import { whoopWebhookApp } from "@src/api/lib/whoop-webhook";
 
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
 
@@ -150,3 +151,7 @@ whoopOAuthApp.get("/callback", async (c) => {
 
   return redirect({ whoop_connected: "true" });
 });
+
+// Mount the webhook handler at POST /api/whoop/webhook
+// whoopWebhookApp registers the route at "/webhook" relative to its own base.
+whoopOAuthApp.route("/", whoopWebhookApp);

@@ -22,6 +22,64 @@
   - [x] Identify maximum-update-depth loop in selected date synchronization
   - [x] Guard fallback date updates by local date key
   - [x] Run type checks and web build
+- [x] Fix Fly release migration/seed failure
+  - [x] Identify missing production `exercise.cardio_subtype` column after release migrations
+  - [x] Add forward-only repair migration for Whoop run-linking schema
+  - [x] Run type checks
+  - [x] Run migration verification
+- [x] Reduce Nike TCX importer memory usage for Fly
+  - [x] Replace full XML object parsing with targeted TCX tag scanning
+  - [x] Verify parser still reads all Nike TCX files
+  - [x] Run type checks
+- [x] Generic TCX Web Importer
+  - [x] Phase 1: Shared TCX parsing core
+    - [x] Add reusable TCX parser and fingerprint helper
+    - [x] Export parser from API lib
+    - [x] Add TCX parser tests
+    - [x] Run parser tests and type checks
+    - [x] Manual parser spot-check confirmed by user
+  - [x] Phase 2: TCX import API
+    - [x] Add `tcxImport.preview` and `tcxImport.commit`
+    - [x] Register router on `appRouter`
+    - [x] Add preview/commit tests
+    - [x] Run API tests and type checks
+    - [x] Manual API preview/commit confirmed by user
+  - [x] Phase 3: Web TCX import route
+    - [x] Add `/import/tcx` route
+    - [x] Add TCX Folder card on `/import`
+    - [x] Regenerate route tree
+    - [x] Run web type checks and build
+    - [x] Manual browser verification confirmed by user
+  - [x] Phase 4: CLI alignment and cleanup
+    - [x] Reuse shared TCX parser and fingerprint helper from the Nike CLI
+    - [x] Remove unused `fast-xml-parser` dependency
+    - [x] Document production import path
+    - [x] Run type checks, web build, API tests, and CLI dry-run
+- [x] Fix production analytics schema drift
+  - [x] Identify `analytics.weeklyRunningVolume` selecting missing `exercise_log` metric columns
+  - [x] Add idempotent repair migration for `exercise_log` metrics and distance normalization
+  - [x] Run migration checks and type checks
+
+## Whoop Webhook Integration — Phase 1
+
+- [x] DB schema migration — add columns to `whoop_connection` and new `whoop_webhook_event` table
+  - [x] `whoopUserId`, `webhookSubscriptionId`, `webhookSecret`, `webhookLastReceivedAt`, `autoImportEnabled`, `notifyOnAutoImport` added to `whoop_connection`
+  - [x] `whoop_webhook_event` table created with PK, FK, indexes
+  - [x] Migration generated and applied (`0013_chilly_robbie_robertson.sql`)
+- [x] Write tests first (TDD — red phase confirmed)
+  - [x] `packages/api/src/__tests__/whoop-webhook.test.ts` created
+  - [x] Tests for: valid signature, invalid signature, unknown user, duplicate event, webhookLastReceivedAt advancement, missing header
+- [x] Implement `packages/api/src/lib/whoop-webhook.ts`
+  - [x] Raw body buffering before JSON parse
+  - [x] Connection lookup by whoopUserId
+  - [x] HMAC-SHA256 verification using decrypted webhook secret
+  - [x] Insert `whoop_webhook_event` with `onConflictDoNothing`
+  - [x] Update `webhookLastReceivedAt`
+  - [x] `setImmediate` stub processor (flips status to `processed`, logs)
+- [x] Mount webhook endpoint at `POST /api/whoop/webhook`
+- [x] All 281 tests pass (17 test files)
+- [x] `pnpm check-types` passes (server + web)
+- [ ] Manual verification: correctly-signed synthetic payload via curl returns 200
 
 ## Review
 
@@ -41,3 +99,23 @@
 - DB verification: `125` Nike workouts, `34` rows with heart rate, `104` Short Run rows, `21` Long Run rows, distance range `54.77m` to `42313.22m`.
 - Fixed `/workouts` calendar freeze by preventing the selected-date effect from setting a new `Date` object when the selected local-day key is already the intended fallback.
 - Verification passed: `pnpm check-types`, `pnpm -F web build`.
+- Fly deploy failed during `release_command` after migrations because seed inserted `exercise.cardio_subtype`, but production still lacked that column.
+- Added `0011_repair_whoop_run_linking` as an idempotent repair migration for `cardio_subtype`, `hr_zone_durations`, and the Whoop activity unique index.
+- Verification passed: `pnpm check-types`, `pnpm -F @src/db exec drizzle-kit check --config drizzle.config.ts`, `pnpm -F @src/db db:migrate`, `pnpm -F @src/db db:seed`.
+- Reduced importer memory pressure by avoiding full XML tree construction for TCX files; dry-run still parsed `126/126` files with `errors: 0` and rerun reported `imported=0 skipped_duplicate=126 skipped_error=0`.
+- Generic TCX importer Phase 1 added `packages/api/src/lib/tcx-import.ts` and `packages/api/src/lib/tcx-import.test.ts`.
+- Verification passed: `pnpm -F @src/api test -- tcx-import`, `pnpm check-types`.
+- Real Nike TCX parser spot check for `0296d2ed-62ad-4e13-abbe-1d751c2cec2c.tcx`: `2022-09-21T12:20:52.921Z`, `3999.56m`, `1810s`, calories `290`, avg HR `142`, max HR `154`.
+- Generic TCX importer Phase 2 added `packages/api/src/routers/tcx-import.ts`, registered `tcxImport`, and added `packages/api/src/__tests__/tcx-import.test.ts`.
+- Verification passed: `pnpm -F @src/api test -- tcx-import`, `pnpm check-types`.
+- Manual API verification confirmed healthy.
+- Generic TCX importer Phase 3 added `/import/tcx`, linked it from `/import`, and regenerated the TanStack route tree.
+- Verification passed: `pnpm -F web check-types`, `pnpm -F web build`, `pnpm check-types`.
+- Local route smoke check passed: `http://localhost:3002/import/tcx` returns `200 OK`.
+- Manual browser verification confirmed by user.
+- Generic TCX importer Phase 4 updated `scripts/import-nike-tcx.ts` to reuse the shared parser/fingerprint module and removed `fast-xml-parser` from manifests and lockfile.
+- Production TCX import path is now the web UI: deploy, open `/import/tcx`, select the TCX folder, review, and commit.
+- Verification passed: `pnpm -F @src/api test -- tcx-import`, `pnpm -F web build`, `pnpm check-types`, `pnpm import:nike-tcx -- --user-id freshbeef --dry-run`.
+- Production `analytics.weeklyRunningVolume` failed because deployed code selects `exercise_log.distance_meter`, `duration_seconds`, `rounds`, `work_duration_seconds`, and `rest_duration_seconds` but the Fly database can be missing older baseline columns.
+- Added `0012_repair_exercise_log_metrics` to idempotently add missing `exercise_log` metric columns, preserve old `distance` data by renaming/converting to `distance_meter`, drop old `pace`, and ensure `exercise_set.duration_seconds` exists.
+- Verification passed: `pnpm -F @src/db exec drizzle-kit check --config drizzle.config.ts`, `pnpm check-types`, `pnpm -F @src/db db:migrate`, `pnpm -F @src/api test -- analytics`.

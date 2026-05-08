@@ -1,7 +1,7 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, Chip } from "heroui-native";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
 import { Container } from "@/components/container";
 import { useAppTheme } from "@/contexts/app-theme-context";
@@ -21,9 +21,32 @@ type NativeSettingsFormData = {
   plateauThreshold: number;
 };
 
+/** Returns a human-readable relative time string ("2 minutes ago", "never"). */
+function formatRelativeTime(date: Date | string | null | undefined): string {
+  if (!date) return "never";
+  const d = date instanceof Date ? date : new Date(date);
+  const diffMs = Date.now() - d.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  if (diffSeconds < 60) return "just now";
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+}
+
 export default function SettingsScreen() {
   const { setTheme } = useAppTheme();
+  const queryClient = useQueryClient();
   const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
+  const webhookStatusQuery = useQuery({
+    ...trpc.whoop.webhookStatus.queryOptions(),
+    refetchInterval: (query) =>
+      query.state.data?.backfill?.running ? 2000 : false,
+  });
+  const connectionStatusQuery = useQuery(trpc.whoop.connectionStatus.queryOptions());
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const [formData, setFormData] = useState<NativeSettingsFormData>({
     weightUnit: "lbs",
@@ -53,6 +76,100 @@ export default function SettingsScreen() {
       },
       onError: (error) => {
         Alert.alert("Error", error.message || "Failed to update settings");
+      },
+    }),
+  );
+
+  const setAutoImportMutation = useMutation(
+    trpc.whoop.setAutoImport.mutationOptions({
+      onMutate: async ({ enabled }) => {
+        await queryClient.cancelQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        const previous = queryClient.getQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+        );
+        queryClient.setQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+          (old: typeof webhookStatusQuery.data) =>
+            old ? { ...old, autoImportEnabled: enabled } : old,
+        );
+        return { previous };
+      },
+      onError: (_err, _vars, context) => {
+        if (context?.previous !== undefined) {
+          queryClient.setQueryData(
+            trpc.whoop.webhookStatus.queryOptions().queryKey,
+            context.previous,
+          );
+        }
+        Alert.alert("Error", "Failed to update auto-import setting");
+      },
+      onSettled: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+    }),
+  );
+
+  const setNotifyOnAutoImportMutation = useMutation(
+    trpc.whoop.setNotifyOnAutoImport.mutationOptions({
+      onMutate: async ({ enabled }) => {
+        await queryClient.cancelQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        const previous = queryClient.getQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+        );
+        queryClient.setQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+          (old: typeof webhookStatusQuery.data) =>
+            old ? { ...old, notifyOnAutoImport: enabled } : old,
+        );
+        return { previous };
+      },
+      onError: (_err, _vars, context) => {
+        if (context?.previous !== undefined) {
+          queryClient.setQueryData(
+            trpc.whoop.webhookStatus.queryOptions().queryKey,
+            context.previous,
+          );
+        }
+        Alert.alert("Error", "Failed to update notification setting");
+      },
+      onSettled: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+    }),
+  );
+
+  const reregisterWebhookMutation = useMutation(
+    trpc.whoop.reregisterWebhook.mutationOptions({
+      onSuccess: () => {
+        setBannerDismissed(true);
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        Alert.alert("Success", "Webhook re-registered successfully");
+      },
+      onError: (error) => {
+        Alert.alert("Error", error.message || "Failed to re-register webhook");
+      },
+    }),
+  );
+
+  const stopBackfillMutation = useMutation(
+    trpc.whoop.stopBackfill.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+      onError: (error) => {
+        Alert.alert("Error", error.message || "Failed to stop backfill");
       },
     }),
   );
@@ -215,6 +332,101 @@ export default function SettingsScreen() {
               {saveMutation.isPending ? "Saving..." : "Save Settings"}
             </Button.Label>
           </Button>
+
+          {/* Whoop webhook section */}
+          {connectionStatusQuery.data?.connected && (
+            <Card variant="secondary" className="p-4">
+              <Text className="text-base font-semibold text-foreground mb-3">
+                Whoop Auto-Import
+              </Text>
+
+              {/* Auto-import toggle */}
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-1 pr-4">
+                  <Text className="text-sm font-medium text-foreground">
+                    Auto-import workouts
+                  </Text>
+                  <Text className="text-xs text-muted mt-0.5">
+                    Automatically import workouts when they complete on your Whoop.
+                  </Text>
+                </View>
+                <Switch
+                  value={webhookStatusQuery.data?.autoImportEnabled ?? false}
+                  onValueChange={(enabled) =>
+                    setAutoImportMutation.mutate({ enabled })
+                  }
+                  disabled={setAutoImportMutation.isPending}
+                />
+              </View>
+
+              {/* Notify on auto-import toggle */}
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-1 pr-4">
+                  <Text className="text-sm font-medium text-foreground">
+                    Notify me on auto-import
+                  </Text>
+                  <Text className="text-xs text-muted mt-0.5">
+                    Receive an in-app notification each time a Whoop workout is imported.
+                  </Text>
+                </View>
+                <Switch
+                  value={webhookStatusQuery.data?.notifyOnAutoImport ?? false}
+                  onValueChange={(enabled) =>
+                    setNotifyOnAutoImportMutation.mutate({ enabled })
+                  }
+                  disabled={setNotifyOnAutoImportMutation.isPending}
+                />
+              </View>
+
+              {/* Backfill progress */}
+              {webhookStatusQuery.data?.backfill?.running && (
+                <View className="flex-row items-center justify-between mb-2 bg-muted/20 rounded-lg p-2 gap-2">
+                  <View className="flex-row items-center gap-2 flex-1">
+                    <ActivityIndicator size="small" />
+                    <Text className="text-xs text-muted flex-1">
+                      Importing {webhookStatusQuery.data.backfill.importedCount} workouts&hellip;
+                    </Text>
+                  </View>
+                  <Button
+                    onPress={() => stopBackfillMutation.mutate()}
+                    isDisabled={stopBackfillMutation.isPending}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    <Button.Label className="text-sm">Skip</Button.Label>
+                  </Button>
+                </View>
+              )}
+
+              {/* Last synced timestamp */}
+              {webhookStatusQuery.data?.subscribed && (
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs text-muted">Last synced</Text>
+                  <Text className="text-xs text-muted">
+                    {formatRelativeTime(webhookStatusQuery.data.lastReceivedAt)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Invalid subscription banner */}
+              {webhookStatusQuery.data?.subscribed === false && !bannerDismissed && (
+                <View className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 gap-2">
+                  <Text className="text-xs text-destructive">
+                    Webhook subscription is inactive. Re-register to resume auto-imports.
+                  </Text>
+                  <Button
+                    onPress={() => reregisterWebhookMutation.mutate()}
+                    isDisabled={reregisterWebhookMutation.isPending}
+                    variant="ghost"
+                  >
+                    <Button.Label className="text-destructive text-sm">
+                      {reregisterWebhookMutation.isPending ? "Registering..." : "Reregister"}
+                    </Button.Label>
+                  </Button>
+                </View>
+              )}
+            </Card>
+          )}
         </View>
       </ScrollView>
     </Container>

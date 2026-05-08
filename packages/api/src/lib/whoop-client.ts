@@ -1,12 +1,47 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 
 import { db } from "@src/db";
-import { whoopConnection } from "@src/db/schema/index";
+import { exercise, whoopConnection } from "@src/db/schema/index";
 import { env } from "@src/env/server";
+import { whoopSportToCardioSubtype } from "@src/shared";
 
 import { decryptToken, encryptToken } from "./token-encryption";
 
 export const WHOOP_API_BASE = "https://api.prod.whoop.com/developer/v2";
+
+/**
+ * Resolves the canonical library exercise for a Whoop sport.
+ * Returns { id, name } so callers can set both exerciseId and exerciseName on the log.
+ *
+ * For running: picks "Short Run" (<8km) or "Long Run" (≥8km) based on distanceMeter.
+ * For other cardio subtypes: returns the first matching exercise by cardioSubtype.
+ * Returns null if no matching exercise found.
+ */
+export async function resolveWhoopExerciseId(
+  sportId: number,
+  sportName?: string,
+  distanceMeter?: number | null,
+): Promise<{ id: string; name: string } | null> {
+  const subtype = whoopSportToCardioSubtype(sportId, sportName);
+  if (!subtype) return null;
+
+  let targetName: string | null = null;
+  if (subtype === "running") {
+    targetName = distanceMeter != null && distanceMeter >= 8000 ? "Long Run" : "Short Run";
+  }
+
+  const [row] = await db
+    .select({ id: exercise.id, name: exercise.name })
+    .from(exercise)
+    .where(
+      targetName
+        ? eq(exercise.name, targetName)
+        : eq(exercise.cardioSubtype, subtype as "running" | "cycling" | "swimming" | "rowing" | "other"),
+    )
+    .limit(1);
+
+  return row ? { id: row.id, name: row.name } : null;
+}
 
 interface TokenResponse {
   access_token: string;

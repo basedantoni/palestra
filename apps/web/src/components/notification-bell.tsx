@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
@@ -15,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function NotificationBell() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: session } = authClient.useSession();
   const isAuthenticated = !!session;
 
@@ -88,7 +90,7 @@ export function NotificationBell() {
             No notifications yet
           </div>
         ) : (
-          <ScrollArea className="max-h-96">
+          <ScrollArea className="max-h-96 overflow-auto">
             <div className="divide-y">
               {notifications.map((notif) => (
                 <button
@@ -99,6 +101,20 @@ export function NotificationBell() {
                   onClick={() => {
                     if (!notif.readAt) {
                       markReadMutation.mutate({ id: notif.id });
+                    }
+                    // Route to workout detail for whoop_workout_imported notifications
+                    if (notif.type === "whoop_workout_imported") {
+                      const payload = notif.payload as Record<
+                        string,
+                        unknown
+                      > | null;
+                      const workoutId = payload?.workoutId;
+                      if (typeof workoutId === "string") {
+                        void navigate({
+                          to: "/workouts/$workoutId",
+                          params: { workoutId },
+                        });
+                      }
                     }
                   }}
                 >

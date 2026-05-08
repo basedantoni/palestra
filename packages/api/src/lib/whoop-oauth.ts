@@ -4,8 +4,10 @@ import { env } from "@src/env/server";
 import { eq } from "drizzle-orm";
 
 import { encryptToken } from "./token-encryption";
+import { triggerBackfill } from "./whoop-backfill";
 
 const WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token";
+const WHOOP_API_BASE_V2 = "https://api.prod.whoop.com/developer/v2";
 
 interface TokenResponse {
   access_token: string;
@@ -13,6 +15,11 @@ interface TokenResponse {
   expires_in: number;
   token_type: string;
   scope: string;
+}
+
+interface WhoopUserProfile {
+  user_id: number | string;
+  [key: string]: unknown;
 }
 
 /**
@@ -64,8 +71,25 @@ export async function handleWhoopCallback(
   const encryptedRefresh = encryptToken(tokens.refresh_token, encryptionKey);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
+  // (Sync) Fetch whoopUserId from Whoop's profile endpoint
+  let whoopUserId: string | null = null;
   try {
-    await db
+    const profileResponse = await fetch(`${WHOOP_API_BASE_V2}/user/profile/basic`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (profileResponse.ok) {
+      const profile = (await profileResponse.json()) as WhoopUserProfile;
+      whoopUserId = profile.user_id != null ? String(profile.user_id) : null;
+    } else {
+      console.warn("Whoop profile fetch failed:", profileResponse.status);
+    }
+  } catch (err) {
+    console.warn("Whoop profile fetch error:", err);
+  }
+
+  let isFirstConnect = false;
+  try {
+    const rows = await db
       .insert(whoopConnection)
       .values({
         id: crypto.randomUUID(),
@@ -74,6 +98,7 @@ export async function handleWhoopCallback(
         refreshToken: encryptedRefresh,
         tokenExpiresAt: expiresAt,
         isValid: true,
+        whoopUserId,
       })
       .onConflictDoUpdate({
         target: whoopConnection.userId,
@@ -83,11 +108,25 @@ export async function handleWhoopCallback(
           tokenExpiresAt: expiresAt,
           isValid: true,
           connectedAt: new Date(),
+          whoopUserId,
         },
       });
+
+    // Detect first connect: upsert returned rows with lastImportedAt = null
+    if (Array.isArray(rows) && rows.length > 0) {
+      const savedRow = rows[0] as { lastImportedAt?: Date | null } | undefined;
+      isFirstConnect = savedRow?.lastImportedAt === null || savedRow?.lastImportedAt === undefined;
+    }
   } catch (err) {
     console.error("Whoop connection save failed:", err);
     return { ok: false, error: "Failed to save Whoop connection" };
+  }
+
+  // (Async) Trigger 30-day backfill on first-ever connect only
+  if (isFirstConnect) {
+    setImmediate(() => {
+      triggerBackfill(userId, 30);
+    });
   }
 
   return { ok: true };

@@ -12,6 +12,8 @@ import { NativeOverloadStatus } from "@/components/analytics/NativeOverloadStatu
 import { NativeWhoopHrTrend } from "@/components/analytics/NativeWhoopHrTrend";
 import { NativeWhoopPaceTrend } from "@/components/analytics/NativeWhoopPaceTrend";
 import { NativeWhoopWeeklyDistance } from "@/components/analytics/NativeWhoopWeeklyDistance";
+import { NativeWhoopSleepChart } from "@/components/analytics/NativeWhoopSleepChart";
+import { NativeWhoopRecoveryChart } from "@/components/analytics/NativeWhoopRecoveryChart";
 
 function useLast30DaysRange(): { from: string; to: string } {
   return useMemo(() => {
@@ -61,6 +63,21 @@ export default function AnalyticsTab() {
   );
   const whoopWeeklyDistance = useQuery(
     trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
+  );
+
+  const whoopConnection = useQuery(trpc.whoop.connectionStatus.queryOptions());
+  const sleepData = useQuery(
+    trpc.whoopSleep.list.queryOptions(
+      { limit: 30, from: whoopDateRange.from, to: whoopDateRange.to },
+      { enabled: whoopConnection.data?.connected === true },
+    ),
+  );
+
+  const recoveryData = useQuery(
+    trpc.whoopRecovery.list.queryOptions(
+      { limit: 30 },
+      { enabled: whoopConnection.data?.connected === true },
+    ),
   );
 
   return (
@@ -209,6 +226,56 @@ export default function AnalyticsTab() {
           distanceUnit={distanceUnit}
           isLoading={whoopWeeklyDistance.isLoading}
         />
+      </View>
+
+      {/* Divider */}
+      <View className="border-t border-border mx-6 mb-8" />
+
+      {/* Whoop Sleep */}
+      <View className="px-6 mb-8">
+        <Text className="text-lg font-semibold text-foreground mb-1">
+          Whoop Sleep
+        </Text>
+        <Text className="text-sm text-muted mb-4">
+          Sleep performance over the last 30 days.
+        </Text>
+        {whoopConnection.data?.connected ? (
+          <NativeWhoopSleepChart
+            data={sleepData.data?.items ?? []}
+            isLoading={sleepData.isLoading}
+          />
+        ) : (
+          <View className="h-48 items-center justify-center border border-dashed border-border rounded-md px-4">
+            <Text className="text-sm text-muted text-center">
+              Connect your Whoop device in Settings to view sleep data.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Divider */}
+      <View className="border-t border-border mx-6 mb-8" />
+
+      {/* Whoop Recovery */}
+      <View className="px-6 mb-8">
+        <Text className="text-lg font-semibold text-foreground mb-1">
+          Whoop Recovery
+        </Text>
+        <Text className="text-sm text-muted mb-4">
+          Daily recovery score over the last 30 days. Green ≥67, yellow 34–66, red ≤33.
+        </Text>
+        {whoopConnection.data?.connected ? (
+          <NativeWhoopRecoveryChart
+            data={recoveryData.data?.items ?? []}
+            isLoading={recoveryData.isLoading}
+          />
+        ) : (
+          <View className="h-48 items-center justify-center border border-dashed border-border rounded-md px-4">
+            <Text className="text-sm text-muted text-center">
+              Connect your Whoop device in Settings to view recovery data.
+            </Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );

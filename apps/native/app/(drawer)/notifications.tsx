@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pressable, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import { Container } from "@/components/container";
 import { trpc } from "@/utils/trpc";
 
 export default function NotificationsScreen() {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: notifications = [], isLoading } = useQuery(
     trpc.notifications.list.queryOptions(),
@@ -62,6 +64,14 @@ export default function NotificationsScreen() {
               onPress={() => {
                 if (!notif.readAt) {
                   markReadMutation.mutate({ id: notif.id });
+                }
+                // Route to workout detail for whoop_workout_imported notifications
+                if (notif.type === "whoop_workout_imported") {
+                  const payload = notif.payload as Record<string, unknown> | null;
+                  const workoutId = payload?.workoutId;
+                  if (typeof workoutId === "string") {
+                    router.push(`/workout-detail/${workoutId}`);
+                  }
                 }
               }}
             >

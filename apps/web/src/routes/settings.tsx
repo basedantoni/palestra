@@ -1,8 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { z } from "zod";
 
 import { authClient } from "@/lib/auth-client";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/utils/trpc";
 import { env } from "@src/env/web";
 import { CustomExerciseStatusBadge } from "@/components/custom-exercise-status-badge";
@@ -59,11 +60,17 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
   const search = useSearch({ from: "/settings" });
+  const queryClient = useQueryClient();
   const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
   const customExercisesQuery = useQuery(
     trpc.exercises.myCustomExercises.queryOptions(),
   );
   const whoopStatusQuery = useQuery(trpc.whoop.connectionStatus.queryOptions());
+  const webhookStatusQuery = useQuery({
+    ...trpc.whoop.webhookStatus.queryOptions(),
+    refetchInterval: (query) =>
+      query.state.data?.backfill?.running ? 2000 : false,
+  });
   const { setTheme } = useTheme();
   const [formData, setFormData] = useState<SettingsFormData>({
     weightUnit: "lbs",
@@ -95,6 +102,8 @@ function RouteComponent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
   const whoopDisconnectMutation = useMutation(
     trpc.whoop.disconnect.mutationOptions({
       onSuccess: () => {
@@ -103,6 +112,104 @@ function RouteComponent() {
       },
       onError: (error) => {
         toast.error(error.message || "Failed to disconnect Whoop");
+      },
+    }),
+  );
+
+  const setAutoImportMutation = useMutation(
+    trpc.whoop.setAutoImport.mutationOptions({
+      onMutate: async ({ enabled }) => {
+        // Cancel any in-flight webhook status queries
+        await queryClient.cancelQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        // Snapshot previous value
+        const previous = queryClient.getQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+        );
+        // Optimistically update
+        queryClient.setQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+          (old: typeof webhookStatusQuery.data) =>
+            old ? { ...old, autoImportEnabled: enabled } : old,
+        );
+        return { previous };
+      },
+      onError: (_err, _vars, context) => {
+        // Revert on error
+        if (context?.previous !== undefined) {
+          queryClient.setQueryData(
+            trpc.whoop.webhookStatus.queryOptions().queryKey,
+            context.previous,
+          );
+        }
+        toast.error("Failed to update auto-import setting");
+      },
+      onSettled: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+    }),
+  );
+
+  const setNotifyOnAutoImportMutation = useMutation(
+    trpc.whoop.setNotifyOnAutoImport.mutationOptions({
+      onMutate: async ({ enabled }) => {
+        await queryClient.cancelQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        const previous = queryClient.getQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+        );
+        queryClient.setQueryData(
+          trpc.whoop.webhookStatus.queryOptions().queryKey,
+          (old: typeof webhookStatusQuery.data) =>
+            old ? { ...old, notifyOnAutoImport: enabled } : old,
+        );
+        return { previous };
+      },
+      onError: (_err, _vars, context) => {
+        if (context?.previous !== undefined) {
+          queryClient.setQueryData(
+            trpc.whoop.webhookStatus.queryOptions().queryKey,
+            context.previous,
+          );
+        }
+        toast.error("Failed to update notification setting");
+      },
+      onSettled: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+    }),
+  );
+
+  const reregisterWebhookMutation = useMutation(
+    trpc.whoop.reregisterWebhook.mutationOptions({
+      onSuccess: () => {
+        setBannerDismissed(true);
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+        toast.success("Webhook re-registered successfully");
+      },
+      onError: (error) => {
+        toast.error(error.message || "Failed to re-register webhook");
+      },
+    }),
+  );
+
+  const stopBackfillMutation = useMutation(
+    trpc.whoop.stopBackfill.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.whoop.webhookStatus.queryOptions().queryKey,
+        });
+      },
+      onError: (error) => {
+        toast.error(error.message || "Failed to stop backfill");
       },
     }),
   );
@@ -384,50 +491,141 @@ function RouteComponent() {
         </CardHeader>
         <CardContent>
           {/* Whoop integration card */}
-          <div className="flex items-start justify-between gap-4 border p-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">Whoop</span>
-                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
-                  <Badge variant="secondary" className="text-xs">Connected</Badge>
-                ) : whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid ? (
-                  <Badge variant="destructive" className="text-xs">Reconnect required</Badge>
-                ) : null}
+          <div className="flex flex-col gap-3 border p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">Whoop</span>
+                  {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
+                    <Badge variant="secondary" className="text-xs">Connected</Badge>
+                  ) : whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid ? (
+                    <Badge variant="destructive" className="text-xs">Reconnect required</Badge>
+                  ) : null}
+                </div>
+                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.connectedAt ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Connected since {format(new Date(whoopStatusQuery.data.connectedAt), "MMM d, yyyy")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Sync your Whoop workouts automatically.
+                  </p>
+                )}
+                {whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid && (
+                  <p className="text-xs text-destructive mt-1">
+                    Your Whoop connection expired. Please reconnect to continue syncing.
+                  </p>
+                )}
               </div>
-              {whoopStatusQuery.data?.connected && whoopStatusQuery.data.connectedAt ? (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Connected since {format(new Date(whoopStatusQuery.data.connectedAt), "MMM d, yyyy")}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Sync your Whoop workouts automatically.
-                </p>
-              )}
-              {whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid && (
-                <p className="text-xs text-destructive mt-1">
-                  Your Whoop connection expired. Please reconnect to continue syncing.
-                </p>
-              )}
+              <div className="flex gap-2">
+                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => whoopDisconnectMutation.mutate()}
+                    disabled={whoopDisconnectMutation.isPending}
+                  >
+                    {whoopDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                  </Button>
+                ) : (
+                  <a
+                    href={`${env.VITE_SERVER_URL}/api/whoop/connect`}
+                    className={buttonVariants({ size: "sm" })}
+                  >
+                    Connect
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="flex gap-2">
-              {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => whoopDisconnectMutation.mutate()}
-                  disabled={whoopDisconnectMutation.isPending}
-                >
-                  {whoopDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                </Button>
-              ) : (
-                <a
-                  href={`${env.VITE_SERVER_URL}/api/whoop/connect`}
-                  className={buttonVariants({ size: "sm" })}
-                >
-                  Connect
-                </a>
-              )}
-            </div>
+
+            {/* Webhook controls — only shown when connected */}
+            {whoopStatusQuery.data?.connected && (
+              <div className="flex flex-col gap-3 border-t pt-3">
+                {/* Auto-import toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Auto-import workouts</p>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically import workouts when they complete on your Whoop.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={webhookStatusQuery.data?.autoImportEnabled ?? false}
+                    onCheckedChange={(checked) =>
+                      setAutoImportMutation.mutate({ enabled: checked })
+                    }
+                    disabled={setAutoImportMutation.isPending}
+                    aria-label="Auto-import Whoop workouts"
+                  />
+                </div>
+
+                {/* Notify on auto-import toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Notify me on auto-import</p>
+                    <p className="text-xs text-muted-foreground">
+                      Receive an in-app notification each time a Whoop workout is imported.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={webhookStatusQuery.data?.notifyOnAutoImport ?? false}
+                    onCheckedChange={(checked) =>
+                      setNotifyOnAutoImportMutation.mutate({ enabled: checked })
+                    }
+                    disabled={setNotifyOnAutoImportMutation.isPending}
+                    aria-label="Notify on Whoop auto-import"
+                  />
+                </div>
+
+                {/* Backfill progress */}
+                {webhookStatusQuery.data?.backfill?.running && (
+                  <div className="flex items-center justify-between gap-3 bg-muted/50 border rounded px-3 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      Importing {webhookStatusQuery.data.backfill.importedCount} workouts&hellip;
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => stopBackfillMutation.mutate()}
+                      disabled={stopBackfillMutation.isPending}
+                    >
+                      Skip
+                    </Button>
+                  </div>
+                )}
+
+                {/* Last synced timestamp */}
+                {webhookStatusQuery.data?.subscribed && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Last synced</p>
+                    <p className="text-xs text-muted-foreground">
+                      {webhookStatusQuery.data.lastReceivedAt
+                        ? formatDistanceToNow(new Date(webhookStatusQuery.data.lastReceivedAt), { addSuffix: true })
+                        : "never"}
+                    </p>
+                  </div>
+                )}
+
+                {/* Invalid / unconfigured webhook banner */}
+                {webhookStatusQuery.data?.subscribed === false && (
+                  <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    <p className="text-xs text-amber-800">
+                      Webhook not configured.{" "}
+                      <a
+                        href="https://developer.whoop.com/docs/developing/webhooks/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        Set up your webhook URL and secret
+                      </a>{" "}
+                      in the Whoop Developer Dashboard, then add{" "}
+                      <code className="font-mono">WHOOP_WEBHOOK_SECRET</code> to your server environment.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

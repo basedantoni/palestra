@@ -9,6 +9,8 @@ import { preferencesRouter } from "./preferences";
 import { templatesRouter } from "./templates";
 import { tcxImportRouter } from "./tcx-import";
 import { whoopRouter } from "./whoop";
+import { whoopRecoveryRouter } from "./whoop-recovery";
+import { whoopSleepRouter } from "./whoop-sleep";
 import { workoutsRouter } from "./workouts";
 
 export const appRouter = router({
@@ -32,5 +34,7 @@ export const appRouter = router({
   import: importRouter,
   tcxImport: tcxImportRouter,
   whoop: whoopRouter,
+  whoopSleep: whoopSleepRouter,
+  whoopRecovery: whoopRecoveryRouter,
 });
 export type AppRouter = typeof appRouter;

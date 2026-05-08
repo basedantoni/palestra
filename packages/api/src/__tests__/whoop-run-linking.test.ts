@@ -105,6 +105,7 @@ vi.mock("../lib/muscle-group-volume-db", () => ({
 vi.mock("../lib/whoop-client", () => ({
   WHOOP_API_BASE: "https://api.prod.whoop.com/developer/v1",
   getValidWhoopAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
+  resolveWhoopExerciseId: vi.fn().mockResolvedValue(null),
 }));
 
 import { appRouter } from "../routers/index";

@@ -92,6 +92,20 @@
       "when": 1777525200000,
       "tag": "0012_repair_exercise_log_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777926843706,
+      "tag": "0013_chilly_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777926843707,
+      "tag": "0014_whoop_workout_imported_notification",
+      "breakpoints": true
     }
   ]
 }

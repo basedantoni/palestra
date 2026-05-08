@@ -229,3 +229,35 @@ export function whoopSportIdToWorkoutType(sportId: number): WorkoutType {
 export function whoopSportIdToName(sportId: number): string {
   return WHOOP_SPORT_ID_TO_NAME[sportId] ?? "Unknown Activity";
 }
+
+/**
+ * Maps Whoop sport_name (lowercase) to cardioSubtype enum value.
+ * Only sports that have a corresponding cardioSubtype are included.
+ * Used when auto-importing Whoop activities to attach the right exercise ID.
+ */
+export const WHOOP_SPORT_NAME_TO_CARDIO_SUBTYPE: Record<string, string> = {
+  running: "running",
+  cycling: "cycling",
+  swimming: "swimming",
+  rowing: "rowing",
+};
+
+/**
+ * Returns the cardioSubtype for a Whoop sport, or null if none applies.
+ * Uses sport_name as primary lookup (v2 API), falls back to sport_id.
+ */
+export function whoopSportToCardioSubtype(sportId: number, sportName?: string): string | null {
+  if (sportName) {
+    const byName = WHOOP_SPORT_NAME_TO_CARDIO_SUBTYPE[sportName.toLowerCase().trim()];
+    if (byName) return byName;
+  }
+  // Fallback: sport_id-based lookup for known IDs
+  const SPORT_ID_TO_SUBTYPE: Record<number, string> = {
+    1: "running",
+    16: "cycling",
+    25: "swimming",
+    35: "rowing",
+    73: "cycling",
+  };
+  return SPORT_ID_TO_SUBTYPE[sportId] ?? null;
+}

@@ -14,6 +14,95 @@ import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
+import { decryptToken, encryptToken } from "../lib/token-encryption";
+import { env } from "@src/env/server";
+import {
+  getBackfillState,
+  triggerBackfill,
+  stopBackfill as stopBackfillState,
+} from "../lib/whoop-backfill";
+
+/** Whoop v1 webhook API base (subscription management uses v1, not v2) */
+const WHOOP_WEBHOOK_API_BASE = "https://api.prod.whoop.com/developer/v1";
+
+/** All event types we subscribe to */
+const WHOOP_WEBHOOK_EVENT_TYPES = [
+  "workout.updated",
+  "workout.deleted",
+  "sleep.created",
+  "sleep.updated",
+  "sleep.deleted",
+  "recovery.created",
+  "recovery.updated",
+  "recovery.deleted",
+];
+
+/** 7-day threshold for isValid */
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes a Whoop webhook subscription. Best-effort — logs but does not throw.
+ */
+async function deleteWhoopSubscription(
+  subscriptionId: string,
+  accessToken: string,
+): Promise<void> {
+  try {
+    const res = await fetch(
+      `${WHOOP_WEBHOOK_API_BASE}/webhook/${subscriptionId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    if (!res.ok) {
+      console.warn(
+        `[whoop] Failed to delete subscription ${subscriptionId}: ${res.status}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[whoop] Error deleting subscription ${subscriptionId}:`,
+      err,
+    );
+  }
+}
+
+interface WhoopSubscriptionResponse {
+  id: string;
+  secret: string;
+}
+
+/**
+ * Registers a new Whoop webhook subscription.
+ * Returns { id, secret } on success, throws on failure.
+ */
+async function registerWhoopSubscription(
+  accessToken: string,
+  serverBaseUrl: string,
+): Promise<WhoopSubscriptionResponse> {
+  const webhookUrl = `${serverBaseUrl}/api/whoop/webhook`;
+  const res = await fetch(`${WHOOP_WEBHOOK_API_BASE}/webhook`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url: webhookUrl,
+      event_types: WHOOP_WEBHOOK_EVENT_TYPES,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Whoop webhook registration failed: ${res.status} ${text}`,
+    );
+  }
+
+  return (await res.json()) as WhoopSubscriptionResponse;
+}
 
 const toIsoStart = (s: string) =>
   s.includes("T") ? s : `${s}T00:00:00.000Z`;
@@ -54,6 +143,155 @@ interface WhoopWorkoutListResponse {
 
 export const whoopRouter = router({
   /**
+   * Returns the webhook subscription status for the authenticated user.
+   * isValid = subscribed AND (lastReceivedAt is within 7 days OR null but subscribed).
+   */
+  webhookStatus: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+
+    const [connection] = await db
+      .select({
+        webhookSubscriptionId: whoopConnection.webhookSubscriptionId,
+        webhookLastReceivedAt: whoopConnection.webhookLastReceivedAt,
+        autoImportEnabled: whoopConnection.autoImportEnabled,
+        notifyOnAutoImport: whoopConnection.notifyOnAutoImport,
+      })
+      .from(whoopConnection)
+      .where(eq(whoopConnection.userId, userId))
+      .limit(1);
+
+    if (!connection) {
+      return {
+        subscribed: false,
+        isValid: false,
+        lastReceivedAt: null,
+        autoImportEnabled: false,
+        notifyOnAutoImport: false,
+        backfill: null,
+      };
+    }
+
+    // v2 webhooks: Whoop signs with the OAuth client secret (WHOOP_CLIENT_SECRET).
+    // "subscribed" = client secret is configured (required for signature verification).
+    const subscribed = !!env.WHOOP_CLIENT_SECRET;
+    const lastReceivedAt = connection.webhookLastReceivedAt ?? null;
+
+    // isValid: secret configured, AND either never received (fresh) or received within 7 days
+    let isValid = false;
+    if (subscribed) {
+      isValid = lastReceivedAt === null || Date.now() - lastReceivedAt.getTime() < SEVEN_DAYS_MS;
+    }
+
+    const backfillState = getBackfillState(userId);
+    const backfill =
+      backfillState?.running === true
+        ? {
+            running: backfillState.running,
+            importedCount: backfillState.importedCount,
+            totalCount: backfillState.totalCount,
+          }
+        : null;
+
+    return {
+      subscribed,
+      isValid,
+      lastReceivedAt,
+      autoImportEnabled: connection.autoImportEnabled,
+      notifyOnAutoImport: connection.notifyOnAutoImport,
+      backfill,
+    };
+  }),
+
+  /**
+   * Updates the autoImportEnabled flag on the user's Whoop connection row.
+   * Returns { ok: true } on success.
+   */
+  setAutoImport: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const updated = await db
+        .update(whoopConnection)
+        .set({ autoImportEnabled: input.enabled })
+        .where(eq(whoopConnection.userId, userId));
+
+      // If no rows were updated, the user has no Whoop connection
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No Whoop connection found",
+        });
+      }
+
+      return { ok: true };
+    }),
+
+  /**
+   * Updates the notifyOnAutoImport flag on the user's Whoop connection row.
+   * Returns { ok: true } on success.
+   */
+  setNotifyOnAutoImport: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const updated = await db
+        .update(whoopConnection)
+        .set({ notifyOnAutoImport: input.enabled })
+        .where(eq(whoopConnection.userId, userId));
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No Whoop connection found",
+        });
+      }
+
+      return { ok: true };
+    }),
+
+  /**
+   * Whoop v2 webhooks are configured at the app level in the Whoop Developer Dashboard.
+   * There is no per-user registration API. This mutation is a no-op kept for UI compatibility.
+   * To fix a broken webhook, update WHOOP_WEBHOOK_SECRET in the server env and redeploy.
+   */
+  reregisterWebhook: protectedProcedure.mutation(async () => {
+    throw new TRPCError({
+      code: "METHOD_NOT_SUPPORTED",
+      message:
+        "Whoop v2 webhooks are configured in the Whoop Developer Dashboard, not via API. Update WHOOP_WEBHOOK_SECRET in your server environment to rotate the signing secret.",
+    });
+  }),
+
+  /**
+   * Triggers a backfill of Whoop activities for the past `days` days (default 30).
+   * Fires async via setImmediate — returns { ok: true } immediately.
+   */
+  triggerBackfill: protectedProcedure
+    .input(z.object({ days: z.number().min(1).max(90).default(30) }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const days = input?.days ?? 30;
+
+      setImmediate(() => {
+        triggerBackfill(userId, days);
+      });
+
+      return { ok: true };
+    }),
+
+  /**
+   * Signals the running backfill to stop at the next iteration.
+   * Returns { ok: true } immediately.
+   */
+  stopBackfill: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    stopBackfillState(userId);
+    return { ok: true };
+  }),
+
+  /**
    * Returns the current Whoop connection status for the authenticated user.
    */
   connectionStatus: protectedProcedure.query(async ({ ctx }) => {
@@ -87,10 +325,35 @@ export const whoopRouter = router({
   }),
 
   /**
-   * Disconnects the Whoop integration by deleting the connection row.
+   * Disconnects the Whoop integration.
+   * Deletes the Whoop webhook subscription first (best-effort), then removes the local row.
    */
   disconnect: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+
+    const encryptionKey = env.TOKEN_ENCRYPTION_KEY;
+
+    // Fetch the connection to get the subscription ID and access token
+    const [connection] = await db
+      .select({
+        webhookSubscriptionId: whoopConnection.webhookSubscriptionId,
+        accessToken: whoopConnection.accessToken,
+        tokenExpiresAt: whoopConnection.tokenExpiresAt,
+      })
+      .from(whoopConnection)
+      .where(eq(whoopConnection.userId, userId))
+      .limit(1);
+
+    // If there's an active subscription, delete it from Whoop first (best-effort)
+    if (connection?.webhookSubscriptionId && encryptionKey) {
+      try {
+        // Decrypt the access token we already fetched — avoid a second DB round-trip
+        const accessToken = decryptToken(connection.accessToken, encryptionKey);
+        await deleteWhoopSubscription(connection.webhookSubscriptionId, accessToken);
+      } catch (err) {
+        console.warn("[whoop] Could not delete subscription on disconnect:", err);
+      }
+    }
 
     await db.delete(whoopConnection).where(eq(whoopConnection.userId, userId));
 
