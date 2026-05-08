@@ -14,7 +14,7 @@ import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
-import { decryptToken, encryptToken } from "../lib/token-encryption";
+import { decryptToken } from "../lib/token-encryption";
 import { env } from "@src/env/server";
 import {
   getBackfillState,
@@ -22,20 +22,7 @@ import {
   stopBackfill as stopBackfillState,
 } from "../lib/whoop-backfill";
 
-/** Whoop v1 webhook API base (subscription management uses v1, not v2) */
 const WHOOP_WEBHOOK_API_BASE = "https://api.prod.whoop.com/developer/v1";
-
-/** All event types we subscribe to */
-const WHOOP_WEBHOOK_EVENT_TYPES = [
-  "workout.updated",
-  "workout.deleted",
-  "sleep.created",
-  "sleep.updated",
-  "sleep.deleted",
-  "recovery.created",
-  "recovery.updated",
-  "recovery.deleted",
-];
 
 /** 7-day threshold for isValid */
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -66,42 +53,6 @@ async function deleteWhoopSubscription(
       err,
     );
   }
-}
-
-interface WhoopSubscriptionResponse {
-  id: string;
-  secret: string;
-}
-
-/**
- * Registers a new Whoop webhook subscription.
- * Returns { id, secret } on success, throws on failure.
- */
-async function registerWhoopSubscription(
-  accessToken: string,
-  serverBaseUrl: string,
-): Promise<WhoopSubscriptionResponse> {
-  const webhookUrl = `${serverBaseUrl}/api/whoop/webhook`;
-  const res = await fetch(`${WHOOP_WEBHOOK_API_BASE}/webhook`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url: webhookUrl,
-      event_types: WHOOP_WEBHOOK_EVENT_TYPES,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Whoop webhook registration failed: ${res.status} ${text}`,
-    );
-  }
-
-  return (await res.json()) as WhoopSubscriptionResponse;
 }
 
 const toIsoStart = (s: string) =>

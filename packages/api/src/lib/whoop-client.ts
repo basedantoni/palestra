@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { db } from "@src/db";
 import { exercise, whoopConnection } from "@src/db/schema/index";
