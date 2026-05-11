@@ -14,6 +14,7 @@ export const env = createEnv({
     WHOOP_CLIENT_SECRET: z.string().min(1).optional(),
     WHOOP_REDIRECT_URI: z.string().url().optional(),
     TOKEN_ENCRYPTION_KEY: z.string().length(64).optional(),
+    INTERNAL_API_SECRET: z.string().min(32).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

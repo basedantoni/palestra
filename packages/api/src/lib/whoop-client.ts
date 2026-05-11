@@ -129,11 +129,41 @@ export async function getValidWhoopAccessToken(userId: string): Promise<string> 
 
   const decryptedRefresh = decryptToken(connection.refreshToken, encryptionKey);
 
-  // Refresh if the token expires within the next 5 minutes
-  const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
-  if (connection.tokenExpiresAt <= fiveMinutesFromNow) {
+  // Refresh if the token expires within the next 30 minutes
+  const thirtyMinutesFromNow = new Date(Date.now() + 30 * 60 * 1000);
+  if (connection.tokenExpiresAt <= thirtyMinutesFromNow) {
     return refreshWhoopToken(userId, decryptedRefresh);
   }
 
   return decryptToken(connection.accessToken, encryptionKey);
+}
+
+/**
+ * Force-refreshes all valid Whoop connections, bypassing the expiry-window check.
+ * Called by the internal cron endpoint to prevent refresh tokens from going stale.
+ */
+export async function refreshAllValidWhoopTokens(): Promise<{ refreshed: number; failed: number }> {
+  const encryptionKey = env.TOKEN_ENCRYPTION_KEY;
+  if (!encryptionKey) return { refreshed: 0, failed: 0 };
+
+  const connections = await db
+    .select({ userId: whoopConnection.userId, refreshToken: whoopConnection.refreshToken })
+    .from(whoopConnection)
+    .where(eq(whoopConnection.isValid, true));
+
+  let refreshed = 0;
+  let failed = 0;
+
+  for (const conn of connections) {
+    try {
+      const decryptedRefresh = decryptToken(conn.refreshToken, encryptionKey);
+      await refreshWhoopToken(conn.userId, decryptedRefresh);
+      refreshed++;
+    } catch (err) {
+      console.error(`[whoop] Failed to refresh token for user ${conn.userId}:`, err);
+      failed++;
+    }
+  }
+
+  return { refreshed, failed };
 }

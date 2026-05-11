@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { whoopOAuthApp } from "./whoop-oauth";
+import { internalApp } from "./internal";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 120;
@@ -84,6 +85,7 @@ app.use(
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/whoop", whoopOAuthApp);
+app.route("/api/internal", internalApp);
 
 app.use(
   "/trpc/*",
