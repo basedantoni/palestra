@@ -102,8 +102,12 @@ app.get("/", (c) => {
 });
 
 import { serve } from "@hono/node-server";
+import { drainPendingWhoopEvents } from "@src/api/lib/whoop-webhook-drain";
+import { getInFlightCount, getInFlightPromises } from "@src/api/lib/whoop-inflight";
 
-serve(
+const SHUTDOWN_TIMEOUT_MS = 38_000; // fly.toml kill_timeout = 45s → 7s safety margin
+
+const server = serve(
   {
     fetch: app.fetch,
     hostname: "0.0.0.0",
@@ -111,5 +115,44 @@ serve(
   },
   (info) => {
     console.log(`Server is running on http://${info.address}:${info.port}`);
+    drainPendingWhoopEvents().catch((err) =>
+      console.error("[whoop-drain] Startup drain failed:", err),
+    );
   },
 );
+
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[shutdown] Received ${signal}, draining ${getInFlightCount()} in-flight processors`);
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  }).catch((err) => console.error("[shutdown] server.close error:", err));
+
+  const inFlight = getInFlightPromises();
+  if (inFlight.length > 0) {
+    const timeout = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), SHUTDOWN_TIMEOUT_MS),
+    );
+    const result = await Promise.race([
+      Promise.allSettled(inFlight).then(() => "drained" as const),
+      timeout,
+    ]);
+    if (result === "timeout") {
+      console.warn(
+        `[shutdown] Timed out after ${SHUTDOWN_TIMEOUT_MS}ms with ${getInFlightCount()} processors still running`,
+      );
+    } else {
+      console.log("[shutdown] All in-flight processors drained");
+    }
+  }
+
+  console.log("[shutdown] Graceful shutdown complete");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));

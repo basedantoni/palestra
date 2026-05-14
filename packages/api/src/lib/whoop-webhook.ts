@@ -23,6 +23,8 @@ import { createHmac, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypt
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
+import { trackInFlight } from "./whoop-inflight";
+
 import { db } from "@src/db";
 import {
   exerciseLog,
@@ -733,6 +735,35 @@ export async function recoveryDeleteProcessor(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// dispatchWhoopEvent — single place that maps eventType → processor
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Maps an event type to the corresponding processor and invokes it.
+ * Returns the promise if a processor was dispatched, or null if the event type
+ * is unknown or has no resourceId.
+ */
+export function dispatchWhoopEvent(args: {
+  eventId: string;
+  userId: string;
+  eventType: string;
+  resourceId: string | null;
+}): Promise<void> | null {
+  const { eventId, userId, eventType, resourceId } = args;
+  if (!resourceId) return null;
+
+  switch (eventType) {
+    case "workout.updated":  return workoutProcessor(eventId, userId, resourceId);
+    case "workout.deleted":  return workoutDeleteProcessor(eventId, userId, resourceId);
+    case "sleep.updated":    return sleepProcessor(eventId, userId, resourceId);
+    case "sleep.deleted":    return sleepDeleteProcessor(eventId, userId, resourceId);
+    case "recovery.updated": return recoveryProcessor(eventId, userId, resourceId);
+    case "recovery.deleted": return recoveryDeleteProcessor(eventId, userId, resourceId);
+    default: return null;
+  }
+}
+
 whoopWebhookApp.post("/webhook", async (c) => {
   // 1. Buffer raw body before any parsing (required for HMAC)
   const rawBody = await c.req.text();
@@ -816,38 +847,25 @@ whoopWebhookApp.post("/webhook", async (c) => {
 
   // 6. Return 200 immediately, process async
   const userId = connection.userId;
-  setImmediate(() => {
-    const skip = () =>
-      db.update(whoopWebhookEvent)
+  setImmediate(async () => {
+    // Atomic claim — prevents double dispatch on deploy overlap with startup drain
+    const result = await db
+      .update(whoopWebhookEvent)
+      .set({ status: "processing" })
+      .where(and(eq(whoopWebhookEvent.id, traceId), eq(whoopWebhookEvent.status, "pending")));
+
+    if (result.rowCount === 0) return; // already claimed by drain or duplicate delivery
+
+    const promise = dispatchWhoopEvent({ eventId: traceId, userId, eventType, resourceId });
+    if (!promise) {
+      await db
+        .update(whoopWebhookEvent)
         .set({ status: "skipped", processedAt: new Date() })
         .where(eq(whoopWebhookEvent.id, traceId))
         .catch((err) => console.error("[whoop-webhook] Failed to skip event:", err));
-
-    const done = () =>
-      db.update(whoopWebhookEvent)
-        .set({ status: "processed", processedAt: new Date() })
-        .where(eq(whoopWebhookEvent.id, traceId))
-        .catch((err) => console.error("[whoop-webhook] Failed to mark event processed:", err));
-
-    if (!resourceId) { skip(); return; }
-
-    switch (eventType) {
-      case "workout.updated":
-        workoutProcessor(traceId, userId, resourceId); break;
-      case "workout.deleted":
-        workoutDeleteProcessor(traceId, userId, resourceId); break;
-      case "sleep.updated":
-        sleepProcessor(traceId, userId, resourceId); break;
-      case "sleep.deleted":
-        sleepDeleteProcessor(traceId, userId, resourceId); break;
-      case "recovery.updated":
-        recoveryProcessor(traceId, userId, resourceId); break;
-      case "recovery.deleted":
-        recoveryDeleteProcessor(traceId, userId, resourceId); break;
-      default:
-        console.log(`[whoop-webhook] Unknown event type: ${eventType}`);
-        done();
+      return;
     }
+    trackInFlight(promise);
   });
 
   return c.json({ ok: true }, 200);

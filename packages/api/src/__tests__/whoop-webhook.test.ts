@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain } = vi.hoisted(() => {
+const { mockDb, makeChain, mockTrackInFlight } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
       {},
@@ -48,10 +48,17 @@ const { mockDb, makeChain } = vi.hoisted(() => {
     query: {},
   };
 
-  return { mockDb, makeChain };
+  const mockTrackInFlight = vi.fn();
+
+  return { mockDb, makeChain, mockTrackInFlight };
 });
 
 vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("../lib/whoop-inflight", () => ({
+  trackInFlight: mockTrackInFlight,
+  getInFlightCount: vi.fn().mockReturnValue(0),
+  getInFlightPromises: vi.fn().mockReturnValue([]),
+}));
 
 // v2: webhook secret is an app-level env var, not per-user DB field
 vi.mock("@src/env/server", () => ({
@@ -161,6 +168,10 @@ function mockUpdateOk() {
 describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // Default fallback: any un-mocked db.update() call returns a safe chain.
+    // This prevents unhandled errors from the async setImmediate claim path
+    // in tests that don't care about the hot path internals.
+    mockDb.update.mockReturnValue(makeChain({ rowCount: 0 }));
   });
 
   it("a. valid HMAC signature → 200 and event row created with status processed", async () => {
@@ -299,5 +310,42 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     expect(res.status).toBe(401);
     expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("g. hot path fires atomic claim UPDATE (status='processing') and calls trackInFlight on success", async () => {
+    const body = buildPayload();
+    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+
+    // Route handler mocks: connection lookup + insert + webhookLastReceivedAt update
+    mockConnectionFound();
+    mockInsertNoConflict();
+    // Update #1: webhookLastReceivedAt
+    mockUpdateOk();
+    // Update #2: atomic claim — returns rowCount=1 (successfully claimed)
+    mockDb.update.mockReturnValueOnce(makeChain({ rowCount: 1 }));
+
+    // Processor internals: workoutProcessor checks connection then fetches from Whoop.
+    // Return a connection with autoImportEnabled=false so the processor short-circuits
+    // to markEventSkipped (one more update call) without making any real network requests.
+    mockDb.select.mockReturnValue(
+      makeChain([{ autoImportEnabled: false, notifyOnAutoImport: false }]),
+    );
+    // Update #3: markEventSkipped inside the processor
+    mockUpdateOk();
+
+    const res = await sendWebhook({ body, signature: sig });
+    expect(res.status).toBe(200);
+
+    // Flush the setImmediate callback + any async continuations from it
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    // Update #1 (webhookLastReceivedAt) + Update #2 (atomic claim) = 2 minimum
+    // Update #3 (markEventSkipped) may also have fired by now
+    expect(mockDb.update.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    // trackInFlight should have been called with the processor promise
+    expect(mockTrackInFlight).toHaveBeenCalledOnce();
+    expect(mockTrackInFlight.mock.calls[0]![0]).toBeInstanceOf(Promise);
   });
 });
