@@ -230,10 +230,17 @@ function mockExistingManualWorkout() {
   );
 }
 
-/** Setup exercise log lookup for an existing workout */
+/**
+ * Setup exercise log lookup for an existing workout.
+ *
+ * The firstLog lookup now runs inside the transaction (tx.select) via the
+ * shared upsertWhoopWorkout helper. After the log update, recordRunningPrs
+ * issues a further tx.select for the current PR best — that read defaults to
+ * [] (no prior PR) via mockTx.select.mockReturnValue in beforeEach.
+ */
 function mockExistingExerciseLog() {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ id: LOG_ID }]),
+  mockTx.select.mockReturnValueOnce(
+    makeChain([{ id: LOG_ID, exerciseId: null }]),
   );
 }
 
@@ -263,6 +270,7 @@ describe("workoutProcessor — new import", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
@@ -338,6 +346,7 @@ describe("workoutProcessor — auto-imported update (source = whoop)", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
@@ -370,6 +379,7 @@ describe("workoutProcessor — manual-link update (source != whoop)", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
@@ -440,6 +450,7 @@ describe("workoutProcessor — INCOMPLETE score_state", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
@@ -590,6 +601,7 @@ describe("workoutProcessor — notification emission", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
@@ -725,6 +737,7 @@ describe("workoutProcessor — recalculations", () => {
     vi.resetAllMocks();
     restoreRecalcMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
     mockDbUpdate();
   });
 
