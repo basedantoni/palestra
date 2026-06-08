@@ -395,3 +395,116 @@ describe("analytics.weeklyRunDistance", () => {
     expect(typeof result[0]!.distanceMeter).toBe("number");
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tests: analytics.personalRecords (PR progression timeline)
+// ────────────────────────────────────────────────────────────────────────────
+describe("analytics.personalRecords", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns recordsByType[].progression[] ordered oldest → newest with chained previousRecordValue", async () => {
+    const d1 = new Date("2026-01-01T12:00:00.000Z");
+    const d2 = new Date("2026-02-01T12:00:00.000Z");
+    const d3 = new Date("2026-03-01T12:00:00.000Z");
+
+    // Rows arrive unsorted from the DB; the query must order them.
+    mockDb.select.mockReturnValueOnce(
+      makeChain([
+        {
+          id: "pr-3",
+          exerciseId: "ex-1",
+          recordType: "max_weight",
+          value: 165,
+          previousRecordValue: 150,
+          dateAchieved: d3,
+          exerciseName: "Bench Press",
+        },
+        {
+          id: "pr-1",
+          exerciseId: "ex-1",
+          recordType: "max_weight",
+          value: 140,
+          previousRecordValue: null,
+          dateAchieved: d1,
+          exerciseName: "Bench Press",
+        },
+        {
+          id: "pr-2",
+          exerciseId: "ex-1",
+          recordType: "max_weight",
+          value: 150,
+          previousRecordValue: 140,
+          dateAchieved: d2,
+          exerciseName: "Bench Press",
+        },
+      ]),
+    );
+
+    const result = await userCaller.analytics.personalRecords();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.exerciseId).toBe("ex-1");
+    expect(result[0]!.exerciseName).toBe("Bench Press");
+    expect(result[0]!.recordsByType).toHaveLength(1);
+
+    const byType = result[0]!.recordsByType[0]!;
+    expect(byType.recordType).toBe("max_weight");
+    expect(byType.currentBest).toBe(165);
+
+    const progression = byType.progression;
+    // Oldest → newest.
+    expect(progression.map((p) => p.dateAchieved)).toEqual([d1, d2, d3]);
+    expect(progression.map((p) => p.value)).toEqual([140, 150, 165]);
+
+    // First entry has no prior.
+    expect(progression[0]!.previousRecordValue).toBeNull();
+    // Subsequent entries chain to the prior entry's value.
+    for (let i = 1; i < progression.length; i++) {
+      expect(progression[i]!.previousRecordValue).toBe(
+        progression[i - 1]!.value,
+      );
+    }
+  });
+
+  it("returns an empty array when the user has no personal records", async () => {
+    mockDb.select.mockReturnValueOnce(makeChain([]));
+
+    const result = await userCaller.analytics.personalRecords();
+
+    expect(result).toEqual([]);
+  });
+
+  it("groups multiple record types under a single exercise", async () => {
+    const d = new Date("2026-03-04T12:00:00.000Z");
+    mockDb.select.mockReturnValueOnce(
+      makeChain([
+        {
+          id: "pr-w",
+          exerciseId: "ex-1",
+          recordType: "max_weight",
+          value: 150,
+          previousRecordValue: null,
+          dateAchieved: d,
+          exerciseName: "Bench Press",
+        },
+        {
+          id: "pr-r",
+          exerciseId: "ex-1",
+          recordType: "max_reps",
+          value: 12,
+          previousRecordValue: null,
+          dateAchieved: d,
+          exerciseName: "Bench Press",
+        },
+      ]),
+    );
+
+    const result = await userCaller.analytics.personalRecords();
+
+    expect(result).toHaveLength(1);
+    const types = result[0]!.recordsByType.map((r) => r.recordType).sort();
+    expect(types).toEqual(["max_reps", "max_weight"]);
+  });
+});

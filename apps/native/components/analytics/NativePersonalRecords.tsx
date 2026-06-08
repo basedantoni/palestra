@@ -8,17 +8,22 @@ import {
   isPrImprovement,
 } from "@src/api/lib/pr-formatters";
 
-interface PersonalRecordEntry {
-  recordType: string;
+interface ProgressionEntry {
   value: number;
-  delta: number | null;
   dateAchieved: Date | string;
+  previousRecordValue: number | null;
+}
+
+interface RecordsByType {
+  recordType: string;
+  currentBest: number;
+  progression: ProgressionEntry[];
 }
 
 interface ExerciseGroup {
   exerciseId: string;
   exerciseName: string;
-  records: PersonalRecordEntry[];
+  recordsByType: RecordsByType[];
 }
 
 interface NativePersonalRecordsProps {
@@ -27,15 +32,71 @@ interface NativePersonalRecordsProps {
   distanceUnit?: "mi" | "km";
 }
 
+function formatDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ProgressionTimeline({
+  recordType,
+  progression,
+  distanceUnit,
+}: {
+  recordType: string;
+  progression: ProgressionEntry[];
+  distanceUnit: "mi" | "km";
+}) {
+  // Render newest → oldest so the most recent PR reads first.
+  const ordered = [...progression].reverse();
+
+  return (
+    <View className="mt-2 gap-2 border-l border-border pl-3">
+      {ordered.map((entry, i) => {
+        const delta =
+          entry.previousRecordValue != null
+            ? entry.value - entry.previousRecordValue
+            : null;
+        return (
+          <View key={i}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-sm font-medium text-foreground">
+                {formatPrValue(recordType, entry.value, distanceUnit)}
+              </Text>
+              {delta != null ? (
+                <Text
+                  className={`text-xs font-medium ${
+                    isPrImprovement(recordType, delta)
+                      ? "text-green-600"
+                      : "text-red-500"
+                  }`}
+                >
+                  {formatPrDelta(recordType, delta, distanceUnit)}
+                </Text>
+              ) : (
+                <Text className="text-xs text-muted">First PR</Text>
+              )}
+            </View>
+            <Text className="text-xs text-muted">
+              {formatDate(entry.dateAchieved)}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function NativePersonalRecords({
   data,
   isLoading,
   distanceUnit = "mi",
 }: NativePersonalRecordsProps) {
   if (isLoading) {
-    return (
-      <View className="h-32 bg-muted rounded-md animate-pulse" />
-    );
+    return <View className="h-32 bg-muted rounded-md animate-pulse" />;
   }
 
   if (data.length === 0) {
@@ -55,30 +116,26 @@ export function NativePersonalRecords({
           <Text className="text-sm font-semibold text-foreground mb-3">
             {exercise.exerciseName}
           </Text>
-          <View className="gap-2">
-            {exercise.records.map((record, i) => (
-              <View key={i} className="flex-row items-center justify-between">
-                <View className="bg-secondary px-2 py-0.5 rounded">
-                  <Text className="text-xs text-secondary-foreground">
-                    {RECORD_TYPE_LABELS[record.recordType] ?? record.recordType}
+          <View className="gap-4">
+            {exercise.recordsByType.map((rt) => (
+              <View key={rt.recordType}>
+                <View className="flex-row items-center justify-between">
+                  <View className="bg-secondary px-2 py-0.5 rounded">
+                    <Text className="text-xs text-secondary-foreground">
+                      {RECORD_TYPE_LABELS[rt.recordType] ?? rt.recordType}
+                    </Text>
+                  </View>
+                  <Text className="text-base font-bold text-foreground">
+                    {formatPrValue(rt.recordType, rt.currentBest, distanceUnit)}
                   </Text>
                 </View>
-                <Text className="text-sm font-medium text-foreground">
-                  {formatPrValue(record.recordType, record.value, distanceUnit)}
-                </Text>
-                {record.delta != null ? (
-                  <Text
-                    className={`text-xs font-medium ${
-                      isPrImprovement(record.recordType, record.delta)
-                        ? "text-green-600"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {formatPrDelta(record.recordType, record.delta, distanceUnit)}
-                  </Text>
-                ) : (
-                  <Text className="text-xs text-muted">First PR</Text>
-                )}
+                {rt.progression.length > 1 ? (
+                  <ProgressionTimeline
+                    recordType={rt.recordType}
+                    progression={rt.progression}
+                    distanceUnit={distanceUnit}
+                  />
+                ) : null}
               </View>
             ))}
           </View>
