@@ -100,13 +100,13 @@ export function AnalyticsDashboard() {
     return (prData.data ?? [])
       .map((exercise) => ({
         ...exercise,
-        records: exercise.records.filter(
-          (record) =>
-            record.recordType === "best_pace" ||
-            record.recordType === "longest_distance",
+        recordsByType: exercise.recordsByType.filter(
+          (rt) =>
+            rt.recordType === "best_pace" ||
+            rt.recordType === "longest_distance",
         ),
       }))
-      .filter((exercise) => exercise.records.length > 0);
+      .filter((exercise) => exercise.recordsByType.length > 0);
   }, [prData.data]);
 
   return (

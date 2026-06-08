@@ -488,6 +488,46 @@ export function buildFrequencyMap(
 // groupPersonalRecordsByExercise
 // ---------------------------------------------------------------------------
 
+export type RecordType =
+  | "max_weight"
+  | "max_reps"
+  | "max_volume"
+  | "best_pace"
+  | "longest_distance";
+
+export interface PrProgressionEntry {
+  value: number;
+  dateAchieved: Date;
+  previousRecordValue: number | null;
+}
+
+export interface PrRecordsByType {
+  recordType: RecordType;
+  currentBest: number;
+  progression: PrProgressionEntry[];
+}
+
+export interface PrExerciseGroup {
+  exerciseId: string;
+  exerciseName: string;
+  recordsByType: PrRecordsByType[];
+}
+
+/**
+ * Groups append-only personal-record rows into a per-exercise, per-record-type
+ * progression timeline.
+ *
+ * Each input row is one PR achievement (one row per
+ * userId/exerciseId/recordType/workoutId), carrying its own `value`,
+ * `dateAchieved`, and the `previousRecordValue` it beat.
+ *
+ * Output guarantees:
+ *  - `recordsByType[].progression[]` is ordered oldest → newest (dateAchieved ASC).
+ *  - `progression[0].previousRecordValue` is `null` (the first PR has no prior).
+ *  - Subsequent entries chain: each `previousRecordValue` equals the prior
+ *    entry's `value`.
+ *  - `currentBest` is the value of the newest progression entry.
+ */
 export function groupPersonalRecordsByExercise(
   records: Array<{
     exerciseId: string | null;
@@ -497,53 +537,59 @@ export function groupPersonalRecordsByExercise(
     previousRecordValue: number | null;
     dateAchieved: Date;
   }>,
-): Array<{
-  exerciseId: string;
-  exerciseName: string;
-  records: Array<{
-    recordType: string;
-    value: number;
-    delta: number | null;
-    dateAchieved: Date;
-  }>;
-}> {
-  const map = new Map<
+): PrExerciseGroup[] {
+  const exerciseMap = new Map<
     string,
     {
       exerciseName: string;
-      records: Array<{
-        recordType: string;
-        value: number;
-        delta: number | null;
-        dateAchieved: Date;
-      }>;
+      byType: Map<string, PrProgressionEntry[]>;
     }
   >();
 
   for (const r of records) {
     if (r.exerciseId == null) continue;
 
-    const existing = map.get(r.exerciseId) ?? {
+    const exerciseEntry = exerciseMap.get(r.exerciseId) ?? {
       exerciseName: r.exerciseName ?? r.exerciseId,
-      records: [],
+      byType: new Map<string, PrProgressionEntry[]>(),
     };
 
-    existing.records.push({
-      recordType: r.recordType,
+    const progression = exerciseEntry.byType.get(r.recordType) ?? [];
+    progression.push({
       value: r.value,
-      delta:
-        r.previousRecordValue != null ? r.value - r.previousRecordValue : null,
       dateAchieved: r.dateAchieved,
+      previousRecordValue: r.previousRecordValue,
     });
+    exerciseEntry.byType.set(r.recordType, progression);
 
-    map.set(r.exerciseId, existing);
+    exerciseMap.set(r.exerciseId, exerciseEntry);
   }
 
-  return Array.from(map.entries()).map(([exerciseId, data]) => ({
+  return Array.from(exerciseMap.entries()).map(([exerciseId, data]) => ({
     exerciseId,
     exerciseName: data.exerciseName,
-    records: data.records.sort(
-      (a, b) => b.dateAchieved.getTime() - a.dateAchieved.getTime(),
-    ),
+    recordsByType: Array.from(data.byType.entries())
+      .map(([recordType, entries]) => {
+        // Order oldest → newest by dateAchieved.
+        const progression = entries
+          .slice()
+          .sort((a, b) => a.dateAchieved.getTime() - b.dateAchieved.getTime())
+          // Re-chain previousRecordValue from the sorted order so that
+          // progression[0] is null and each subsequent entry references the
+          // prior entry's value. This is robust even if the persisted
+          // previousRecordValue is stale or out of order.
+          .map((entry, i, all) => ({
+            value: entry.value,
+            dateAchieved: entry.dateAchieved,
+            previousRecordValue: i === 0 ? null : all[i - 1]!.value,
+          }));
+
+        return {
+          recordType: recordType as RecordType,
+          currentBest: progression[progression.length - 1]!.value,
+          progression,
+        };
+      })
+      .sort((a, b) => a.recordType.localeCompare(b.recordType)),
   }));
 }

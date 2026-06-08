@@ -9,23 +9,88 @@ import {
   isPrImprovement,
 } from "@src/api/lib/index";
 
-interface PersonalRecordEntry {
-  recordType: string;
+interface ProgressionEntry {
   value: number;
-  delta: number | null;
   dateAchieved: Date | string;
+  previousRecordValue: number | null;
+}
+
+interface RecordsByType {
+  recordType: string;
+  currentBest: number;
+  progression: ProgressionEntry[];
 }
 
 interface ExerciseGroup {
   exerciseId: string;
   exerciseName: string;
-  records: PersonalRecordEntry[];
+  recordsByType: RecordsByType[];
 }
 
 interface PersonalRecordsGridProps {
   data: ExerciseGroup[];
   isLoading: boolean;
   distanceUnit?: "mi" | "km";
+}
+
+function formatDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ProgressionTimeline({
+  recordType,
+  progression,
+  distanceUnit,
+}: {
+  recordType: string;
+  progression: ProgressionEntry[];
+  distanceUnit: "mi" | "km";
+}) {
+  // Render newest → oldest so the most recent PR reads first.
+  const ordered = [...progression].reverse();
+
+  return (
+    <ol className="mt-2 space-y-2 border-l border-border pl-3">
+      {ordered.map((entry, i) => {
+        const delta =
+          entry.previousRecordValue != null
+            ? entry.value - entry.previousRecordValue
+            : null;
+        return (
+          <li key={i} className="relative">
+            <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-border" />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">
+                {formatPrValue(recordType, entry.value, distanceUnit)}
+              </span>
+              {delta != null ? (
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    isPrImprovement(recordType, delta)
+                      ? "text-green-600"
+                      : "text-destructive",
+                  )}
+                >
+                  {formatPrDelta(recordType, delta, distanceUnit)}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">First PR</span>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {formatDate(entry.dateAchieved)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export function PersonalRecordsGrid({
@@ -37,7 +102,7 @@ export function PersonalRecordsGrid({
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-32" />
+          <Skeleton key={i} className="h-48" />
         ))}
       </div>
     );
@@ -62,28 +127,23 @@ export function PersonalRecordsGrid({
               {exercise.exerciseName}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {exercise.records.map((record, i) => (
-              <div key={i} className="flex items-center justify-between gap-2">
-                <Badge variant="outline" className="shrink-0 text-xs">
-                  {RECORD_TYPE_LABELS[record.recordType] ?? record.recordType}
-                </Badge>
-                <span className="text-sm font-medium">
-                  {formatPrValue(record.recordType, record.value, distanceUnit)}
-                </span>
-                {record.delta != null ? (
-                  <span
-                    className={cn(
-                      "text-xs font-medium",
-                      isPrImprovement(record.recordType, record.delta)
-                        ? "text-green-600"
-                        : "text-destructive",
-                    )}
-                  >
-                    {formatPrDelta(record.recordType, record.delta, distanceUnit)}
+          <CardContent className="space-y-4">
+            {exercise.recordsByType.map((rt) => (
+              <div key={rt.recordType}>
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="outline" className="shrink-0 text-xs">
+                    {RECORD_TYPE_LABELS[rt.recordType] ?? rt.recordType}
+                  </Badge>
+                  <span className="text-base font-bold">
+                    {formatPrValue(rt.recordType, rt.currentBest, distanceUnit)}
                   </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">First PR</span>
+                </div>
+                {rt.progression.length > 1 && (
+                  <ProgressionTimeline
+                    recordType={rt.recordType}
+                    progression={rt.progression}
+                    distanceUnit={distanceUnit}
+                  />
                 )}
               </div>
             ))}

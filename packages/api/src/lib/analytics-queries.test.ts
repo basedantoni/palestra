@@ -546,7 +546,7 @@ describe("groupPersonalRecordsByExercise", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("computes delta as value - previousRecordValue — value=150, prev=140 returns delta=10", () => {
+  it("groups records of the same exercise by recordType into recordsByType", () => {
     const records = [
       {
         exerciseId: "ex-1",
@@ -556,24 +556,136 @@ describe("groupPersonalRecordsByExercise", () => {
         previousRecordValue: 140,
         dateAchieved: baseDate,
       },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_reps",
+        value: 12,
+        previousRecordValue: null,
+        dateAchieved: baseDate,
+      },
     ];
     const result = groupPersonalRecordsByExercise(records);
-    expect(result[0]!.records[0]!.delta).toBe(10);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.recordsByType).toHaveLength(2);
+    const types = result[0]!.recordsByType.map((r) => r.recordType).sort();
+    expect(types).toEqual(["max_reps", "max_weight"]);
   });
 
-  it("delta is null when previousRecordValue is null (first PR ever)", () => {
+  it("orders progression oldest → newest by dateAchieved", () => {
+    const d1 = new Date("2026-01-01");
+    const d2 = new Date("2026-02-01");
+    const d3 = new Date("2026-03-01");
+    // Provide records out of chronological order on purpose.
+    const records = [
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 160,
+        previousRecordValue: 150,
+        dateAchieved: d3,
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 140,
+        previousRecordValue: null,
+        dateAchieved: d1,
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 150,
+        previousRecordValue: 140,
+        dateAchieved: d2,
+      },
+    ];
+    const result = groupPersonalRecordsByExercise(records);
+    const progression = result[0]!.recordsByType[0]!.progression;
+    expect(progression.map((p) => p.dateAchieved)).toEqual([d1, d2, d3]);
+    expect(progression.map((p) => p.value)).toEqual([140, 150, 160]);
+  });
+
+  it("first progression entry has previousRecordValue null", () => {
     const records = [
       {
         exerciseId: "ex-1",
         exerciseName: "Bench Press",
         recordType: "max_weight",
         value: 150,
-        previousRecordValue: null,
-        dateAchieved: baseDate,
+        // Even if the persisted value is non-null, progression[0] must be null.
+        previousRecordValue: 999,
+        dateAchieved: new Date("2026-01-01"),
       },
     ];
     const result = groupPersonalRecordsByExercise(records);
-    expect(result[0]!.records[0]!.delta).toBeNull();
+    expect(
+      result[0]!.recordsByType[0]!.progression[0]!.previousRecordValue,
+    ).toBeNull();
+  });
+
+  it("chains previousRecordValue: each entry matches the prior entry's value", () => {
+    const d1 = new Date("2026-01-01");
+    const d2 = new Date("2026-02-01");
+    const d3 = new Date("2026-03-01");
+    const records = [
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 140,
+        previousRecordValue: null,
+        dateAchieved: d1,
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 150,
+        previousRecordValue: 140,
+        dateAchieved: d2,
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 165,
+        previousRecordValue: 150,
+        dateAchieved: d3,
+      },
+    ];
+    const result = groupPersonalRecordsByExercise(records);
+    const progression = result[0]!.recordsByType[0]!.progression;
+    expect(progression[0]!.previousRecordValue).toBeNull();
+    for (let i = 1; i < progression.length; i++) {
+      expect(progression[i]!.previousRecordValue).toBe(progression[i - 1]!.value);
+    }
+  });
+
+  it("currentBest is the value of the newest progression entry", () => {
+    const records = [
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 140,
+        previousRecordValue: null,
+        dateAchieved: new Date("2026-01-01"),
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_weight",
+        value: 165,
+        previousRecordValue: 140,
+        dateAchieved: new Date("2026-03-01"),
+      },
+    ];
+    const result = groupPersonalRecordsByExercise(records);
+    expect(result[0]!.recordsByType[0]!.currentBest).toBe(165);
   });
 
   it("filters out records with null exerciseId", () => {
@@ -615,17 +727,15 @@ describe("groupPersonalRecordsByExercise", () => {
     expect(result[0]!.exerciseName).toBe("Bench Press");
   });
 
-  it("sorts records within each exercise by dateAchieved descending (most recent first)", () => {
-    const olderDate = new Date("2026-01-01");
-    const newerDate = new Date("2026-03-04");
+  it("sorts recordsByType deterministically by recordType", () => {
     const records = [
       {
         exerciseId: "ex-1",
         exerciseName: "Bench Press",
         recordType: "max_weight",
-        value: 140,
+        value: 150,
         previousRecordValue: null,
-        dateAchieved: olderDate,
+        dateAchieved: baseDate,
       },
       {
         exerciseId: "ex-1",
@@ -633,11 +743,22 @@ describe("groupPersonalRecordsByExercise", () => {
         recordType: "max_reps",
         value: 12,
         previousRecordValue: null,
-        dateAchieved: newerDate,
+        dateAchieved: baseDate,
+      },
+      {
+        exerciseId: "ex-1",
+        exerciseName: "Bench Press",
+        recordType: "max_volume",
+        value: 1800,
+        previousRecordValue: null,
+        dateAchieved: baseDate,
       },
     ];
     const result = groupPersonalRecordsByExercise(records);
-    expect(result[0]!.records[0]!.dateAchieved).toEqual(newerDate);
-    expect(result[0]!.records[1]!.dateAchieved).toEqual(olderDate);
+    expect(result[0]!.recordsByType.map((r) => r.recordType)).toEqual([
+      "max_reps",
+      "max_volume",
+      "max_weight",
+    ]);
   });
 });
