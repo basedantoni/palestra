@@ -42,6 +42,7 @@ const {
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    select: vi.fn(),
   };
 
   const mockDb = {
@@ -157,7 +158,19 @@ describe("tcxImport router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    // recordPr issues two tx.select calls per record type (existing + prior best);
+    // default to "no prior PRs" so both running PRs are recorded.
+    mockTx.select.mockReturnValue(makeChain([]));
   });
+
+  const isLogInsert = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" &&
+    v !== null &&
+    "exerciseName" in v &&
+    "distanceMeter" in v;
+
+  const isPrInsert = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && "recordType" in v;
 
   it("previews DB duplicates and repeated files in the same request", async () => {
     mockDb.select
@@ -217,7 +230,8 @@ describe("tcxImport router", () => {
       totalCount: 1,
     });
     expect(mockDb.transaction).toHaveBeenCalledTimes(1);
-    expect(mockTx.insert).toHaveBeenCalledTimes(2);
+    // workout + exercise log + 2 running PRs (longest_distance + best_pace)
+    expect(mockTx.insert).toHaveBeenCalledTimes(4);
     expect(insertedValues[0]).toMatchObject({
       userId: USER_ID,
       date: new Date(shortRun.startedAt),
@@ -254,11 +268,12 @@ describe("tcxImport router", () => {
       runs: [shortRun, longRun],
     });
 
-    expect(insertedValues[1]).toMatchObject({
+    const logInserts = insertedValues.filter(isLogInsert);
+    expect(logInserts[0]).toMatchObject({
       exerciseId: SHORT_RUN_ID,
       exerciseName: "Short Run",
     });
-    expect(insertedValues[3]).toMatchObject({
+    expect(logInserts[1]).toMatchObject({
       exerciseId: LONG_RUN_ID,
       exerciseName: "Long Run",
     });
@@ -314,5 +329,63 @@ describe("tcxImport router", () => {
       exerciseId: LONG_RUN_ID,
       exerciseName: "Long Run",
     });
+  });
+
+  it("records longest_distance and best_pace PRs when a run beats prior best", async () => {
+    const insertedValues: unknown[] = [];
+    mockDb.select
+      .mockReturnValueOnce(makeChain(runningExerciseRows))
+      .mockReturnValueOnce(makeChain([]));
+    // default mockTx.select → [] means no prior PRs, so both running PRs record.
+    mockTx.insert.mockReturnValue(
+      makeChain([], (value) => insertedValues.push(value)),
+    );
+
+    await userCaller.tcxImport.commit({ runs: [shortRun] });
+
+    const prInserts = insertedValues.filter(isPrInsert);
+    const longestDistance = prInserts.find(
+      (v) => v.recordType === "longest_distance",
+    );
+    const bestPace = prInserts.find((v) => v.recordType === "best_pace");
+
+    expect(longestDistance).toMatchObject({
+      userId: USER_ID,
+      exerciseId: SHORT_RUN_ID,
+      recordType: "longest_distance",
+      value: shortRun.distanceMeter,
+      previousRecordValue: null,
+    });
+    // best_pace = (durationMinutes * 60) / (distanceMeter / 1000) seconds per km
+    expect(bestPace).toMatchObject({
+      userId: USER_ID,
+      exerciseId: SHORT_RUN_ID,
+      recordType: "best_pace",
+      previousRecordValue: null,
+    });
+    expect(bestPace?.value).toBeCloseTo((30 * 60) / (shortRun.distanceMeter / 1000), 5);
+  });
+
+  it("does not record a PR when a run is shorter/slower than the existing best", async () => {
+    const insertedValues: unknown[] = [];
+    mockDb.select
+      .mockReturnValueOnce(makeChain(runningExerciseRows))
+      .mockReturnValueOnce(makeChain([]));
+    // recordPr(longest_distance): existing [], prior best 999999 (unbeatable)
+    // recordPr(best_pace): existing [], prior best 1 s/km (unbeatable, lower is better)
+    mockTx.select
+      .mockReturnValueOnce(makeChain([]))
+      .mockReturnValueOnce(makeChain([{ value: 999999 }]))
+      .mockReturnValueOnce(makeChain([]))
+      .mockReturnValueOnce(makeChain([{ value: 1 }]));
+    mockTx.insert.mockReturnValue(
+      makeChain([], (value) => insertedValues.push(value)),
+    );
+
+    const result = await userCaller.tcxImport.commit({ runs: [shortRun] });
+
+    expect(result.createdCount).toBe(1);
+    const prInserts = insertedValues.filter(isPrInsert);
+    expect(prInserts).toHaveLength(0);
   });
 });

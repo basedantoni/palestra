@@ -11,6 +11,7 @@ import {
   fingerprintTcxRun,
 } from "../lib/tcx-import";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { recordRunningPrs } from "../lib/personal-records";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 
 const DEFAULT_TCX_IMPORT_SOURCE = "nike_run_club";
@@ -261,6 +262,15 @@ export const tcxImportRouter = router({
               durationSeconds: run.durationSeconds,
               durationMinutes,
               heartRate: run.avgHeartRate ?? null,
+            });
+
+            await recordRunningPrs(tx, {
+              userId,
+              exerciseId,
+              workoutId,
+              dateAchieved: run.startedAtDate,
+              distanceMeter: run.distanceMeter,
+              durationMinutes,
             });
 
             importedExerciseIds.add(exerciseId);
