@@ -6,11 +6,17 @@ import { db } from "@src/db";
 import { exerciseLog, whoopConnection, workout } from "@src/db/schema/index";
 import {
   whoopActivityToExerciseLog,
+  whoopSportToCardioSubtype,
   whoopSportToWorkoutType,
 } from "@src/shared";
 
 import { protectedProcedure, router } from "../index";
-import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
+import {
+  WHOOP_API_BASE,
+  getValidWhoopAccessToken,
+  resolveWhoopExerciseId,
+} from "../lib/whoop-client";
+import { recordRunningPrs } from "../lib/personal-records";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -534,27 +540,30 @@ export const whoopRouter = router({
 
       // --- Step 3: Build workout rows and insert in a single transaction ---
       const insertedWorkoutDates: Date[] = [];
+      const insertedExerciseIds = new Set<string>();
 
       await db.transaction(async (tx) => {
         for (const record of newActivities) {
-          const startMs = new Date(record.start).getTime();
-          const endMs = new Date(record.end).getTime();
-          const durationMinutes = Math.round((endMs - startMs) / 60_000);
+          // Use the shared DTO so the exercise log mirrors the webhook/backfill
+          // output exactly (distanceMeter, hrZoneDurations, normalized intensity).
+          const patch = whoopActivityToExerciseLog(record);
+          const durationMinutes = patch.durationMinutes;
 
           const workoutType =
             typeOverrides[record.id] ??
             whoopSportToWorkoutType(record.sport_id, record.sport_name);
 
-          // Normalize strain (0–21 scale) to intensity (0–10 scale) then to 0–100
-          const strain = record.score?.strain ?? null;
-          const intensityOutOf10 =
-            strain !== null ? Math.min(10, Math.max(0, strain)) : null;
-          const intensity =
-            intensityOutOf10 !== null
-              ? Math.round(intensityOutOf10 * 10)
-              : null;
+          // Resolve the canonical library exercise (Short Run / Long Run / etc.)
+          // based on sport + distance, so the log gets a real exerciseId and is
+          // visible to cardio analytics.
+          const resolvedExercise = await resolveWhoopExerciseId(
+            record.sport_id,
+            record.sport_name,
+            patch.distanceMeter,
+          );
 
-          const avgHR = record.score?.average_heart_rate ?? null;
+          const strain = record.score?.strain ?? null;
+          const avgHR = patch.heartRate;
 
           // Auto-generated notes
           const noteParts: string[] = [
@@ -572,24 +581,46 @@ export const whoopRouter = router({
             userId,
             date: workoutDate,
             workoutType,
-            durationMinutes,
+            durationMinutes: durationMinutes ?? undefined,
             notes,
             source: "whoop",
             whoopActivityId: record.id,
           });
 
-          // Insert a single exercise log row for the Whoop activity
+          // Insert a single exercise log row for the Whoop activity, structurally
+          // identical to the webhook/backfill import paths.
           const logId = crypto.randomUUID();
           await tx.insert(exerciseLog).values({
             id: logId,
             workoutId,
-            exerciseName: record.sport_name,
+            exerciseId: resolvedExercise?.id ?? undefined,
+            exerciseName: resolvedExercise?.name ?? record.sport_name,
             order: 0,
             heartRate: avgHR,
-            intensity,
+            intensity: patch.intensity,
+            distanceMeter: patch.distanceMeter,
             durationMinutes,
+            hrZoneDurations: patch.hrZoneDurations,
           });
 
+          // Record running PRs (longest distance + best pace) when this is a
+          // resolved running activity, mirroring the workouts.create path.
+          if (
+            resolvedExercise &&
+            whoopSportToCardioSubtype(record.sport_id, record.sport_name) ===
+              "running"
+          ) {
+            await recordRunningPrs(tx, {
+              userId,
+              exerciseId: resolvedExercise.id,
+              workoutId,
+              dateAchieved: workoutDate,
+              distanceMeter: patch.distanceMeter,
+              durationMinutes,
+            });
+          }
+
+          if (resolvedExercise) insertedExerciseIds.add(resolvedExercise.id);
           insertedWorkoutDates.push(workoutDate);
         }
 
@@ -621,9 +652,11 @@ export const whoopRouter = router({
         );
       }
 
-      // No exercise IDs (Whoop activities have no mapped exercises), but we still trigger
-      // progressive overload for completeness in case the user has mapped exercises later.
-      recalculateProgressiveOverload(userId, []).catch((err) =>
+      // Trigger progressive overload recalc for the exercises we resolved + inserted.
+      recalculateProgressiveOverload(
+        userId,
+        Array.from(insertedExerciseIds),
+      ).catch((err) =>
         console.error("Whoop import: progressive overload recalc failed:", err),
       );
 
