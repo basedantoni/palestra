@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "personal_record_user_exercise_type_workout_uq" ON "personal_record" USING btree ("user_id","exercise_id","record_type","workout_id");

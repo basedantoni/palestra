@@ -5,6 +5,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -30,6 +31,12 @@ export const personalRecord = pgTable(
   (table) => [
     index("personal_record_userId_idx").on(table.userId),
     index("personal_record_exerciseId_idx").on(table.exerciseId),
+    uniqueIndex("personal_record_user_exercise_type_workout_uq").on(
+      table.userId,
+      table.exerciseId,
+      table.recordType,
+      table.workoutId,
+    ),
   ],
 );
 

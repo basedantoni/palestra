@@ -1,3 +1,24 @@
+# KOI-73 Personal Record Unique Index
+
+- [x] Fetch KOI-73 from Linear and move it to In Progress
+- [x] Inspect DB schema and migration conventions
+- [x] Add the four-column unique index to `personal_record`
+- [x] Repair existing Drizzle metadata so generation can run
+- [x] Generate migration `0017_personal_record_unique.sql`
+- [x] Apply the migration locally
+- [x] Verify the unique index exists and rejects duplicate rows
+- [x] Run focused automated verification
+- [x] Document KOI-73 review results
+
+## KOI-73 Review
+
+- Added `personal_record_user_exercise_type_workout_uq` to the Drizzle schema and generated `0017_personal_record_unique.sql`.
+- Repaired existing Drizzle metadata needed for generation: fixed the `0009_snapshot.json` self-parent and restored missing `0015`/`0016` snapshots for already-registered Whoop migrations.
+- Applied migrations locally with `pnpm --filter @src/db db:migrate`.
+- Verified `pg_indexes` returns `personal_record_user_exercise_type_workout_uq`.
+- Verified a duplicate `(user_id, exercise_id, record_type, workout_id)` insert fails with `23505:personal_record_user_exercise_type_workout_uq` inside a rollback-only transaction.
+- Verification passed: `pnpm --filter @src/db exec drizzle-kit check --config drizzle.config.ts`, `pnpm check-types`, and `pnpm --filter @src/db db:generate` reports no pending schema changes.
+
 # Nike TCX Import
 
 - [x] Phase 1: Add XML parser dependency and dry-run parser script

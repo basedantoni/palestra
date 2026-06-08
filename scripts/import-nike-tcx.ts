@@ -38,9 +38,10 @@ function parseArgs(): ImportArgs {
       return undefined;
     }
 
-    const eq = args[i].indexOf("=");
+    const arg = args[i]!;
+    const eq = arg.indexOf("=");
     if (eq >= 0) {
-      return args[i].slice(eq + 1);
+      return arg.slice(eq + 1);
     }
 
     const value = args[i + 1];

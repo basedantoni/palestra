@@ -120,6 +120,13 @@
       "when": 1746936000001,
       "tag": "0016_whoop_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780949067214,
+      "tag": "0017_personal_record_unique",
+      "breakpoints": true
     }
   ]
 }
