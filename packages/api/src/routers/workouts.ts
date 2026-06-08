@@ -7,7 +7,6 @@ import {
   exercise,
   exerciseLog,
   exerciseSet,
-  personalRecord,
   workout,
   workoutTemplate,
   workoutTemplateExercise,
@@ -17,6 +16,7 @@ import { whoopActivityToExerciseLog } from "@src/shared";
 import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
@@ -71,18 +71,6 @@ function toUtcDayBoundary(date: Date, endOfDay: boolean): Date {
       endOfDay ? 999 : 0,
     ),
   );
-}
-
-type RunningPrRecordType = "longest_distance";
-
-function isBetterRunningPr(
-  _recordType: RunningPrRecordType,
-  candidate: number,
-  currentBest: number | undefined,
-): boolean {
-  if (currentBest == null) return true;
-  // longest_distance: higher is better
-  return candidate > currentBest;
 }
 
 type WorkoutsTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -270,7 +258,6 @@ export const workoutsRouter = router({
       );
 
       const runningExerciseIdSet = new Set<string>();
-      const runningPrByKey = new Map<string, number>();
 
       // Track which exercise has cardioSubtype=running for Whoop metric application
       const cardioSubtypeByExerciseId = new Map<string, string>();
@@ -291,43 +278,6 @@ export const workoutsRouter = router({
           }
           if (row.cardioSubtype) {
             cardioSubtypeByExerciseId.set(row.id, row.cardioSubtype);
-          }
-        }
-
-        if (runningExerciseIdSet.size > 0) {
-          const existingRecords = await db
-            .select({
-              exerciseId: personalRecord.exerciseId,
-              recordType: personalRecord.recordType,
-              value: personalRecord.value,
-            })
-            .from(personalRecord)
-            .where(
-              and(
-                eq(personalRecord.userId, ctx.session.user.id),
-                inArray(
-                  personalRecord.exerciseId,
-                  Array.from(runningExerciseIdSet),
-                ),
-              ),
-            );
-
-          for (const record of existingRecords) {
-            if (
-              record.exerciseId == null ||
-              record.recordType !== "longest_distance"
-            ) {
-              continue;
-            }
-
-            const key = `${record.exerciseId}:${record.recordType}`;
-            const currentBest = runningPrByKey.get(key);
-            if (
-              currentBest == null ||
-              isBetterRunningPr(record.recordType, record.value, currentBest)
-            ) {
-              runningPrByKey.set(key, record.value);
-            }
           }
         }
       }
@@ -388,38 +338,25 @@ export const workoutsRouter = router({
             firstRunningLogId = createdLog.id;
           }
 
-          if (
-            createdLog &&
-            log.exerciseId &&
-            runningExerciseIdSet.has(log.exerciseId)
-          ) {
-            const maybeInsertRunningPr = async (
-              recordType: RunningPrRecordType,
-              value: number | undefined,
-            ) => {
-              if (value == null || value <= 0) return;
-
-              const key = `${log.exerciseId}:${recordType}`;
-              const currentBest = runningPrByKey.get(key);
-              if (!isBetterRunningPr(recordType, value, currentBest)) {
-                return;
-              }
-
-              await tx.insert(personalRecord).values({
-                id: crypto.randomUUID(),
+          if (createdLog && log.exerciseId) {
+            if (runningExerciseIdSet.has(log.exerciseId)) {
+              await recordRunningPrs(tx, {
                 userId: ctx.session.user.id,
                 exerciseId: log.exerciseId,
-                recordType,
-                value,
-                dateAchieved: input.date,
                 workoutId: newWorkout!.id,
-                previousRecordValue: currentBest ?? null,
+                dateAchieved: input.date,
+                distanceMeter: log.distanceMeter,
+                durationMinutes: log.durationMinutes,
               });
-
-              runningPrByKey.set(key, value);
-            };
-
-            await maybeInsertRunningPr("longest_distance", log.distanceMeter);
+            } else if (log.sets?.length) {
+              await recordStrengthPrs(tx, {
+                userId: ctx.session.user.id,
+                exerciseId: log.exerciseId,
+                workoutId: newWorkout!.id,
+                dateAchieved: input.date,
+                sets: log.sets,
+              });
+            }
           }
         }
 
@@ -447,6 +384,25 @@ export const workoutsRouter = router({
   update: protectedProcedure
     .input(workoutInput.extend({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const exerciseIds = Array.from(
+        new Set(
+          input.logs
+            .map((log) => log.exerciseId)
+            .filter((id): id is string => id != null),
+        ),
+      );
+
+      const runningExerciseIdSet = new Set<string>();
+      if (exerciseIds.length > 0) {
+        const exerciseRows = await db
+          .select({ id: exercise.id, category: exercise.category })
+          .from(exercise)
+          .where(inArray(exercise.id, exerciseIds));
+        for (const row of exerciseRows) {
+          if (row.category === "cardio") runningExerciseIdSet.add(row.id);
+        }
+      }
+
       const updatedWorkout = await db.transaction(async (tx) => {
         const [updated] = await tx
           .update(workout)
@@ -473,20 +429,33 @@ export const workoutsRouter = router({
           .where(eq(exerciseLog.workoutId, updated.id));
 
         for (const log of input.logs) {
-          await insertExerciseLogAndSets(tx, updated!.id, log);
+          const createdLog = await insertExerciseLogAndSets(tx, updated.id, log);
+          if (createdLog && log.exerciseId) {
+            if (runningExerciseIdSet.has(log.exerciseId)) {
+              await recordRunningPrs(tx, {
+                userId: ctx.session.user.id,
+                exerciseId: log.exerciseId,
+                workoutId: updated.id,
+                dateAchieved: input.date,
+                distanceMeter: log.distanceMeter,
+                durationMinutes: log.durationMinutes,
+              });
+            } else if (log.sets?.length) {
+              await recordStrengthPrs(tx, {
+                userId: ctx.session.user.id,
+                exerciseId: log.exerciseId,
+                workoutId: updated.id,
+                dateAchieved: input.date,
+                sets: log.sets,
+              });
+            }
+          }
         }
 
         return updated;
       });
 
       if (updatedWorkout) {
-        const exerciseIds = Array.from(
-          new Set(
-            input.logs
-              .map((log) => log.exerciseId)
-              .filter((id): id is string => id != null),
-          ),
-        );
         fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);
       }
 

@@ -53,6 +53,7 @@ const {
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    select: vi.fn(),
   };
 
   const mockDb = {
@@ -129,14 +130,14 @@ describe("distance normalization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
   });
 
   it("accepts distanceMeter (not distance) in create input", async () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([]));
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
 
     mockTx.insert
       .mockReturnValueOnce(
@@ -197,8 +198,7 @@ describe("distance normalization", () => {
     const capturedInserts: Array<Record<string, unknown>> = [];
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([]));
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
 
     mockTx.insert.mockImplementation(() => ({
       values: vi.fn((val: unknown) => {
@@ -281,8 +281,7 @@ describe("distance normalization", () => {
     const capturedLogInserts: Array<Record<string, unknown>> = [];
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([]));
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
 
     mockTx.insert
       .mockReturnValueOnce(
@@ -335,8 +334,7 @@ describe("distance normalization", () => {
     const insertedPrs: Array<Record<string, unknown>> = [];
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([])); // no existing PRs
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }])); // no existing PRs
 
     mockTx.insert
       .mockReturnValueOnce(
@@ -398,8 +396,7 @@ describe("distance normalization", () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([]));
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
 
     mockTx.insert
       .mockReturnValueOnce(

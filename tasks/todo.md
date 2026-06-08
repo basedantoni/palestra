@@ -1,3 +1,43 @@
+# KOI-75 Wire recordPr into workouts.create and workouts.update
+
+- [x] Read workouts.ts, personal-records.ts, and both affected test files
+- [x] Remove RunningPrRecordType, isBetterRunningPr, runningPrByKey, maybeInsertRunningPr, existing-PRs pre-fetch
+- [x] Wire recordRunningPrs + recordStrengthPrs into workouts.create
+- [x] Add exercise pre-fetch + wire recordRunningPrs + recordStrengthPrs into workouts.update
+- [x] Update workouts-cardio.test.ts and workouts-distance-normalization.test.ts
+- [x] Run full test suite and type check
+
+## KOI-75 Review
+
+- Deleted old PR logic: `RunningPrRecordType`, `isBetterRunningPr`, `runningPrByKey` Map, existing-PRs pre-fetch block, `maybeInsertRunningPr` closure.
+- Removed `personalRecord` from `workouts.ts` imports (no longer directly accessed).
+- `workouts.create`: replaced bespoke closure with `recordRunningPrs` (cardio exercises) and `recordStrengthPrs` (exercises with sets) per log.
+- `workouts.update`: added exercise category pre-fetch before transaction; capture `createdLog` return value; call same PR wrappers after each log re-insert.
+- Both running exercise tests updated: added `select: vi.fn()` + `mockTx.select.mockReturnValue(makeChain([]))` to handle `recordPr`'s in-transaction selects; removed stale second `mockDb.select` for existing-PRs pre-fetch.
+- 373/373 tests pass. `pnpm check-types` clean.
+
+# KOI-74 Core Personal Record Library
+
+- [x] Fetch KOI-74 from Linear and move it to In Progress
+- [x] Inspect current personal record schema, query usage, and workout PR logic
+- [x] Add `packages/api/src/lib/personal-records.ts`
+- [x] Implement `recordPr`
+- [x] Implement `recordRunningPrs`
+- [x] Implement `recordStrengthPrs`
+- [x] Add unit tests for KOI-74 acceptance criteria
+- [x] Run focused tests and type checks
+- [x] Update handoff and Linear
+
+## KOI-74 Review
+
+- Added `packages/api/src/lib/personal-records.ts` with `recordPr`, `recordRunningPrs`, and `recordStrengthPrs`.
+- `recordPr` supports append-only records, same-workout update/delete for edit-aware behavior, strict prior-best comparisons, and lower-is-better `best_pace`.
+- `recordRunningPrs` records `longest_distance` and derived `best_pace` in seconds/km.
+- `recordStrengthPrs` records `max_weight`, `max_reps`, and `max_volume`; bodyweight-only sets only record `max_reps`.
+- Added `packages/api/src/lib/personal-records.test.ts` covering all KOI-74 acceptance criteria plus weighted wrapper behavior.
+- Verification passed: `pnpm --filter @src/api test -- src/lib/personal-records.test.ts` and `pnpm check-types`.
+- Handoff updated in `tasks/handoff-koi-74.md`; route wiring remains for KOI-75.
+
 # KOI-73 Personal Record Unique Index
 
 - [x] Fetch KOI-73 from Linear and move it to In Progress

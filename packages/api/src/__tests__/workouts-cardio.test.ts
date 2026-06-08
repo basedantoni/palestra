@@ -42,6 +42,7 @@ const {
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    select: vi.fn(),
   };
 
   const mockDb = {
@@ -115,6 +116,7 @@ describe("workouts cardio round-trip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
+    mockTx.select.mockReturnValue(makeChain([]));
   });
 
   it("creates a cardio workout via tRPC and fetches the same cardio fields back", async () => {
@@ -122,8 +124,7 @@ describe("workouts cardio round-trip", () => {
     const insertedPrs: Array<Record<string, unknown>> = [];
 
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]))
-      .mockReturnValueOnce(makeChain([]));
+      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
 
     // 8.2 miles converted to meters (as if the client sends meters)
     const distanceInMeters = 8.2 * 1609.344;
