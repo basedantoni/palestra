@@ -7,18 +7,14 @@
  * workoutProcessor in whoop-webhook.ts.
  */
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { db } from "@src/db";
-import {
-  exerciseLog,
-  notification,
-  whoopConnection,
-  workout,
-} from "@src/db/schema/index";
-import { whoopActivityToExerciseLog, whoopSportToWorkoutType } from "@src/shared";
+import { notification, whoopConnection } from "@src/db/schema/index";
 
-import { getValidWhoopAccessToken, resolveWhoopExerciseId, WHOOP_API_BASE } from "./whoop-client";
+import type { WhoopActivityDetail } from "./whoop-activity-dto";
+import { upsertWhoopWorkout } from "./whoop-upsert";
+import { getValidWhoopAccessToken, WHOOP_API_BASE } from "./whoop-client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State map — persists for the lifetime of the Node process
@@ -58,31 +54,8 @@ export function stopBackfill(userId: string): void {
 // Whoop API types
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface WhoopActivityRecord {
-  id: string;
-  start: string;
-  end: string;
-  sport_id: number;
-  sport_name: string;
-  score_state?: string;
-  score?: {
-    strain?: number;
-    average_heart_rate?: number;
-    max_heart_rate?: number;
-    distance_meter?: number;
-    zone_durations?: {
-      zone_zero_milli?: number;
-      zone_one_milli?: number;
-      zone_two_milli?: number;
-      zone_three_milli?: number;
-      zone_four_milli?: number;
-      zone_five_milli?: number;
-    };
-  } | null;
-}
-
 interface WhoopWorkoutListResponse {
-  records: WhoopActivityRecord[];
+  records: WhoopActivityDetail[];
   next_token: string | null;
 }
 
@@ -189,132 +162,10 @@ export async function triggerBackfill(
           continue;
         }
 
-        // Three-path dedup: check if workout exists for (userId, whoopActivityId)
-        const [existingWorkout] = await db
-          .select({
-            id: workout.id,
-            source: workout.source,
-          })
-          .from(workout)
-          .where(
-            and(
-              eq(workout.userId, userId),
-              eq(workout.whoopActivityId, activity.id),
-            ),
-          )
-          .limit(1);
-
-        const patch = whoopActivityToExerciseLog(activity);
-        const workoutDate = new Date(activity.start);
-        const workoutType = whoopSportToWorkoutType(
-          activity.sport_id,
-          activity.sport_name,
-        );
-        const resolvedExercise = await resolveWhoopExerciseId(
-          activity.sport_id,
-          activity.sport_name,
-          patch.distanceMeter,
-        );
-
-        if (existingWorkout) {
-          if (existingWorkout.source !== "whoop") {
-            // Path 1 — Manual link: update exercise log metrics only
-            await db.transaction(async (tx) => {
-              const [firstLog] = await db
-                .select({ id: exerciseLog.id })
-                .from(exerciseLog)
-                .where(eq(exerciseLog.workoutId, existingWorkout.id))
-                .limit(1);
-
-              if (firstLog) {
-                await tx
-                  .update(exerciseLog)
-                  .set({
-                    heartRate: patch.heartRate,
-                    intensity: patch.intensity,
-                    distanceMeter: patch.distanceMeter,
-                    durationMinutes: patch.durationMinutes,
-                    hrZoneDurations: patch.hrZoneDurations,
-                  })
-                  .where(eq(exerciseLog.id, firstLog.id));
-              }
-
-              await tx
-                .update(whoopConnection)
-                .set({ lastImportedAt: new Date() })
-                .where(eq(whoopConnection.userId, userId));
-            });
-          } else {
-            // Path 2 — Auto-imported update: update workout + exercise log
-            await db.transaction(async (tx) => {
-              await tx
-                .update(workout)
-                .set({ date: workoutDate, workoutType })
-                .where(eq(workout.id, existingWorkout.id));
-
-              const [firstLog] = await db
-                .select({ id: exerciseLog.id })
-                .from(exerciseLog)
-                .where(eq(exerciseLog.workoutId, existingWorkout.id))
-                .limit(1);
-
-              if (firstLog) {
-                await tx
-                  .update(exerciseLog)
-                  .set({
-                    ...(resolvedExercise ? { exerciseId: resolvedExercise.id } : {}),
-                    heartRate: patch.heartRate,
-                    intensity: patch.intensity,
-                    distanceMeter: patch.distanceMeter,
-                    durationMinutes: patch.durationMinutes,
-                    hrZoneDurations: patch.hrZoneDurations,
-                  })
-                  .where(eq(exerciseLog.id, firstLog.id));
-              }
-
-              await tx
-                .update(whoopConnection)
-                .set({ lastImportedAt: new Date() })
-                .where(eq(whoopConnection.userId, userId));
-            });
-
-            importedCount++;
-          }
-        } else {
-          // Path 3 — New import: create workout + exercise log
-          const newWorkoutId = crypto.randomUUID();
-          const newLogId = crypto.randomUUID();
-
-          await db.transaction(async (tx) => {
-            await tx.insert(workout).values({
-              id: newWorkoutId,
-              userId,
-              date: workoutDate,
-              workoutType,
-              durationMinutes: patch.durationMinutes ?? undefined,
-              source: "whoop",
-              whoopActivityId: activity.id,
-            });
-
-            await tx.insert(exerciseLog).values({
-              id: newLogId,
-              workoutId: newWorkoutId,
-              exerciseId: resolvedExercise?.id ?? undefined,
-              exerciseName: resolvedExercise?.name ?? activity.sport_name,
-              order: 0,
-              heartRate: patch.heartRate,
-              intensity: patch.intensity,
-              distanceMeter: patch.distanceMeter,
-              durationMinutes: patch.durationMinutes,
-              hrZoneDurations: patch.hrZoneDurations,
-            });
-
-            await tx
-              .update(whoopConnection)
-              .set({ lastImportedAt: new Date() })
-              .where(eq(whoopConnection.userId, userId));
-          });
-
+        // Three-path dedup + import (shared with the webhook) — see whoop-upsert.ts.
+        // Count auto-update & new-import toward importedCount; manual-link does not.
+        const result = await upsertWhoopWorkout(userId, activity);
+        if (result.path !== "manual-link") {
           importedCount++;
         }
 
