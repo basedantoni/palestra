@@ -3,6 +3,7 @@ import {
   calculateSetVolume,
   calculateExerciseVolume,
   calculateTotalVolume,
+  computeWorkoutTotalVolume,
   createBlankSet,
   createBlankExercise,
   formDataToApiInput,
@@ -894,6 +895,57 @@ describe("workout-utils", () => {
       );
 
       expect(form.exercises[0]?.sets).toHaveLength(4);
+    });
+  });
+
+  describe("computeWorkoutTotalVolume", () => {
+    it("returns null for null/undefined/empty logs", () => {
+      expect(computeWorkoutTotalVolume(null)).toBeNull();
+      expect(computeWorkoutTotalVolume(undefined)).toBeNull();
+      expect(computeWorkoutTotalVolume([])).toBeNull();
+    });
+
+    it("returns null when no set has both weight and reps", () => {
+      expect(computeWorkoutTotalVolume([{ sets: [] }])).toBeNull();
+      expect(computeWorkoutTotalVolume([{}])).toBeNull();
+      // bodyweight: reps but no weight → not counted
+      expect(
+        computeWorkoutTotalVolume([{ sets: [{ reps: 10, weight: null }] }]),
+      ).toBeNull();
+      // weight but no reps → not counted
+      expect(
+        computeWorkoutTotalVolume([{ sets: [{ reps: null, weight: 50 }] }]),
+      ).toBeNull();
+    });
+
+    it("sums weight * reps across all logs and sets", () => {
+      expect(
+        computeWorkoutTotalVolume([
+          { sets: [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }] },
+          { sets: [{ weight: 60, reps: 10 }] },
+        ]),
+      ).toBe(100 * 5 + 100 * 5 + 60 * 10);
+    });
+
+    it("skips only the unqualified sets, keeping qualified ones", () => {
+      expect(
+        computeWorkoutTotalVolume([
+          {
+            sets: [
+              { weight: 80, reps: 5 }, // 400
+              { weight: null, reps: 12 }, // skipped (bodyweight)
+              { weight: 80, reps: null }, // skipped (no reps)
+            ],
+          },
+        ]),
+      ).toBe(400);
+    });
+
+    it("returns null when the qualifying volume is <= 0", () => {
+      // weight 0 → contributes 0, total stays 0 → null (cardio convention)
+      expect(
+        computeWorkoutTotalVolume([{ sets: [{ weight: 0, reps: 30 }] }]),
+      ).toBeNull();
     });
   });
 });

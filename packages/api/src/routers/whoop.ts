@@ -585,6 +585,8 @@ export const whoopRouter = router({
             notes,
             source: "whoop",
             whoopActivityId: record.id,
+            // Whoop activities carry no weighted sets — volume is always null (KOI-82).
+            totalVolume: null,
           });
 
           // Insert a single exercise log row for the Whoop activity, structurally
