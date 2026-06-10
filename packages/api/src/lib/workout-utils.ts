@@ -270,6 +270,39 @@ export function calculateTotalVolume(
   );
 }
 
+/**
+ * Strength training volume for a workout's exercise logs, used by the import /
+ * sync write paths (TCX, Whoop, workouts.update) and the totalVolume backfill
+ * migration to populate `workout.totalVolume`.
+ *
+ * Volume = sum of `weight * reps` across every set that has BOTH weight and reps
+ * non-null. Returns `null` (not 0) when there are no qualifying weighted sets —
+ * matching the markdown importer's `totalVolume > 0 ? totalVolume : null`
+ * convention so cardio/run/Whoop workouts stay NULL rather than charting as 0.
+ *
+ * Note: this is deliberately the strength definition (weight * reps only); unlike
+ * the form-layer `calculateTotalVolume`, duration-based sets do not contribute.
+ */
+export function computeWorkoutTotalVolume(
+  logs:
+    | {
+        sets?: { weight?: number | null; reps?: number | null }[] | null;
+      }[]
+    | null
+    | undefined,
+): number | null {
+  if (!logs) return null;
+  let total = 0;
+  for (const log of logs) {
+    for (const set of log.sets ?? []) {
+      if (set.weight != null && set.reps != null) {
+        total += set.weight * set.reps;
+      }
+    }
+  }
+  return total > 0 ? total : null;
+}
+
 // Create a blank set for a given set number
 export function createBlankSet(setNumber: number): WorkoutSetFormData {
   return {

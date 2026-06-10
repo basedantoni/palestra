@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, eq, gte, isNotNull, lte, sql, sum } from "drizzle-orm";
+import { and, asc, eq, gte, lte, sql, sum } from "drizzle-orm";
 
 import { db } from "@src/db";
 import {
@@ -451,10 +451,11 @@ export const analyticsRouter = router({
         })
         .from(exerciseLog)
         .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
         .where(
           and(
             eq(workout.userId, ctx.session.user.id),
-            isNotNull(workout.whoopActivityId),
+            eq(exercise.cardioSubtype, "running"),
             sql`${workout.date} >= ${input.from}::date`,
             sql`${workout.date} <= ${input.to}::date`,
           ),
@@ -494,10 +495,11 @@ export const analyticsRouter = router({
           })
           .from(exerciseLog)
           .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+          .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
           .where(
             and(
               eq(workout.userId, userId),
-              isNotNull(workout.whoopActivityId),
+              eq(exercise.cardioSubtype, "running"),
               sql`${workout.date} >= ${input.from}::date`,
               sql`${workout.date} <= ${input.to}::date`,
             ),
@@ -552,10 +554,11 @@ export const analyticsRouter = router({
         })
         .from(exerciseLog)
         .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
+        .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
         .where(
           and(
             eq(workout.userId, ctx.session.user.id),
-            isNotNull(workout.whoopActivityId),
+            eq(exercise.cardioSubtype, "running"),
             sql`${workout.date} >= ${input.from}::date`,
             sql`${workout.date} <= ${input.to}::date`,
           ),

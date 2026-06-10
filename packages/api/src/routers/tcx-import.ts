@@ -250,6 +250,8 @@ export const tcxImportRouter = router({
               durationMinutes,
               notes: buildNotes(source, run),
               source,
+              // Runs carry no weighted sets, so volume is always null (KOI-82).
+              totalVolume: null,
             });
 
             await tx.insert(exerciseLog).values({

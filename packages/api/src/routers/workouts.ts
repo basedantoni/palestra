@@ -18,7 +18,10 @@ import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
-import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
+import {
+  computeWorkoutTotalVolume,
+  WORKOUT_TYPE_ENUM,
+} from "../lib/workout-utils";
 
 const exerciseSetInput = z
   .object({
@@ -412,7 +415,9 @@ export const workoutsRouter = router({
             durationMinutes: input.durationMinutes,
             templateId: input.templateId,
             notes: input.notes,
-            totalVolume: input.totalVolume,
+            // Recompute server-side from the submitted logs rather than trusting
+            // the client-sent total, so volumeOverTime stays accurate (KOI-82).
+            totalVolume: computeWorkoutTotalVolume(input.logs),
             updatedAt: new Date(),
           })
           .where(

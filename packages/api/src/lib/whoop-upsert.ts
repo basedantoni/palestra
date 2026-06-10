@@ -128,7 +128,8 @@ export async function upsertWhoopWorkout(
     await db.transaction(async (tx) => {
       await tx
         .update(workout)
-        .set({ date: workoutDate, workoutType })
+        // Whoop activities carry no weighted sets — volume is always null (KOI-82).
+        .set({ date: workoutDate, workoutType, totalVolume: null })
         .where(eq(workout.id, existingWorkout.id));
 
       const [firstLog] = await tx
@@ -184,6 +185,8 @@ export async function upsertWhoopWorkout(
       durationMinutes: patch.durationMinutes ?? undefined,
       source: "whoop",
       whoopActivityId,
+      // Whoop activities carry no weighted sets — volume is always null (KOI-82).
+      totalVolume: null,
     });
 
     await tx.insert(exerciseLog).values({
