@@ -33,6 +33,7 @@ import {
 } from "./whoop-activity-dto";
 import { recordRunningPrs } from "./personal-records";
 import { resolveWhoopExerciseId } from "./whoop-client";
+import { createWorkoutWithLogs } from "./workout-create";
 
 export type UpsertWhoopResult =
   | { path: "manual-link"; workoutId: string }
@@ -174,10 +175,9 @@ export async function upsertWhoopWorkout(
 
   // Path 3 — New import: create workout + exercise log.
   const newWorkoutId = crypto.randomUUID();
-  const newLogId = crypto.randomUUID();
 
   await db.transaction(async (tx) => {
-    await tx.insert(workout).values({
+    await createWorkoutWithLogs(tx, {
       id: newWorkoutId,
       userId,
       date: workoutDate,
@@ -185,33 +185,20 @@ export async function upsertWhoopWorkout(
       durationMinutes: patch.durationMinutes ?? undefined,
       source: "whoop",
       whoopActivityId,
-      // Whoop activities carry no weighted sets — volume is always null (KOI-82).
-      totalVolume: null,
+      logs: [
+        {
+          exerciseId: resolvedExercise?.id,
+          exerciseName: resolvedExercise?.name ?? activity.sport_name,
+          order: 0,
+          heartRate: patch.heartRate,
+          intensity: patch.intensity,
+          distanceMeter: patch.distanceMeter,
+          durationMinutes: patch.durationMinutes,
+          hrZoneDurations: patch.hrZoneDurations,
+          prKind: resolvedExercise ? "running" : "none",
+        },
+      ],
     });
-
-    await tx.insert(exerciseLog).values({
-      id: newLogId,
-      workoutId: newWorkoutId,
-      exerciseId: resolvedExercise?.id ?? undefined,
-      exerciseName: resolvedExercise?.name ?? activity.sport_name,
-      order: 0,
-      heartRate: patch.heartRate,
-      intensity: patch.intensity,
-      distanceMeter: patch.distanceMeter,
-      durationMinutes: patch.durationMinutes,
-      hrZoneDurations: patch.hrZoneDurations,
-    });
-
-    if (resolvedExercise) {
-      await recordRunningPrs(tx, {
-        userId,
-        exerciseId: resolvedExercise.id,
-        workoutId: newWorkoutId,
-        dateAchieved: workoutDate,
-        distanceMeter: patch.distanceMeter,
-        durationMinutes: patch.durationMinutes,
-      });
-    }
 
     await tx
       .update(whoopConnection)

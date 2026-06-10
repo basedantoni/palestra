@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { db } from "@src/db";
 import { exercise, exerciseLog, workout } from "@src/db/schema/index";
 import { and, eq } from "drizzle-orm";
+import { createWorkoutWithLogs } from "../packages/api/src/lib/workout-create";
 import {
   fingerprintTcxRun,
   parseTcxRun,
@@ -116,7 +117,7 @@ async function importRun(
   return db.transaction(async (tx) => {
     const workoutId = randomUUID();
 
-    await tx.insert(workout).values({
+    await createWorkoutWithLogs(tx, {
       id: workoutId,
       userId,
       date: run.startedAt,
@@ -124,18 +125,18 @@ async function importRun(
       durationMinutes,
       notes: noteParts.join(" | "),
       source: NIKE_RUN_CLUB_SOURCE,
-    });
-
-    await tx.insert(exerciseLog).values({
-      id: randomUUID(),
-      workoutId,
-      exerciseId,
-      exerciseName,
-      order: 0,
-      distanceMeter: run.distanceMeter,
-      durationSeconds: run.durationSeconds,
-      durationMinutes,
-      heartRate: run.avgHeartRate ?? undefined,
+      logs: [
+        {
+          exerciseId,
+          exerciseName,
+          order: 0,
+          distanceMeter: run.distanceMeter,
+          durationSeconds: run.durationSeconds,
+          durationMinutes,
+          heartRate: run.avgHeartRate ?? undefined,
+          prKind: "running",
+        },
+      ],
     });
 
     return { workoutId };

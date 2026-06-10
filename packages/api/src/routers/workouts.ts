@@ -17,6 +17,10 @@ import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
+import {
+  createWorkoutWithLogs,
+  type CreateWorkoutExerciseMetadata,
+} from "../lib/workout-create";
 import { WHOOP_API_BASE, getValidWhoopAccessToken } from "../lib/whoop-client";
 import {
   computeWorkoutTotalVolume,
@@ -260,10 +264,9 @@ export const workoutsRouter = router({
         ),
       );
 
-      const runningExerciseIdSet = new Set<string>();
-
       // Track which exercise has cardioSubtype=running for Whoop metric application
       const cardioSubtypeByExerciseId = new Map<string, string>();
+      const exerciseMetadataById = new Map<string, CreateWorkoutExerciseMetadata>();
 
       if (exerciseIds.length > 0) {
         const exerciseRows = await db
@@ -276,9 +279,7 @@ export const workoutsRouter = router({
           .where(inArray(exercise.id, exerciseIds));
 
         for (const row of exerciseRows) {
-          if (row.category === "cardio") {
-            runningExerciseIdSet.add(row.id);
-          }
+          exerciseMetadataById.set(row.id, { category: row.category });
           if (row.cardioSubtype) {
             cardioSubtypeByExerciseId.set(row.id, row.cardioSubtype);
           }
@@ -305,63 +306,32 @@ export const workoutsRouter = router({
       }
 
       const createdWorkout = await db.transaction(async (tx) => {
-        const workoutId = crypto.randomUUID();
-        const [newWorkout] = await tx
-          .insert(workout)
-          .values({
-            id: workoutId,
-            userId: ctx.session.user.id,
-            date: input.date,
-            workoutType: input.workoutType,
-            durationMinutes: input.durationMinutes,
-            templateId: input.templateId,
-            notes: input.notes,
-            totalVolume: input.totalVolume,
-            // Set whoopActivityId only if we successfully fetched the activity
-            whoopActivityId: whoopPatch && input.whoopActivityId ? input.whoopActivityId : undefined,
-          })
-          .returning();
+        const created = await createWorkoutWithLogs(tx, {
+          userId: ctx.session.user.id,
+          date: input.date,
+          workoutType: input.workoutType,
+          durationMinutes: input.durationMinutes,
+          templateId: input.templateId,
+          notes: input.notes,
+          // Set whoopActivityId only if we successfully fetched the activity
+          whoopActivityId:
+            whoopPatch && input.whoopActivityId
+              ? input.whoopActivityId
+              : undefined,
+          logs: input.logs,
+          exerciseMetadataById,
+        });
 
-        // Track the first running exercise log created so we can apply Whoop metrics
-        let firstRunningLogId: string | null = null;
-
-        for (const log of input.logs) {
-          const isRunningExercise =
-            log.exerciseId != null &&
-            cardioSubtypeByExerciseId.get(log.exerciseId) === "running";
-
-          const createdLog = await insertExerciseLogAndSets(
-            tx,
-            newWorkout!.id,
-            log,
-          );
-
-          // Track first running exercise log for Whoop metric application
-          if (isRunningExercise && firstRunningLogId === null && createdLog) {
-            firstRunningLogId = createdLog.id;
-          }
-
-          if (createdLog && log.exerciseId) {
-            if (runningExerciseIdSet.has(log.exerciseId)) {
-              await recordRunningPrs(tx, {
-                userId: ctx.session.user.id,
-                exerciseId: log.exerciseId,
-                workoutId: newWorkout!.id,
-                dateAchieved: input.date,
-                distanceMeter: log.distanceMeter,
-                durationMinutes: log.durationMinutes,
-              });
-            } else if (log.sets?.length) {
-              await recordStrengthPrs(tx, {
-                userId: ctx.session.user.id,
-                exerciseId: log.exerciseId,
-                workoutId: newWorkout!.id,
-                dateAchieved: input.date,
-                sets: log.sets,
-              });
-            }
-          }
-        }
+        const firstRunningLogId =
+          created.logs.find((createdLog, index) => {
+            const inputLog = input.logs[index];
+            return (
+              inputLog?.exerciseId != null &&
+              cardioSubtypeByExerciseId.get(inputLog.exerciseId) ===
+                "running" &&
+              createdLog.exerciseId === inputLog.exerciseId
+            );
+          })?.id ?? null;
 
         // Apply Whoop metrics to the first running exercise log
         if (whoopPatch && firstRunningLogId) {
@@ -377,7 +347,7 @@ export const workoutsRouter = router({
             .where(eq(exerciseLog.id, firstRunningLogId));
         }
 
-        return newWorkout;
+        return created.workout;
       });
 
       fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);

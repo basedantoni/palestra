@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 
 import { db } from "@src/db";
-import { exercise, exerciseLog, exerciseSet, workout } from "@src/db/schema/index";
+import { exercise, workout } from "@src/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -10,6 +10,7 @@ import { parseWorkoutMarkdown } from "../lib/workout-import-parser";
 import { computeSimilarity, resolveExerciseNames } from "../lib/fuzzy-match";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { createWorkoutWithLogs } from "../lib/workout-create";
 
 export const importRouter = router({
   /**
@@ -275,67 +276,41 @@ export const importRouter = router({
       try {
         await db.transaction(async (tx) => {
           for (const w of workoutsToImport) {
-            const workoutId = crypto.randomUUID();
-
             const nonSkippedExercises = w.exercises.filter((ex) => {
               if (ex.isSkipped) return false;
               const resolution = input.resolutionMap[ex.name];
               return resolution && resolution.type !== "skip";
             });
 
-            // Calculate total volume for this workout
-            let totalVolume = 0;
-            for (const ex of nonSkippedExercises) {
-              for (const set of ex.sets) {
-                if (set.durationSeconds !== undefined && set.reps === undefined) {
-                  totalVolume += set.durationSeconds;
-                } else {
-                  totalVolume += (set.reps ?? 0) * (set.weight ?? 0);
-                }
-              }
-            }
-
-            await tx.insert(workout).values({
-              id: workoutId,
-              userId,
-              date: new Date(w.date),
-              workoutType: w.workoutType,
-              notes: w.notes ?? null,
-              totalVolume: totalVolume > 0 ? totalVolume : null,
-            });
-
-            for (let i = 0; i < nonSkippedExercises.length; i++) {
-              const ex = nonSkippedExercises[i]!;
+            const logs = nonSkippedExercises.map((ex, i) => {
               const exId = exerciseIdForName(ex.name);
               if (exId) allExerciseIds.add(exId);
 
-              const logId = crypto.randomUUID();
-              await tx.insert(exerciseLog).values({
-                id: logId,
-                workoutId,
-                exerciseId: exId ?? undefined,
+              return {
+                exerciseId: exId,
                 exerciseName: ex.name,
                 order: i,
                 rounds: ex.rounds ?? null,
                 workDurationSeconds: ex.workDurationSeconds ?? null,
                 restDurationSeconds: ex.restDurationSeconds ?? null,
                 notes: ex.notes ?? null,
-              });
+                sets: ex.sets.map((s) => ({
+                  setNumber: s.setNumber,
+                  reps: s.reps ?? null,
+                  weight: s.weight ?? null,
+                  rpe: s.rpe ?? null,
+                  durationSeconds: s.durationSeconds ?? null,
+                })),
+              };
+            });
 
-              if (ex.sets.length > 0) {
-                await tx.insert(exerciseSet).values(
-                  ex.sets.map((s) => ({
-                    id: crypto.randomUUID(),
-                    exerciseLogId: logId,
-                    setNumber: s.setNumber,
-                    reps: s.reps ?? null,
-                    weight: s.weight ?? null,
-                    rpe: s.rpe ?? null,
-                    durationSeconds: s.durationSeconds ?? null,
-                  })),
-                );
-              }
-            }
+            await createWorkoutWithLogs(tx, {
+              userId,
+              date: new Date(w.date),
+              workoutType: w.workoutType,
+              notes: w.notes ?? null,
+              logs,
+            });
 
             importedCount++;
           }

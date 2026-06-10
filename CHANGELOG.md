@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Workout creation helper** — added `packages/api/src/lib/workout-create.ts` with `createWorkoutWithLogs(tx, input)` to centralize workout row insertion, exercise log/set insertion, `totalVolume` calculation, and PR dispatch for all creation paths.
+
 - **`packages/shared`** — new shared package (`@src/shared`) containing the single source of truth for onboarding Zod schemas, option label constants, and the composed API preferences input schema.
   - `stepGoalsSchema`, `stepWorkoutsSchema`, `stepMetricsSchema`, `stepPreferencesSchema`
   - `onboardingSchema` (merged combined schema)
@@ -13,6 +15,8 @@
 - **Onboarding schema tests** (`packages/shared/src/onboarding-schemas.test.ts`) — 26 Vitest tests covering all step schemas, the combined schema, the preferences input schema, and `STEP_FIELD_NAMES` groupings. Tests live once in the shared package instead of being duplicated per platform.
 
 ### Changed
+
+- `packages/api` — workout creation paths now delegate to `createWorkoutWithLogs`: TCX import, Whoop commit/shared upsert, `workouts.create`, markdown import, and the legacy Nike TCX CLI importer all route through the same helper.
 
 - `apps/native` — all onboarding component and screen imports updated from `@/lib/onboarding-schemas` to `@src/shared`.
 - `apps/web` — `onboarding-page.tsx` updated from `@/lib/onboarding-schemas` to `@src/shared`. Step components (`step-goals`, `step-workouts`, `step-preferences`, `step-metrics`) updated from inline local constant definitions to imported constants from `@src/shared`.

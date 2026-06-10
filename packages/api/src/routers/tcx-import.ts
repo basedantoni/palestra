@@ -11,8 +11,8 @@ import {
   fingerprintTcxRun,
 } from "../lib/tcx-import";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
-import { recordRunningPrs } from "../lib/personal-records";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
+import { createWorkoutWithLogs } from "../lib/workout-create";
 
 const DEFAULT_TCX_IMPORT_SOURCE = "nike_run_club";
 const LONG_RUN_THRESHOLD_M = 8000;
@@ -231,7 +231,6 @@ export const tcxImportRouter = router({
       if (runsToImport.length > 0) {
         await db.transaction(async (tx) => {
           for (const run of runsToImport) {
-            const workoutId = crypto.randomUUID();
             const exerciseId = exerciseIdForDistance(
               run.distanceMeter,
               exerciseIds,
@@ -242,37 +241,25 @@ export const tcxImportRouter = router({
               Math.round(run.durationSeconds / 60),
             );
 
-            await tx.insert(workout).values({
-              id: workoutId,
+            await createWorkoutWithLogs(tx, {
               userId,
               date: run.startedAtDate,
               workoutType: "cardio",
               durationMinutes,
               notes: buildNotes(source, run),
               source,
-              // Runs carry no weighted sets, so volume is always null (KOI-82).
-              totalVolume: null,
-            });
-
-            await tx.insert(exerciseLog).values({
-              id: crypto.randomUUID(),
-              workoutId,
-              exerciseId,
-              exerciseName,
-              order: 0,
-              distanceMeter: run.distanceMeter,
-              durationSeconds: run.durationSeconds,
-              durationMinutes,
-              heartRate: run.avgHeartRate ?? null,
-            });
-
-            await recordRunningPrs(tx, {
-              userId,
-              exerciseId,
-              workoutId,
-              dateAchieved: run.startedAtDate,
-              distanceMeter: run.distanceMeter,
-              durationMinutes,
+              logs: [
+                {
+                  exerciseId,
+                  exerciseName,
+                  order: 0,
+                  distanceMeter: run.distanceMeter,
+                  durationSeconds: run.durationSeconds,
+                  durationMinutes,
+                  heartRate: run.avgHeartRate ?? null,
+                  prKind: "running",
+                },
+              ],
             });
 
             importedExerciseIds.add(exerciseId);

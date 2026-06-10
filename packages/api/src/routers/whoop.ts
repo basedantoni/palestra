@@ -16,10 +16,10 @@ import {
   getValidWhoopAccessToken,
   resolveWhoopExerciseId,
 } from "../lib/whoop-client";
-import { recordRunningPrs } from "../lib/personal-records";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
+import { createWorkoutWithLogs } from "../lib/workout-create";
 import { decryptToken } from "../lib/token-encryption";
 import { env } from "@src/env/server";
 import {
@@ -575,8 +575,11 @@ export const whoopRouter = router({
 
           const workoutId = crypto.randomUUID();
           const workoutDate = new Date(record.start);
+          const isRunningActivity =
+            whoopSportToCardioSubtype(record.sport_id, record.sport_name) ===
+            "running";
 
-          await tx.insert(workout).values({
+          await createWorkoutWithLogs(tx, {
             id: workoutId,
             userId,
             date: workoutDate,
@@ -585,42 +588,21 @@ export const whoopRouter = router({
             notes,
             source: "whoop",
             whoopActivityId: record.id,
-            // Whoop activities carry no weighted sets — volume is always null (KOI-82).
-            totalVolume: null,
+            logs: [
+              {
+                exerciseId: resolvedExercise?.id,
+                exerciseName: resolvedExercise?.name ?? record.sport_name,
+                order: 0,
+                heartRate: avgHR,
+                intensity: patch.intensity,
+                distanceMeter: patch.distanceMeter,
+                durationMinutes,
+                hrZoneDurations: patch.hrZoneDurations,
+                prKind:
+                  resolvedExercise && isRunningActivity ? "running" : "none",
+              },
+            ],
           });
-
-          // Insert a single exercise log row for the Whoop activity, structurally
-          // identical to the webhook/backfill import paths.
-          const logId = crypto.randomUUID();
-          await tx.insert(exerciseLog).values({
-            id: logId,
-            workoutId,
-            exerciseId: resolvedExercise?.id ?? undefined,
-            exerciseName: resolvedExercise?.name ?? record.sport_name,
-            order: 0,
-            heartRate: avgHR,
-            intensity: patch.intensity,
-            distanceMeter: patch.distanceMeter,
-            durationMinutes,
-            hrZoneDurations: patch.hrZoneDurations,
-          });
-
-          // Record running PRs (longest distance + best pace) when this is a
-          // resolved running activity, mirroring the workouts.create path.
-          if (
-            resolvedExercise &&
-            whoopSportToCardioSubtype(record.sport_id, record.sport_name) ===
-              "running"
-          ) {
-            await recordRunningPrs(tx, {
-              userId,
-              exerciseId: resolvedExercise.id,
-              workoutId,
-              dateAchieved: workoutDate,
-              distanceMeter: patch.distanceMeter,
-              durationMinutes,
-            });
-          }
 
           if (resolvedExercise) insertedExerciseIds.add(resolvedExercise.id);
           insertedWorkoutDates.push(workoutDate);
