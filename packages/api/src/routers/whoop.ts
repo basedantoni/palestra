@@ -22,6 +22,7 @@ import {
 } from "../lib/whoop-client";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { isoWeekKey } from "../lib/date-utils";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 import { decryptToken } from "../lib/token-encryption";
@@ -613,23 +614,16 @@ export const whoopRouter = router({
       });
 
       // --- Step 4: Fire-and-forget recalculations ---
-      const uniqueWeekStarts = new Set(
-        insertedWorkoutDates.map((d) => {
-          const day = d.getDay();
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          return new Date(d.getFullYear(), d.getMonth(), diff)
-            .toISOString()
-            .slice(0, 10);
-        }),
-      );
+      // Dedup workout dates by ISO week, keeping one raw date per week; the
+      // callee normalizes to the week start itself.
+      const weekRepresentatives = new Map<string, Date>();
+      for (const d of insertedWorkoutDates) {
+        weekRepresentatives.set(isoWeekKey(d), d);
+      }
 
-      for (const weekStart of uniqueWeekStarts) {
-        recalculateMuscleGroupVolumeForWeek(userId, new Date(weekStart)).catch(
-          (err) =>
-            console.error(
-              "Whoop import: muscle group volume recalc failed:",
-              err,
-            ),
+      for (const weekDate of weekRepresentatives.values()) {
+        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
+          console.error("Whoop import: muscle group volume recalc failed:", err),
         );
       }
 

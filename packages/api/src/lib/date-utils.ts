@@ -1,3 +1,13 @@
+import { startOfISOWeek } from "date-fns";
+
+// Stable per-ISO-week string key: the local Monday of `date`'s week as "yyyy-MM-dd".
+// Use to dedup workout dates that fall in the same week before recalculating volume.
+// Routes through toLocalDateKey (local getters, no toISOString round-trip), so it
+// never lands on the wrong week in timezones behind UTC.
+export function isoWeekKey(date: Date): string {
+  return toLocalDateKey(startOfISOWeek(date));
+}
+
 // Converts a DB-returned UTC timestamp to a local calendar date at noon.
 // Uses UTC getters so "2025-01-05T00:00:00Z" maps to Jan 5 regardless of timezone.
 // NOT for locally-constructed Date objects — use localDateToNoon for those.

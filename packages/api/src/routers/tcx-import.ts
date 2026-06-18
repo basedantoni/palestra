@@ -9,6 +9,7 @@ import { protectedProcedure, router } from "../index";
 import { type ParsedTcxRun, fingerprintTcxRun } from "../lib/tcx-import";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
+import { isoWeekKey } from "../lib/date-utils";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 
 const DEFAULT_TCX_IMPORT_SOURCE = "nike_run_club";
@@ -126,13 +127,6 @@ function buildNotes(source: string, run: ParsedTcxRun): string {
     noteParts.push(`Max HR: ${run.maxHeartRate}`);
   }
   return noteParts.join(" | ");
-}
-
-function weekStartDate(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.getFullYear(), d.getMonth(), diff);
 }
 
 export const tcxImportRouter = router({
@@ -274,19 +268,16 @@ export const tcxImportRouter = router({
         );
       }
 
-      const uniqueWeekStarts = new Set(
-        insertedWorkoutDates.map((date) =>
-          weekStartDate(date).toISOString().slice(0, 10),
-        ),
-      );
+      // Dedup workout dates by ISO week, keeping one raw date per week; the
+      // callee normalizes to the week start itself.
+      const weekRepresentatives = new Map<string, Date>();
+      for (const date of insertedWorkoutDates) {
+        weekRepresentatives.set(isoWeekKey(date), date);
+      }
 
-      for (const weekStart of uniqueWeekStarts) {
-        recalculateMuscleGroupVolumeForWeek(userId, new Date(weekStart)).catch(
-          (err) =>
-            console.error(
-              "TCX import: muscle group volume recalc failed:",
-              err,
-            ),
+      for (const weekDate of weekRepresentatives.values()) {
+        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
+          console.error("TCX import: muscle group volume recalc failed:", err),
         );
       }
 
