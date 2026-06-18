@@ -10,6 +10,7 @@ import { parseWorkoutMarkdown } from "../lib/workout-import-parser";
 import { computeSimilarity, resolveExerciseNames } from "../lib/fuzzy-match";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { isoWeekKey } from "../lib/date-utils";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 
 export const importRouter = router({
@@ -333,22 +334,17 @@ export const importRouter = router({
         );
       }
 
-      // Recalculate muscle group volume for each unique week
-      const uniqueWeekStarts = new Set(
-        workoutsToImport.map((w) => {
-          const d = new Date(w.date);
-          const day = d.getDay();
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          return new Date(d.getFullYear(), d.getMonth(), diff)
-            .toISOString()
-            .slice(0, 10);
-        }),
-      );
+      // Recalculate muscle group volume once per unique ISO week. Dedup by week
+      // key, keeping one raw date per week; the callee normalizes to the week start.
+      const weekRepresentatives = new Map<string, Date>();
+      for (const w of workoutsToImport) {
+        const d = new Date(w.date);
+        weekRepresentatives.set(isoWeekKey(d), d);
+      }
 
-      for (const weekStart of uniqueWeekStarts) {
-        recalculateMuscleGroupVolumeForWeek(userId, new Date(weekStart)).catch(
-          (err) =>
-            console.error("Import: muscle group volume recalc failed:", err),
+      for (const weekDate of weekRepresentatives.values()) {
+        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
+          console.error("Import: muscle group volume recalc failed:", err),
         );
       }
 

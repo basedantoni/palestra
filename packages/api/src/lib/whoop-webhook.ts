@@ -100,12 +100,8 @@ async function markEventFailed(
  * Call after any workout create/update/delete.
  */
 function fireRecalculations(userId: string, workoutDate: Date): void {
-  const d = workoutDate;
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const weekStart = new Date(d.getFullYear(), d.getMonth(), diff);
-
-  recalculateMuscleGroupVolumeForWeek(userId, weekStart).catch((err) =>
+  // recalculateMuscleGroupVolumeForWeek normalizes to the ISO week internally.
+  recalculateMuscleGroupVolumeForWeek(userId, workoutDate).catch((err) =>
     console.error("[whoop-webhook] Muscle group volume recalc failed:", err),
   );
 
