@@ -33,10 +33,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm turbo lint
+        run: pnpm turbo "//#lint"
 
       - name: Tests
-        run: pnpm -F @src/api test && pnpm -F @src/shared test
+        run: pnpm -F @life-tracker/api test && pnpm -F @life-tracker/shared test
 
       - name: Type Check
         run: pnpm check-types

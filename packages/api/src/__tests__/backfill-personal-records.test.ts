@@ -214,6 +214,7 @@ function buildTx(store: Store) {
         limit = n;
         return builder;
       },
+      // oxlint-disable-next-line no-thenable -- intentional: query-builder mock is awaitable
       then(resolve: (rows: any[]) => any, reject?: any) {
         return Promise.resolve(execute()).then(resolve, reject);
       },

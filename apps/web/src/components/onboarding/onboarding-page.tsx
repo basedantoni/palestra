@@ -4,11 +4,7 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 
 import { trpc } from "@/utils/trpc";
-import {
-  STEP_FIELD_NAMES,
-  TOTAL_STEPS,
-  type OnboardingFormData,
-} from "@life-tracker/shared";
+import { STEP_FIELD_NAMES, TOTAL_STEPS } from "@life-tracker/shared";
 
 import StepGoals from "./step-goals";
 import StepWorkouts from "./step-workouts";
@@ -46,7 +42,7 @@ export default function OnboardingPage() {
     const fieldNames = STEP_FIELD_NAMES[currentStep];
 
     // Validate all fields in the current step
-    const validationResults = await Promise.all(
+    await Promise.all(
       fieldNames.map((fieldName) => form.validateField(fieldName, "change")),
     );
 

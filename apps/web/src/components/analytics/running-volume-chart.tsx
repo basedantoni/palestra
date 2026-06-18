@@ -62,7 +62,7 @@ export function RunningVolumeChart({
           width={44}
         />
         <Tooltip
-          formatter={(value, name, item) => {
+          formatter={(value, name, _item) => {
             if (name === "totalDistance") {
               return [
                 metersToDisplayUnit(Number(value), distanceUnit).toFixed(2),

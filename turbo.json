@@ -10,8 +10,16 @@
     "test": {
       "dependsOn": ["^test"]
     },
-    "lint": {
-      "dependsOn": ["^lint"]
+    "//#lint": {
+      "inputs": [
+        "**/*.{ts,tsx,js,jsx,cjs,mjs}",
+        ".oxlintrc.json",
+        "!**/dist/**",
+        "!**/.turbo/**"
+      ]
+    },
+    "//#lint:fix": {
+      "cache": false
     },
     "check-types": {
       "dependsOn": ["^check-types"]

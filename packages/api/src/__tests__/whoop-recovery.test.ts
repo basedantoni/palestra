@@ -18,7 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, mockTx, makeChain, mockGetValidToken } = vi.hoisted(() => {
+const { mockDb, makeChain, mockGetValidToken } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
       {},

@@ -9,4 +9,3 @@ export * from "./template";
 export * from "./user-preferences";
 export * from "./whoop";
 export * from "./workout";
-export {};

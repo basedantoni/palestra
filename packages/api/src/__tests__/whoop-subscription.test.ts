@@ -79,7 +79,7 @@ vi.stubGlobal("fetch", mockFetch);
 
 // Import after mocks
 import { appRouter } from "../routers/index";
-import { encryptToken, decryptToken } from "../lib/token-encryption";
+import { encryptToken } from "../lib/token-encryption";
 import { handleWhoopCallback } from "../lib/whoop-oauth";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -112,14 +112,6 @@ function makeCaller(userId = APP_USER_ID) {
 
 function mockSelectConnection(row: Record<string, unknown> | null) {
   mockDb.select.mockReturnValueOnce(makeChain(row ? [row] : []));
-}
-
-function mockUpdateOk() {
-  mockDb.update.mockReturnValueOnce({
-    set: vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue(makeChain([])),
-    }),
-  });
 }
 
 function mockDeleteOk() {

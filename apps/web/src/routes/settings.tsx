@@ -102,7 +102,7 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [, setBannerDismissed] = useState(false);
 
   const whoopDisconnectMutation = useMutation(
     trpc.whoop.disconnect.mutationOptions({
@@ -186,6 +186,7 @@ function RouteComponent() {
     }),
   );
 
+  // oxlint-disable-next-line no-unused-vars -- pre-existing: mutation declared but not yet wired to a UI control
   const reregisterWebhookMutation = useMutation(
     trpc.whoop.reregisterWebhook.mutationOptions({
       onSuccess: () => {

@@ -36,9 +36,6 @@ const {
   mockGetValidToken,
   mockTriggerBackfillFn,
   mockStopBackfillFn,
-  mockGetBackfillStateFn,
-  mockSetBackfillStateFn,
-  mockClearBackfillStateFn,
 } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
