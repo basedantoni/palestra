@@ -1,6 +1,6 @@
-import { db } from "@src/db";
-import { whoopConnection } from "@src/db/schema/index";
-import { env } from "@src/env/server";
+import { db } from "@life-tracker/db";
+import { whoopConnection } from "@life-tracker/db/schema/index";
+import { env } from "@life-tracker/env/server";
 import { eq } from "drizzle-orm";
 
 import { encryptToken } from "./token-encryption";
@@ -74,9 +74,12 @@ export async function handleWhoopCallback(
   // (Sync) Fetch whoopUserId from Whoop's profile endpoint
   let whoopUserId: string | null = null;
   try {
-    const profileResponse = await fetch(`${WHOOP_API_BASE_V2}/user/profile/basic`, {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
+    const profileResponse = await fetch(
+      `${WHOOP_API_BASE_V2}/user/profile/basic`,
+      {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      },
+    );
     if (profileResponse.ok) {
       const profile = (await profileResponse.json()) as WhoopUserProfile;
       whoopUserId = profile.user_id != null ? String(profile.user_id) : null;
@@ -115,7 +118,9 @@ export async function handleWhoopCallback(
     // Detect first connect: upsert returned rows with lastImportedAt = null
     if (Array.isArray(rows) && rows.length > 0) {
       const savedRow = rows[0] as { lastImportedAt?: Date | null } | undefined;
-      isFirstConnect = savedRow?.lastImportedAt === null || savedRow?.lastImportedAt === undefined;
+      isFirstConnect =
+        savedRow?.lastImportedAt === null ||
+        savedRow?.lastImportedAt === undefined;
     }
   } catch (err) {
     console.error("Whoop connection save failed:", err);
@@ -136,7 +141,5 @@ export async function handleWhoopCallback(
  * Deletes the Whoop connection row for a user.
  */
 export async function deleteWhoopConnection(userId: string): Promise<void> {
-  await db
-    .delete(whoopConnection)
-    .where(eq(whoopConnection.userId, userId));
+  await db.delete(whoopConnection).where(eq(whoopConnection.userId, userId));
 }

@@ -1,15 +1,7 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  isNull,
-  ne,
-  or,
-} from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or } from "drizzle-orm";
 
-import type { db } from "@src/db";
-import { personalRecord, recordTypeEnum } from "@src/db/schema/index";
+import type { db } from "@life-tracker/db";
+import { personalRecord, recordTypeEnum } from "@life-tracker/db/schema/index";
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type RecordType = (typeof recordTypeEnum.enumValues)[number];
@@ -72,10 +64,7 @@ function beatsPriorBest(
     : candidate > priorBest;
 }
 
-export async function recordPr(
-  tx: Tx,
-  args: RecordPrArgs,
-): Promise<boolean> {
+export async function recordPr(tx: Tx, args: RecordPrArgs): Promise<boolean> {
   const [existingForWorkout] = await tx
     .select({
       id: personalRecord.id,

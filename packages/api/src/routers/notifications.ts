@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { notification } from "@src/db/schema/notification";
+import { db } from "@life-tracker/db";
+import { notification } from "@life-tracker/db/schema/notification";
 
 import { protectedProcedure, router } from "../index";
 

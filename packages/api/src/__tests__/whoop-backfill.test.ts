@@ -91,9 +91,9 @@ const {
   };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -101,7 +101,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     WHOOP_CLIENT_ID: "test-whoop-client-id",
     WHOOP_CLIENT_SECRET: "test-whoop-client-secret",
     WHOOP_REDIRECT_URI: "http://localhost:3000/api/whoop/callback",
@@ -495,16 +496,23 @@ describe("triggerBackfill function — pagination and import logic", () => {
   // The cleanest approach: import the real module via importActual.
 
   let realTriggerBackfill: (userId: string, days?: number) => Promise<void>;
-  let realGetBackfillState: (userId: string) => { running: boolean; importedCount: number; totalCount: number; shouldStop: boolean } | null;
+  let realGetBackfillState: (
+    userId: string,
+  ) => {
+    running: boolean;
+    importedCount: number;
+    totalCount: number;
+    shouldStop: boolean;
+  } | null;
   let realClearBackfillState: (userId: string) => void;
   let realStopBackfill: (userId: string) => void;
 
   beforeEach(async () => {
     vi.resetAllMocks();
     // Import the actual (non-mocked) module
-    const actual = await vi.importActual<typeof import("../lib/whoop-backfill")>(
-      "../lib/whoop-backfill",
-    );
+    const actual = await vi.importActual<
+      typeof import("../lib/whoop-backfill")
+    >("../lib/whoop-backfill");
     realTriggerBackfill = actual.triggerBackfill;
     realGetBackfillState = actual.getBackfillState;
     realClearBackfillState = actual.clearBackfillState;
@@ -589,16 +597,32 @@ describe("triggerBackfill function — pagination and import logic", () => {
     // Transaction for act-001
     mockDb.transaction.mockImplementationOnce(async (fn: any) => {
       const tx = {
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
       };
       return fn(tx);
     });
     // Transaction for act-002
     mockDb.transaction.mockImplementationOnce(async (fn: any) => {
       const tx = {
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
       };
       return fn(tx);
     });
@@ -662,8 +686,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
     mockDb.transaction.mockImplementation(async (fn: any) => {
       transactionCallCount++;
       const tx = {
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
       };
       const result = await fn(tx);
       // After first transaction, trigger stop
@@ -715,8 +747,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
     // Transaction
     mockDb.transaction.mockImplementationOnce(async (fn: any) => {
       const tx = {
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
       };
       return fn(tx);
     });
@@ -774,8 +814,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
 
     mockDb.transaction.mockImplementationOnce(async (fn: any) => {
       const tx = {
-        insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
       };
       return fn(tx);
     });
@@ -888,13 +936,19 @@ describe("handleWhoopCallback — first connect triggers backfill", () => {
     // DB insert/upsert returns lastImportedAt: null (first connect)
     mockDb.insert.mockReturnValueOnce({
       values: vi.fn().mockReturnValue({
-        onConflictDoUpdate: vi.fn().mockResolvedValue([{ lastImportedAt: null }]),
+        onConflictDoUpdate: vi
+          .fn()
+          .mockResolvedValue([{ lastImportedAt: null }]),
       }),
     });
 
     const setImmediateSpy = vi.spyOn(globalThis, "setImmediate" as any);
 
-    const result = await handleWhoopCallback("user-first-connect", "auth-code", "verifier-xyz");
+    const result = await handleWhoopCallback(
+      "user-first-connect",
+      "auth-code",
+      "verifier-xyz",
+    );
 
     expect(result.ok).toBe(true);
 

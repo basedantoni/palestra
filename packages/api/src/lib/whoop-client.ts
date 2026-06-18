@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { exercise, whoopConnection } from "@src/db/schema/index";
-import { env } from "@src/env/server";
-import { whoopSportToCardioSubtype } from "@src/shared";
+import { db } from "@life-tracker/db";
+import { exercise, whoopConnection } from "@life-tracker/db/schema/index";
+import { env } from "@life-tracker/env/server";
+import { whoopSportToCardioSubtype } from "@life-tracker/shared";
 
 import { decryptToken, encryptToken } from "./token-encryption";
 
@@ -27,7 +27,8 @@ export async function resolveWhoopExerciseId(
 
   let targetName: string | null = null;
   if (subtype === "running") {
-    targetName = distanceMeter != null && distanceMeter >= 8000 ? "Long Run" : "Short Run";
+    targetName =
+      distanceMeter != null && distanceMeter >= 8000 ? "Long Run" : "Short Run";
   }
 
   const [row] = await db
@@ -36,7 +37,10 @@ export async function resolveWhoopExerciseId(
     .where(
       targetName
         ? eq(exercise.name, targetName)
-        : eq(exercise.cardioSubtype, subtype as "running" | "cycling" | "swimming" | "rowing" | "other"),
+        : eq(
+            exercise.cardioSubtype,
+            subtype as "running" | "cycling" | "swimming" | "rowing" | "other",
+          ),
     )
     .limit(1);
 
@@ -56,7 +60,10 @@ interface TokenResponse {
  * Updates the DB row on success, sets isValid=false on failure.
  * Returns the new access token, or throws if refresh fails.
  */
-export async function refreshWhoopToken(userId: string, currentRefreshToken: string): Promise<string> {
+export async function refreshWhoopToken(
+  userId: string,
+  currentRefreshToken: string,
+): Promise<string> {
   const clientId = env.WHOOP_CLIENT_ID;
   const clientSecret = env.WHOOP_CLIENT_SECRET;
   const encryptionKey = env.TOKEN_ENCRYPTION_KEY;
@@ -65,16 +72,19 @@ export async function refreshWhoopToken(userId: string, currentRefreshToken: str
     throw new Error("Whoop integration is not configured");
   }
 
-  const response = await fetch("https://api.prod.whoop.com/oauth/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: currentRefreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  });
+  const response = await fetch(
+    "https://api.prod.whoop.com/oauth/oauth2/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: currentRefreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    },
+  );
 
   if (!response.ok) {
     // Mark connection as invalid
@@ -107,7 +117,9 @@ export async function refreshWhoopToken(userId: string, currentRefreshToken: str
  * Returns a valid (possibly refreshed) Whoop access token for the given user.
  * Throws if no connection exists, connection is invalid, or refresh fails.
  */
-export async function getValidWhoopAccessToken(userId: string): Promise<string> {
+export async function getValidWhoopAccessToken(
+  userId: string,
+): Promise<string> {
   const encryptionKey = env.TOKEN_ENCRYPTION_KEY;
   if (!encryptionKey) {
     throw new Error("Whoop integration is not configured");
@@ -142,12 +154,18 @@ export async function getValidWhoopAccessToken(userId: string): Promise<string> 
  * Force-refreshes all valid Whoop connections, bypassing the expiry-window check.
  * Called by the internal cron endpoint to prevent refresh tokens from going stale.
  */
-export async function refreshAllValidWhoopTokens(): Promise<{ refreshed: number; failed: number }> {
+export async function refreshAllValidWhoopTokens(): Promise<{
+  refreshed: number;
+  failed: number;
+}> {
   const encryptionKey = env.TOKEN_ENCRYPTION_KEY;
   if (!encryptionKey) return { refreshed: 0, failed: 0 };
 
   const connections = await db
-    .select({ userId: whoopConnection.userId, refreshToken: whoopConnection.refreshToken })
+    .select({
+      userId: whoopConnection.userId,
+      refreshToken: whoopConnection.refreshToken,
+    })
     .from(whoopConnection)
     .where(eq(whoopConnection.isValid, true));
 
@@ -160,7 +178,10 @@ export async function refreshAllValidWhoopTokens(): Promise<{ refreshed: number;
       await refreshWhoopToken(conn.userId, decryptedRefresh);
       refreshed++;
     } catch (err) {
-      console.error(`[whoop] Failed to refresh token for user ${conn.userId}:`, err);
+      console.error(
+        `[whoop] Failed to refresh token for user ${conn.userId}:`,
+        err,
+      );
       failed++;
     }
   }

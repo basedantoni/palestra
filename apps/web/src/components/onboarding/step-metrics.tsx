@@ -3,7 +3,7 @@ import z from "zod";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GENDERS } from "@src/shared";
+import { GENDERS } from "@life-tracker/shared";
 import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepMetricsProps {
@@ -19,7 +19,7 @@ export default function StepMetrics({ form }: StepMetricsProps) {
   const cmToInches = (cm: number) => Math.round(cm * 0.393701 * 10) / 10;
   const inchesToCm = (inches: number) => Math.round(inches * 2.54 * 10) / 10;
   const kgToLbs = (kg: number) => Math.round(kg * 2.20462 * 10) / 10;
-  const lbsToKg = (lbs: number) => Math.round(lbs / 2.20462 * 10) / 10;
+  const lbsToKg = (lbs: number) => Math.round((lbs / 2.20462) * 10) / 10;
 
   // Unit labels and placeholders
   const heightUnit = distanceUnit === "mi" ? "in" : "cm";
@@ -31,7 +31,10 @@ export default function StepMetrics({ form }: StepMetricsProps) {
   const weightKgValue = form.getFieldValue("weightKg");
 
   const initialHeight = heightCmValue
-    ? (distanceUnit === "mi" ? cmToInches(heightCmValue) : heightCmValue).toString()
+    ? (distanceUnit === "mi"
+        ? cmToInches(heightCmValue)
+        : heightCmValue
+      ).toString()
     : "";
   const initialWeight = weightKgValue
     ? (weightUnit === "lbs" ? kgToLbs(weightKgValue) : weightKgValue).toString()
@@ -152,18 +155,13 @@ export default function StepMetrics({ form }: StepMetricsProps) {
                       const inputVal = Number(val);
                       // Convert to cm for storage
                       const cmVal =
-                        distanceUnit === "mi"
-                          ? inchesToCm(inputVal)
-                          : inputVal;
+                        distanceUnit === "mi" ? inchesToCm(inputVal) : inputVal;
                       field.handleChange(cmVal);
                     }
                   }}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    key={error?.message}
-                    className="text-xs text-destructive"
-                  >
+                  <p key={error?.message} className="text-xs text-destructive">
                     {error?.message}
                   </p>
                 ))}
@@ -211,10 +209,7 @@ export default function StepMetrics({ form }: StepMetricsProps) {
                   }}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p
-                    key={error?.message}
-                    className="text-xs text-destructive"
-                  >
+                  <p key={error?.message} className="text-xs text-destructive">
                     {error?.message}
                   </p>
                 ))}

@@ -1,5 +1,5 @@
 {
-  "name": "@src/api",
+  "name": "@life-tracker/api",
   "type": "module",
   "exports": {
     ".": {
@@ -15,10 +15,10 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
-    "@src/auth": "workspace:*",
-    "@src/db": "workspace:*",
-    "@src/env": "workspace:*",
-    "@src/shared": "workspace:*",
+    "@life-tracker/auth": "workspace:*",
+    "@life-tracker/db": "workspace:*",
+    "@life-tracker/env": "workspace:*",
+    "@life-tracker/shared": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "date-fns": "^4.1.0",
@@ -27,7 +27,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "@vitest/ui": "^4.0.18",
     "hono": "catalog:",
     "typescript": "catalog:",

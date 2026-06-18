@@ -14,8 +14,8 @@ import {
   apiTemplateToFormData,
   templateFormToApiInput,
   WORKOUT_TYPE_LABELS,
-} from "@src/api/lib/index";
-import type { TemplateFormData } from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
+import type { TemplateFormData } from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/templates/$templateId")({
   component: RouteComponent,
@@ -42,9 +42,9 @@ function RouteComponent() {
   const queryClient = useQueryClient();
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [formData, setFormData] = useState<TemplateFormData | null>(null);
-  const [initializedTemplateId, setInitializedTemplateId] = useState<string | null>(
-    null,
-  );
+  const [initializedTemplateId, setInitializedTemplateId] = useState<
+    string | null
+  >(null);
 
   const { data: template, isLoading } = useQuery(
     trpc.templates.get.queryOptions({ id: templateId }),
@@ -52,7 +52,10 @@ function RouteComponent() {
   const { data: exercises } = useQuery(trpc.exercises.list.queryOptions());
 
   const exerciseNameById = useMemo(() => {
-    const entries = (exercises ?? []).map((exercise) => [exercise.id, exercise.name]);
+    const entries = (exercises ?? []).map((exercise) => [
+      exercise.id,
+      exercise.name,
+    ]);
     return Object.fromEntries(entries);
   }, [exercises]);
 
@@ -186,7 +189,9 @@ function RouteComponent() {
               id="template-name"
               value={formData.name}
               disabled={!isEditable}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
             />
           </div>
 
@@ -200,7 +205,8 @@ function RouteComponent() {
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  workoutType: e.target.value as TemplateFormData["workoutType"],
+                  workoutType: e.target
+                    .value as TemplateFormData["workoutType"],
                 })
               }
             >
@@ -220,7 +226,9 @@ function RouteComponent() {
               className="mt-2 w-full rounded border bg-background px-3 py-2 text-sm"
               rows={3}
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, notes: e.target.value })
+              }
             />
           </div>
         </CardContent>
@@ -232,7 +240,9 @@ function RouteComponent() {
         </CardHeader>
         <CardContent className="space-y-3">
           {formData.exercises.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No exercises added yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No exercises added yet.
+            </p>
           ) : (
             formData.exercises.map((exercise, index) => (
               <div
@@ -240,14 +250,18 @@ function RouteComponent() {
                 className="rounded border p-3 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <div className="font-medium truncate">{exercise.exerciseName}</div>
+                  <div className="font-medium truncate">
+                    {exercise.exerciseName}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     Exercise {index + 1}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Label htmlFor={`default-sets-${exercise.tempId}`}>Sets</Label>
+                  <Label htmlFor={`default-sets-${exercise.tempId}`}>
+                    Sets
+                  </Label>
                   <Input
                     id={`default-sets-${exercise.tempId}`}
                     type="number"
@@ -255,7 +269,10 @@ function RouteComponent() {
                     disabled={!isEditable}
                     value={exercise.defaultSets ?? ""}
                     onChange={(e) => {
-                      const value = e.target.value === "" ? undefined : Number(e.target.value);
+                      const value =
+                        e.target.value === ""
+                          ? undefined
+                          : Number(e.target.value);
                       const exercises = [...formData.exercises];
                       exercises[index] = { ...exercise, defaultSets: value };
                       setFormData({ ...formData, exercises });
@@ -275,7 +292,10 @@ function RouteComponent() {
           )}
 
           {isEditable && (
-            <Button variant="outline" onClick={() => setShowExercisePicker(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowExercisePicker(true)}
+            >
               Add Exercise
             </Button>
           )}

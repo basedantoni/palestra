@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   exercise,
   exerciseLog,
@@ -13,7 +13,7 @@ import {
   workout,
   workoutTemplate,
   workoutTemplateExercise,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 import { adminProcedure, router } from "../index";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
@@ -33,9 +33,7 @@ const exerciseInput = z.object({
   ]),
   exerciseType: WORKOUT_TYPE_ENUM,
   muscleGroupsBodybuilding: z
-    .array(
-      z.enum(["chest", "back", "shoulders", "arms", "legs", "core"]),
-    )
+    .array(z.enum(["chest", "back", "shoulders", "arms", "legs", "core"]))
     .optional(),
   muscleGroupsMovement: z
     .array(z.enum(["push", "pull", "squat", "hinge", "carry"]))
@@ -387,7 +385,9 @@ export const adminRouter = router({
 
         await tx
           .delete(workoutTemplateExercise)
-          .where(eq(workoutTemplateExercise.workoutTemplateId, updatedTemplate.id));
+          .where(
+            eq(workoutTemplateExercise.workoutTemplateId, updatedTemplate.id),
+          );
 
         if (input.exercises.length) {
           await tx.insert(workoutTemplateExercise).values(

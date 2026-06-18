@@ -2,8 +2,11 @@ import { format } from "date-fns";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { formatVolume, getEffectiveDurationSeconds } from "@src/api/lib/index";
-import type { HrZoneDurations } from "@src/shared";
+import {
+  formatVolume,
+  getEffectiveDurationSeconds,
+} from "@life-tracker/api/lib/index";
+import type { HrZoneDurations } from "@life-tracker/shared";
 
 import { LoggedExerciseCard } from "./LoggedExerciseCard";
 import { WhoopSection } from "./WhoopSection";

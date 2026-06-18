@@ -72,9 +72,9 @@ const {
   };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -123,8 +123,9 @@ describe("workouts cardio round-trip", () => {
     const workoutDate = new Date("2026-04-23T12:00:00.000Z");
     const insertedPrs: Array<Record<string, unknown>> = [];
 
-    mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: EXERCISE_ID, category: "cardio" }]));
+    mockDb.select.mockReturnValueOnce(
+      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
+    );
 
     // 8.2 miles converted to meters (as if the client sends meters)
     const distanceInMeters = 8.2 * 1609.344;

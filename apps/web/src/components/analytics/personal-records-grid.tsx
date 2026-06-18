@@ -7,7 +7,7 @@ import {
   formatPrValue,
   formatPrDelta,
   isPrImprovement,
-} from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
 
 interface ProgressionEntry {
   value: number;

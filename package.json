@@ -1,5 +1,5 @@
 {
-  "name": "fitness-app",
+  "name": "life-tracker",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -10,32 +10,32 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
+    "clean": "pnpm recursive exec -- rm -rf node_modules .turbo dist tsconfig.tsbuildinfo",
     "import:nike-tcx": "cd apps/server && tsx ../../scripts/import-nike-tcx.ts",
-    "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @src/db db:push",
-    "db:studio": "turbo -F @src/db db:studio",
-    "db:generate": "turbo -F @src/db db:generate",
-    "db:migrate": "turbo -F @src/db db:migrate",
-    "db:seed": "turbo -F @src/db db:seed",
-    "db:start": "turbo -F @src/db db:start",
-    "db:watch": "turbo -F @src/db db:watch",
-    "db:stop": "turbo -F @src/db db:stop",
-    "db:down": "turbo -F @src/db db:down"
+    "db:push": "turbo -F @life-tracker/db db:push",
+    "db:studio": "turbo -F @life-tracker/db db:studio",
+    "db:generate": "turbo -F @life-tracker/db db:generate",
+    "db:migrate": "turbo -F @life-tracker/db db:migrate",
+    "db:seed": "turbo -F @life-tracker/db db:seed",
+    "db:start": "turbo -F @life-tracker/db db:start",
+    "db:watch": "turbo -F @life-tracker/db db:watch",
+    "db:stop": "turbo -F @life-tracker/db db:stop",
+    "db:down": "turbo -F @life-tracker/db db:down"
   },
   "dependencies": {
-    "@src/db": "workspace:*",
-    "@src/env": "workspace:*",
+    "@life-tracker/db": "workspace:*",
+    "@life-tracker/env": "workspace:*",
     "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "@types/node": "^22.13.14",
-    "tsx": "^4.21.0",
-    "turbo": "^2.6.3",
+    "tsx": "^4.22.4",
+    "turbo": "^2.9.18",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@10.22.0"

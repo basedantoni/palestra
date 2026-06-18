@@ -70,12 +70,19 @@ const {
   const mockRecalcPO = vi.fn().mockResolvedValue(undefined);
   const mockRecalcMG = vi.fn().mockResolvedValue(undefined);
 
-  return { mockDb, mockTx, makeChain, mockGetValidToken, mockRecalcPO, mockRecalcMG };
+  return {
+    mockDb,
+    mockTx,
+    makeChain,
+    mockGetValidToken,
+    mockRecalcPO,
+    mockRecalcMG,
+  };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -83,7 +90,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   },
 }));
 
@@ -353,8 +361,8 @@ describe("workoutProcessor — auto-imported update (source = whoop)", () => {
   it("2. updates existing whoop workout in place without creating a duplicate", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_RUNNING_ACTIVITY);
-    mockExistingWhoopWorkout();      // dedup: existing whoop workout found
-    mockExistingExerciseLog();       // exercise log lookup
+    mockExistingWhoopWorkout(); // dedup: existing whoop workout found
+    mockExistingExerciseLog(); // exercise log lookup
 
     const capturedSets: Array<Record<string, unknown>> = [];
     mockTx.update = makeTxUpdateCapture(capturedSets);
@@ -386,8 +394,8 @@ describe("workoutProcessor — manual-link update (source != whoop)", () => {
   it("3. updates exercise log metrics without creating new workout or altering workout source", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_RUNNING_ACTIVITY);
-    mockExistingManualWorkout();     // dedup: existing manual workout found
-    mockExistingExerciseLog();       // exercise log lookup
+    mockExistingManualWorkout(); // dedup: existing manual workout found
+    mockExistingExerciseLog(); // exercise log lookup
 
     const capturedSets: Array<Record<string, unknown>> = [];
     mockTx.update = makeTxUpdateCapture(capturedSets);
@@ -404,9 +412,7 @@ describe("workoutProcessor — manual-link update (source != whoop)", () => {
     expect(workoutSourceUpdate).toBeUndefined();
 
     // Exercise log should have metrics updated
-    const logUpdate = capturedSets.find(
-      (s) => s.heartRate !== undefined,
-    );
+    const logUpdate = capturedSets.find((s) => s.heartRate !== undefined);
     expect(logUpdate).toBeDefined();
     expect(logUpdate!.heartRate).toBe(155);
     expect(logUpdate!.distanceMeter).toBe(10000);
@@ -642,7 +648,9 @@ describe("workoutProcessor — notification emission", () => {
     // message should include workout type and duration
     expect(notifInsert!.message).toMatch(/\d+\s*min/i);
     // payload should have workoutId
-    expect((notifInsert!.payload as Record<string, unknown>).workoutId).toBeDefined();
+    expect(
+      (notifInsert!.payload as Record<string, unknown>).workoutId,
+    ).toBeDefined();
   });
 
   it("9b. new import with notifyOnAutoImport=false → no notification row", async () => {
@@ -678,7 +686,7 @@ describe("workoutProcessor — notification emission", () => {
   it("9c. manual-link update → no notification even with notifyOnAutoImport=true", async () => {
     mockAutoImportAndNotify(true, true);
     mockFetch(SCORED_RUNNING_ACTIVITY);
-    mockExistingManualWorkout();    // Path 1 — manual link
+    mockExistingManualWorkout(); // Path 1 — manual link
     mockExistingExerciseLog();
 
     const capturedSets: Array<Record<string, unknown>> = [];
@@ -703,7 +711,7 @@ describe("workoutProcessor — notification emission", () => {
   it("9d. auto-imported update (source=whoop) with notifyOnAutoImport=true → notification emitted", async () => {
     mockAutoImportAndNotify(true, true);
     mockFetch(SCORED_RUNNING_ACTIVITY);
-    mockExistingWhoopWorkout();     // Path 2 — auto-imported update
+    mockExistingWhoopWorkout(); // Path 2 — auto-imported update
     mockExistingExerciseLog();
 
     const capturedSets: Array<Record<string, unknown>> = [];
@@ -725,7 +733,9 @@ describe("workoutProcessor — notification emission", () => {
     expect(notifInsert).toBeDefined();
     expect(notifInsert!.userId).toBe(USER_ID);
     // payload workoutId should match the existing workout ID
-    expect((notifInsert!.payload as Record<string, unknown>).workoutId).toBe(WORKOUT_ID);
+    expect((notifInsert!.payload as Record<string, unknown>).workoutId).toBe(
+      WORKOUT_ID,
+    );
   });
 });
 

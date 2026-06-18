@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateLabel } from "@src/api/lib/index";
+import { formatDateLabel } from "@life-tracker/api/lib/index";
 
 interface RecoveryRow {
   id: string;
@@ -59,7 +59,10 @@ function formatScore(val: number | null): string {
   return `${Math.round(val)}`;
 }
 
-export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps) {
+export function WhoopRecoveryChart({
+  data,
+  isLoading,
+}: WhoopRecoveryChartProps) {
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
@@ -68,8 +71,8 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
     return (
       <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
         <p className="text-sm text-muted-foreground">
-          No recovery data imported yet. Recovery scores will appear here once Whoop
-          starts sending events.
+          No recovery data imported yet. Recovery scores will appear here once
+          Whoop starts sending events.
         </p>
       </div>
     );
@@ -77,7 +80,10 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
 
   const sorted = data
     .slice()
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
 
   const chartData = sorted.map((r) => ({
     label: formatDateLabel(new Date(r.createdAt).toISOString().slice(0, 10)),
@@ -105,7 +111,9 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
           />
           <Tooltip
             formatter={(value) =>
-              value != null ? [`${value}`, "Recovery Score"] : ["—", "Recovery Score"]
+              value != null
+                ? [`${value}`, "Recovery Score"]
+                : ["—", "Recovery Score"]
             }
             labelFormatter={(label) => `Date: ${String(label)}`}
             labelStyle={{ color: "var(--muted-foreground)" }}
@@ -116,7 +124,11 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
             dataKey="recoveryScore"
             strokeWidth={2}
             dot={(props) => {
-              const { cx, cy, payload } = props as { cx: number; cy: number; payload: { color: string } };
+              const { cx, cy, payload } = props as {
+                cx: number;
+                cy: number;
+                payload: { color: string };
+              };
               return (
                 <circle
                   key={`dot-${cx}-${cy}`}
@@ -152,7 +164,10 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <tr key={r.id} className="border-b border-border/50 last:border-0">
+              <tr
+                key={r.id}
+                className="border-b border-border/50 last:border-0"
+              >
                 <td className="py-2 pr-4 text-foreground">
                   {new Date(r.createdAt).toLocaleDateString("en-US", {
                     month: "short",
@@ -166,7 +181,9 @@ export function WhoopRecoveryChart({ data, isLoading }: WhoopRecoveryChartProps)
                 >
                   {formatScore(r.recoveryScore)}
                 </td>
-                <td className="py-2 pr-4 text-foreground">{formatHr(r.restingHr)}</td>
+                <td className="py-2 pr-4 text-foreground">
+                  {formatHr(r.restingHr)}
+                </td>
                 <td className="py-2 text-foreground">{formatHrv(r.hrv)}</td>
               </tr>
             ))}

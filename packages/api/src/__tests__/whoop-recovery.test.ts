@@ -18,12 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  mockGetValidToken,
-} = vi.hoisted(() => {
+const { mockDb, mockTx, makeChain, mockGetValidToken } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
       {},
@@ -66,9 +61,9 @@ const {
   return { mockDb, mockTx, makeChain, mockGetValidToken };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -76,7 +71,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   },
 }));
 
@@ -87,7 +83,10 @@ vi.mock("../lib/whoop-client", () => ({
 }));
 
 // Import after mocks
-import { recoveryProcessor, recoveryDeleteProcessor } from "../lib/whoop-webhook";
+import {
+  recoveryProcessor,
+  recoveryDeleteProcessor,
+} from "../lib/whoop-webhook";
 import { appRouter } from "../routers/index";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -288,7 +287,9 @@ describe("recoveryProcessor — autoImportEnabled = false", () => {
     expect(mockDb.insert).not.toHaveBeenCalled();
 
     // Event marked skipped
-    const skippedUpdate = capturedUpdateSets.find((s) => s.status === "skipped");
+    const skippedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "skipped",
+    );
     expect(skippedUpdate).toBeDefined();
   });
 });
@@ -337,7 +338,9 @@ describe("recoveryProcessor — error handling", () => {
       }),
     }));
 
-    await expect(recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID)).resolves.not.toThrow();
+    await expect(
+      recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID),
+    ).resolves.not.toThrow();
 
     const failedUpdate = capturedUpdateSets.find((s) => s.status === "failed");
     expect(failedUpdate).toBeDefined();
@@ -376,7 +379,9 @@ describe("recoveryDeleteProcessor", () => {
     expect(mockDb.delete).toHaveBeenCalledOnce();
 
     // Event marked processed
-    const processedUpdate = capturedUpdateSets.find((s) => s.status === "processed");
+    const processedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "processed",
+    );
     expect(processedUpdate).toBeDefined();
   });
 
@@ -398,7 +403,9 @@ describe("recoveryDeleteProcessor", () => {
     expect(mockDb.delete).not.toHaveBeenCalled();
 
     // Still marks event processed
-    const processedUpdate = capturedUpdateSets.find((s) => s.status === "processed");
+    const processedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "processed",
+    );
     expect(processedUpdate).toBeDefined();
   });
 });
@@ -409,7 +416,11 @@ describe("recoveryDeleteProcessor", () => {
 
 const userCaller = appRouter.createCaller({
   session: {
-    user: { id: USER_ID, email: "recovery@test.internal", name: "Recovery User" },
+    user: {
+      id: USER_ID,
+      email: "recovery@test.internal",
+      name: "Recovery User",
+    },
     session: {
       id: "sess-recovery",
       userId: USER_ID,
@@ -582,20 +593,22 @@ describe("Cross-phase regression: workout.updated still imports (Phase 3 unchang
 
     // Transaction mock: insert workout + exercise log
     let transactionCalled = false;
-    mockDb.transaction.mockImplementation(async (fn: (tx: any) => Promise<void>) => {
-      transactionCalled = true;
-      const tx = {
-        insert: vi.fn().mockReturnValue({
-          values: vi.fn().mockResolvedValue([]),
-        }),
-        update: vi.fn().mockReturnValue({
-          set: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue([]),
+    mockDb.transaction.mockImplementation(
+      async (fn: (tx: any) => Promise<void>) => {
+        transactionCalled = true;
+        const tx = {
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockResolvedValue([]),
           }),
-        }),
-      };
-      await fn(tx);
-    });
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        };
+        await fn(tx);
+      },
+    );
 
     // Import workoutProcessor
     const { workoutProcessor } = await import("../lib/whoop-webhook");

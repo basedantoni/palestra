@@ -22,72 +22,72 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 const { mockDb, mockTx, makeChain, recordRunningPrsSpy, RESOLVED_EXERCISE } =
   vi.hoisted(() => {
-  function makeChain(
-    resolveWith: unknown = [],
-    onValues?: (value: unknown) => void,
-  ) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "values") {
-            return vi.fn((value: unknown) => {
-              onValues?.(value);
-              return proxy;
-            });
-          }
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return vi.fn(() => proxy);
+    function makeChain(
+      resolveWith: unknown = [],
+      onValues?: (value: unknown) => void,
+    ) {
+      const proxy: any = new Proxy(
+        {},
+        {
+          get(_, prop: string) {
+            if (prop === "values") {
+              return vi.fn((value: unknown) => {
+                onValues?.(value);
+                return proxy;
+              });
+            }
+            if (prop === "then") {
+              return (ok: any) => Promise.resolve(resolveWith).then(ok);
+            }
+            if (prop === "catch") {
+              return (err: any) => Promise.resolve(resolveWith).catch(err);
+            }
+            if (prop === "finally") {
+              return (fin: any) => Promise.resolve(resolveWith).finally(fin);
+            }
+            return vi.fn(() => proxy);
+          },
         },
-      },
-    );
-    return proxy;
-  }
+      );
+      return proxy;
+    }
 
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
+    const mockTx = {
+      insert: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      select: vi.fn(),
+    };
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
+    const mockDb = {
+      insert: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      select: vi.fn(),
+      transaction: vi.fn(),
+      query: {},
+    };
 
-  const recordRunningPrsSpy = vi.fn().mockResolvedValue(undefined);
+    const recordRunningPrsSpy = vi.fn().mockResolvedValue(undefined);
 
-  // resolveWhoopExerciseId resolves to a canonical cardio exercise so PRs attach.
-  const RESOLVED_EXERCISE = {
-    id: "00000000-0000-4000-8000-0000000004ee",
-    name: "Long Run",
-  };
+    // resolveWhoopExerciseId resolves to a canonical cardio exercise so PRs attach.
+    const RESOLVED_EXERCISE = {
+      id: "00000000-0000-4000-8000-0000000004ee",
+      name: "Long Run",
+    };
 
-  return {
-    mockDb,
-    mockTx,
-    makeChain,
-    recordRunningPrsSpy,
-    RESOLVED_EXERCISE,
-  };
-});
+    return {
+      mockDb,
+      mockTx,
+      makeChain,
+      recordRunningPrsSpy,
+      RESOLVED_EXERCISE,
+    };
+  });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",

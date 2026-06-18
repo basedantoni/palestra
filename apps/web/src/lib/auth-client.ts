@@ -1,4 +1,4 @@
-import { env } from "@src/env/web";
+import { env } from "@life-tracker/env/web";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({

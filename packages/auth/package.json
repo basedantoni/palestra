@@ -1,5 +1,5 @@
 {
-  "name": "@src/auth",
+  "name": "@life-tracker/auth",
   "type": "module",
   "exports": {
     ".": {
@@ -12,14 +12,14 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
-    "@src/db": "workspace:*",
-    "@src/env": "workspace:*",
+    "@life-tracker/db": "workspace:*",
+    "@life-tracker/env": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "typescript": "catalog:"
   }
 }

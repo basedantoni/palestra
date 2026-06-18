@@ -72,9 +72,9 @@ const {
   };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -217,7 +217,9 @@ describe("tcxImport router", () => {
     mockDb.select
       .mockReturnValueOnce(makeChain(runningExerciseRows))
       .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(makeChain([], (value) => insertedValues.push(value)));
+    mockTx.insert.mockReturnValue(
+      makeChain([], (value) => insertedValues.push(value)),
+    );
 
     const result = await userCaller.tcxImport.commit({
       runs: [shortRun],
@@ -262,7 +264,9 @@ describe("tcxImport router", () => {
     mockDb.select
       .mockReturnValueOnce(makeChain(runningExerciseRows))
       .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(makeChain([], (value) => insertedValues.push(value)));
+    mockTx.insert.mockReturnValue(
+      makeChain([], (value) => insertedValues.push(value)),
+    );
 
     await userCaller.tcxImport.commit({
       runs: [shortRun, longRun],
@@ -314,7 +318,9 @@ describe("tcxImport router", () => {
     mockDb.select
       .mockReturnValueOnce(makeChain(runningExerciseRows))
       .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(makeChain([], (value) => insertedValues.push(value)));
+    mockTx.insert.mockReturnValue(
+      makeChain([], (value) => insertedValues.push(value)),
+    );
 
     const result = await userCaller.tcxImport.commit({
       runs: [shortRun, longRun],
@@ -363,7 +369,10 @@ describe("tcxImport router", () => {
       recordType: "best_pace",
       previousRecordValue: null,
     });
-    expect(bestPace?.value).toBeCloseTo((30 * 60) / (shortRun.distanceMeter / 1000), 5);
+    expect(bestPace?.value).toBeCloseTo(
+      (30 * 60) / (shortRun.distanceMeter / 1000),
+      5,
+    );
   });
 
   it("does not record a PR when a run is shorter/slower than the existing best", async () => {

@@ -9,7 +9,7 @@
   "orm": "drizzle",
   "backend": "hono",
   "runtime": "node",
-  "frontend": ["tanstack-router", "native-uniwind"],
+  "frontend": ["tanstack-router"],
   "addons": ["turborepo"],
   "examples": [],
   "auth": "better-auth",

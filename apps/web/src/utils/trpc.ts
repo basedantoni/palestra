@@ -1,6 +1,6 @@
-import type { AppRouter } from "@src/api/routers/index";
+import type { AppRouter } from "@life-tracker/api/routers/index";
 
-import { env } from "@src/env/web";
+import { env } from "@life-tracker/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";

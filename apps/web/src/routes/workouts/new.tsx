@@ -38,8 +38,8 @@ import {
   reconcileUnknownExerciseNames,
   templateToWorkoutFormData,
   WORKOUT_TYPE_LABELS,
-} from "@src/api/lib/index";
-import type { WorkoutFormData } from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
+import type { WorkoutFormData } from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/workouts/new")({
   validateSearch: z.object({
@@ -71,13 +71,17 @@ function RouteComponent() {
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<
     number | null
   >(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(
-    search.templateId,
-  );
-  const [appliedTemplateId, setAppliedTemplateId] = useState<string | undefined>();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<
+    string | undefined
+  >(search.templateId);
+  const [appliedTemplateId, setAppliedTemplateId] = useState<
+    string | undefined
+  >();
 
   // Whoop linking state
-  const [selectedWhoopActivityId, setSelectedWhoopActivityId] = useState<string | null>(null);
+  const [selectedWhoopActivityId, setSelectedWhoopActivityId] = useState<
+    string | null
+  >(null);
   const [whoopCardOpen, setWhoopCardOpen] = useState(false);
 
   const [formData, setFormData] = useState<WorkoutFormData>({
@@ -91,7 +95,10 @@ function RouteComponent() {
   const createWorkout = useMutation(
     trpc.workouts.create.mutationOptions({
       onSuccess: (data) => {
-        navigate({ to: "/workouts/$workoutId", params: { workoutId: data.id } });
+        navigate({
+          to: "/workouts/$workoutId",
+          params: { workoutId: data.id },
+        });
       },
     }),
   );
@@ -104,13 +111,18 @@ function RouteComponent() {
     ),
   );
   const exercisesQuery = useQuery(trpc.exercises.list.queryOptions());
-  const overloadQuery = useQuery(trpc.analytics.progressiveOverload.queryOptions());
+  const overloadQuery = useQuery(
+    trpc.analytics.progressiveOverload.queryOptions(),
+  );
   const preferencesQuery = useQuery(trpc.preferences.get.queryOptions());
   const distanceUnit = preferencesQuery.data?.distanceUnit ?? "mi";
 
   const exerciseNameById = useMemo(() => {
     return Object.fromEntries(
-      (exercisesQuery.data ?? []).map((exercise) => [exercise.id, exercise.name]),
+      (exercisesQuery.data ?? []).map((exercise) => [
+        exercise.id,
+        exercise.name,
+      ]),
     );
   }, [exercisesQuery.data]);
 
@@ -124,7 +136,10 @@ function RouteComponent() {
   }, [exercisesQuery.data]);
 
   const suggestionsByExerciseId = useMemo(() => {
-    const pairs = (overloadQuery.data ?? []).map((item) => [item.exerciseId, item.suggestion]);
+    const pairs = (overloadQuery.data ?? []).map((item) => [
+      item.exerciseId,
+      item.suggestion,
+    ]);
     return Object.fromEntries(pairs);
   }, [overloadQuery.data]);
 
@@ -194,7 +209,9 @@ function RouteComponent() {
 
   useEffect(() => {
     if (!Object.keys(exerciseNameById).length) return;
-    setFormData((prev) => reconcileUnknownExerciseNames(prev, exerciseNameById));
+    setFormData((prev) =>
+      reconcileUnknownExerciseNames(prev, exerciseNameById),
+    );
   }, [exerciseNameById]);
 
   const handleAddExercise = () => {
@@ -226,7 +243,8 @@ function RouteComponent() {
         });
       } else {
         // Changing existing exercise — clear Whoop if running subtype changes
-        const prevSubtype = updatedExercises[editingExerciseIndex]?.cardioSubtype;
+        const prevSubtype =
+          updatedExercises[editingExerciseIndex]?.cardioSubtype;
         updatedExercises[editingExerciseIndex] = {
           ...updatedExercises[editingExerciseIndex]!,
           exerciseId: exercise.id,
@@ -237,7 +255,8 @@ function RouteComponent() {
         if (prevSubtype === "running" && exercise.cardioSubtype !== "running") {
           // Check if any other exercise is still running
           const stillHasRunning = updatedExercises.some(
-            (ex, i) => i !== editingExerciseIndex && ex.cardioSubtype === "running",
+            (ex, i) =>
+              i !== editingExerciseIndex && ex.cardioSubtype === "running",
           );
           if (!stillHasRunning) {
             setSelectedWhoopActivityId(null);
@@ -297,7 +316,10 @@ function RouteComponent() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">New Workout</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate({ to: "/dashboard" })}>
+          <Button
+            variant="outline"
+            onClick={() => navigate({ to: "/dashboard" })}
+          >
             Cancel
           </Button>
           <Button
@@ -433,7 +455,11 @@ function RouteComponent() {
           </div>
         )}
 
-        <Button onClick={handleAddExercise} variant="outline" className="w-full">
+        <Button
+          onClick={handleAddExercise}
+          variant="outline"
+          className="w-full"
+        >
           <Plus className="h-4 w-4" />
           Add Exercise
         </Button>

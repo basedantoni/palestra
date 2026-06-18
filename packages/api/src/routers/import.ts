@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { exercise, workout } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { exercise, workout } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -229,7 +229,11 @@ export const importRouter = router({
             createdExerciseMap[parsedName] = id;
 
             // Add to the pending list so subsequent iterations can reuse it
-            pendingExercises.push({ id, name: resolution.name, status: "imported" });
+            pendingExercises.push({
+              id,
+              name: resolution.name,
+              status: "imported",
+            });
           }
         }
       }

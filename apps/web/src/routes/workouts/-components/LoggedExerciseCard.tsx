@@ -3,7 +3,7 @@ import {
   formatVolume,
   metersToDisplayUnit,
   getEffectiveDurationSeconds,
-} from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
 
 interface Set {
   id: string;
@@ -63,7 +63,10 @@ function formatLoggedPace(
   return `${mins}:${secs.toString().padStart(2, "0")} /${distanceUnit}`;
 }
 
-export function LoggedExerciseCard({ log, distanceUnit }: LoggedExerciseCardProps) {
+export function LoggedExerciseCard({
+  log,
+  distanceUnit,
+}: LoggedExerciseCardProps) {
   const exerciseType = log.exercise?.exerciseType;
   const cardioStyle =
     exerciseType === "cardio" ||
@@ -154,7 +157,9 @@ export function LoggedExerciseCard({ log, distanceUnit }: LoggedExerciseCardProp
                   <div>{log.rounds ?? "-"}</div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Duration Per Round</div>
+                  <div className="text-muted-foreground">
+                    Duration Per Round
+                  </div>
                   <div>{formatLoggedDuration(log.durationSeconds)}</div>
                 </div>
               </>

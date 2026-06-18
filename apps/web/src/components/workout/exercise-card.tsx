@@ -11,11 +11,15 @@ import {
   formatVolume,
   isCardioStyleExerciseType,
   metersToDisplayUnit,
-} from "@src/api/lib/index";
-import type { WorkoutExerciseFormData, WorkoutSetFormData } from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
+import type {
+  WorkoutExerciseFormData,
+  WorkoutSetFormData,
+} from "@life-tracker/api/lib/index";
 
 function ExerciseSuggestionBadge({ exerciseId }: { exerciseId: string }) {
-  const { suggestion, trendStatus, isLoading } = useExerciseSuggestion(exerciseId);
+  const { suggestion, trendStatus, isLoading } =
+    useExerciseSuggestion(exerciseId);
 
   if (isLoading || !trendStatus) return null;
 
@@ -35,7 +39,6 @@ function isTimedSet(set: WorkoutSetFormData): boolean {
 function parseNumber(value: string): number | undefined {
   return value === "" ? undefined : Number(value);
 }
-
 
 interface ExerciseCardProps {
   exercise: WorkoutExerciseFormData;
@@ -90,9 +93,18 @@ export function ExerciseCard({
     const updatedSets = [...exercise.sets];
     const set = updatedSets[index]!;
     if (isTimedSet(set)) {
-      updatedSets[index] = { ...set, durationSeconds: undefined, reps: undefined };
+      updatedSets[index] = {
+        ...set,
+        durationSeconds: undefined,
+        reps: undefined,
+      };
     } else {
-      updatedSets[index] = { ...set, reps: undefined, weight: undefined, durationSeconds: 30 };
+      updatedSets[index] = {
+        ...set,
+        reps: undefined,
+        weight: undefined,
+        durationSeconds: 30,
+      };
     }
     onUpdate({ ...exercise, sets: updatedSets });
   };
@@ -130,7 +142,9 @@ export function ExerciseCard({
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-sm font-medium">Distance ({distanceUnit})</label>
+              <label className="text-sm font-medium">
+                Distance ({distanceUnit})
+              </label>
               <Input
                 type="number"
                 min="0"
@@ -138,14 +152,19 @@ export function ExerciseCard({
                 placeholder={distanceUnit === "mi" ? "3.1" : "5.0"}
                 value={
                   exercise.distanceMeter != null
-                    ? metersToDisplayUnit(exercise.distanceMeter, distanceUnit).toFixed(2).replace(/\.?0+$/, "")
+                    ? metersToDisplayUnit(exercise.distanceMeter, distanceUnit)
+                        .toFixed(2)
+                        .replace(/\.?0+$/, "")
                     : ""
                 }
                 onChange={(e) => {
                   const raw = parseNumber(e.target.value);
                   onUpdate({
                     ...exercise,
-                    distanceMeter: raw != null ? Math.round(displayUnitToMeters(raw, distanceUnit)) : undefined,
+                    distanceMeter:
+                      raw != null
+                        ? Math.round(displayUnitToMeters(raw, distanceUnit))
+                        : undefined,
                   });
                 }}
               />
@@ -220,7 +239,9 @@ export function ExerciseCard({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Work Duration (seconds)</label>
+              <label className="text-sm font-medium">
+                Work Duration (seconds)
+              </label>
               <Input
                 type="number"
                 min="0"
@@ -233,7 +254,9 @@ export function ExerciseCard({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">Rest Duration (seconds)</label>
+              <label className="text-sm font-medium">
+                Rest Duration (seconds)
+              </label>
               <Input
                 type="number"
                 min="0"
@@ -288,7 +311,9 @@ export function ExerciseCard({
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Duration Per Round (seconds)</label>
+            <label className="text-sm font-medium">
+              Duration Per Round (seconds)
+            </label>
             <Input
               type="number"
               min="0"
@@ -357,10 +382,14 @@ export function ExerciseCard({
           <div className="space-y-2">
             <div className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2 text-sm font-medium text-muted-foreground">
               <div>Set</div>
-              <div>{mixedModes ? "Reps/Dur" : anyTimed ? "Duration (s)" : "Reps"}</div>
+              <div>
+                {mixedModes ? "Reps/Dur" : anyTimed ? "Duration (s)" : "Reps"}
+              </div>
               <div>Weight (lbs)</div>
               <div>RPE</div>
-              <div title="Toggle timed mode"><Timer className="h-4 w-4" /></div>
+              <div title="Toggle timed mode">
+                <Timer className="h-4 w-4" />
+              </div>
               <div></div>
             </div>
 
@@ -371,7 +400,9 @@ export function ExerciseCard({
                   key={set.tempId}
                   className="grid grid-cols-[50px_1fr_1fr_1fr_32px_40px] gap-2"
                 >
-                  <div className="flex items-center text-sm">{set.setNumber}</div>
+                  <div className="flex items-center text-sm">
+                    {set.setNumber}
+                  </div>
                   {timed ? (
                     <Input
                       type="number"

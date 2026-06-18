@@ -2,7 +2,7 @@ import z from "zod";
 
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { WORKOUT_TYPES, type OnboardingFormData } from "@src/shared";
+import { WORKOUT_TYPES, type OnboardingFormData } from "@life-tracker/shared";
 import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepWorkoutsProps {
@@ -23,7 +23,16 @@ export default function StepWorkouts({ form }: StepWorkoutsProps) {
         name="preferredWorkoutTypes"
         validators={{
           onChange: z
-            .array(z.enum(["weightlifting", "hiit", "cardio", "calisthenics", "yoga", "sports"]))
+            .array(
+              z.enum([
+                "weightlifting",
+                "hiit",
+                "cardio",
+                "calisthenics",
+                "yoga",
+                "sports",
+              ]),
+            )
             .min(1, "Select at least one workout type"),
         }}
       >
@@ -48,13 +57,17 @@ export default function StepWorkouts({ form }: StepWorkoutsProps) {
                           field.handleChange(
                             checked
                               ? [...selected, type.value]
-                              : selected.filter((v) => v !== type.value)
+                              : selected.filter((v) => v !== type.value),
                           );
                         }}
                       />
                       <div>
-                        <span className="text-sm font-medium">{type.label}</span>
-                        <p className="text-xs text-muted-foreground">{type.description}</p>
+                        <span className="text-sm font-medium">
+                          {type.label}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {type.description}
+                        </p>
                       </div>
                     </label>
                   );
@@ -69,7 +82,8 @@ export default function StepWorkouts({ form }: StepWorkoutsProps) {
 
               {selected.length > 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {selected.length} workout type{selected.length !== 1 ? "s" : ""} selected
+                  {selected.length} workout type
+                  {selected.length !== 1 ? "s" : ""} selected
                 </p>
               ) : null}
             </>

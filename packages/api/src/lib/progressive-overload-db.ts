@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   exercise,
   exerciseLog,
@@ -8,7 +8,7 @@ import {
   progressiveOverloadState,
   userPreferences,
   workout,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 import {
   analyzeProgressiveOverload,
@@ -77,10 +77,7 @@ export async function recalculateProgressiveOverload(
       .from(workout)
       .innerJoin(exerciseLog, eq(exerciseLog.workoutId, workout.id))
       .where(
-        and(
-          eq(workout.userId, userId),
-          eq(exerciseLog.exerciseId, exerciseId),
-        ),
+        and(eq(workout.userId, userId), eq(exerciseLog.exerciseId, exerciseId)),
       )
       .orderBy(desc(workout.date))
       .limit(10);
@@ -107,15 +104,30 @@ export async function recalculateProgressiveOverload(
     //    recentWorkoutLogs is newest-first, so we reverse it before building.
     const setsByLogId = new Map<
       string,
-      Array<{ reps: number | null; weight: number | null; rpe: number | null; durationSeconds: number | null }>
+      Array<{
+        reps: number | null;
+        weight: number | null;
+        rpe: number | null;
+        durationSeconds: number | null;
+      }>
     >();
     for (const set of allSets) {
       const existing = setsByLogId.get(set.exerciseLogId);
       if (existing) {
-        existing.push({ reps: set.reps, weight: set.weight, rpe: set.rpe, durationSeconds: set.durationSeconds });
+        existing.push({
+          reps: set.reps,
+          weight: set.weight,
+          rpe: set.rpe,
+          durationSeconds: set.durationSeconds,
+        });
       } else {
         setsByLogId.set(set.exerciseLogId, [
-          { reps: set.reps, weight: set.weight, rpe: set.rpe, durationSeconds: set.durationSeconds },
+          {
+            reps: set.reps,
+            weight: set.weight,
+            rpe: set.rpe,
+            durationSeconds: set.durationSeconds,
+          },
         ]);
       }
     }

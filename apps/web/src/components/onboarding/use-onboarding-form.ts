@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import {
   onboardingSchema,
   type OnboardingFormData,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 const DEFAULT_VALUES: OnboardingFormData = {
   fitnessGoal: "general_fitness",

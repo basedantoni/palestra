@@ -8,7 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import { WORKOUT_TYPE_LABELS } from "@life-tracker/api/lib/index";
 
 import { WorkoutViewMode } from "./-components/WorkoutViewMode";
 import {
@@ -173,10 +173,7 @@ function RouteComponent() {
           onPendingChange={setIsSaving}
         />
       ) : (
-        <WorkoutViewMode
-          workout={workout as any}
-          distanceUnit={distanceUnit}
-        />
+        <WorkoutViewMode workout={workout as any} distanceUnit={distanceUnit} />
       )}
     </div>
   );

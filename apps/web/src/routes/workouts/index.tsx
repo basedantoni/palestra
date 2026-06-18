@@ -19,7 +19,7 @@ import {
   getLocalMonthRange,
   groupWorkoutsByLocalDay,
   WORKOUT_TYPE_LABELS,
-} from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/workouts/")({
   component: RouteComponent,
@@ -46,7 +46,12 @@ function dateFromLocalKey(localKey: string): Date {
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0);
 }
 
-type WorkoutHistoryFilter = "all" | "running" | "mobility" | "lifting" | "other";
+type WorkoutHistoryFilter =
+  | "all"
+  | "running"
+  | "mobility"
+  | "lifting"
+  | "other";
 
 function matchesWorkoutTypeFilter(
   workout: { workoutType: string },
@@ -65,9 +70,11 @@ function matchesWorkoutTypeFilter(
       workout.workoutType === "calisthenics"
     );
   }
-  return !matchesWorkoutTypeFilter(workout, "running") &&
+  return (
+    !matchesWorkoutTypeFilter(workout, "running") &&
     !matchesWorkoutTypeFilter(workout, "mobility") &&
-    !matchesWorkoutTypeFilter(workout, "lifting");
+    !matchesWorkoutTypeFilter(workout, "lifting")
+  );
 }
 
 function RouteComponent() {
@@ -75,7 +82,10 @@ function RouteComponent() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [typeFilter, setTypeFilter] = useState<WorkoutHistoryFilter>("all");
 
-  const monthRange = useMemo(() => getLocalMonthRange(visibleMonth), [visibleMonth]);
+  const monthRange = useMemo(
+    () => getLocalMonthRange(visibleMonth),
+    [visibleMonth],
+  );
 
   const { data: workouts, isLoading } = useQuery(
     trpc.workouts.calendarRange.queryOptions({
@@ -147,7 +157,7 @@ function RouteComponent() {
 
   const selectedKey = selectedDate ? getLocalDateKey(selectedDate) : undefined;
   const workoutsForSelectedDay = selectedKey
-    ? filteredGroupedByDay[selectedKey] ?? []
+    ? (filteredGroupedByDay[selectedKey] ?? [])
     : [];
 
   return (
@@ -188,7 +198,9 @@ function RouteComponent() {
             ))}
           </div>
           {isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading calendar...</div>
+            <div className="text-sm text-muted-foreground">
+              Loading calendar...
+            </div>
           ) : (
             <Calendar
               mode="single"
@@ -257,10 +269,13 @@ function RouteComponent() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <CardTitle className="text-base">
-                            {new Date(workout.date).toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
+                            {new Date(workout.date).toLocaleTimeString(
+                              "en-US",
+                              {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              },
+                            )}
                           </CardTitle>
                           <Badge variant="secondary">
                             {WORKOUT_TYPE_LABELS[workout.workoutType]}
@@ -316,7 +331,12 @@ function RouteComponent() {
                   </div>
                   {item.trendStatus && (
                     <SuggestionBadge
-                      trendStatus={item.trendStatus as "improving" | "plateau" | "declining"}
+                      trendStatus={
+                        item.trendStatus as
+                          | "improving"
+                          | "plateau"
+                          | "declining"
+                      }
                       suggestion={item.suggestion}
                       compact
                     />

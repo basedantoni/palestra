@@ -53,9 +53,9 @@ const { mockDb, mockTx, makeChain } = vi.hoisted(() => {
   return { mockDb, mockTx, makeChain };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -82,7 +82,11 @@ const NOTIF_ID = "00000000-0000-4000-8000-000000000004";
 const userCaller = appRouter.createCaller({
   session: {
     user: { id: USER_ID, email: "user@test.internal", name: "Test User" },
-    session: { id: "sess-user", userId: USER_ID, expiresAt: new Date(Date.now() + 86400000) },
+    session: {
+      id: "sess-user",
+      userId: USER_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   },
   headers: new Headers(),
 } as any);
@@ -90,7 +94,11 @@ const userCaller = appRouter.createCaller({
 const adminCaller = appRouter.createCaller({
   session: {
     user: { id: ADMIN_ID, email: "admin@test.internal", name: "Admin" },
-    session: { id: "sess-admin", userId: ADMIN_ID, expiresAt: new Date(Date.now() + 86400000) },
+    session: {
+      id: "sess-admin",
+      userId: ADMIN_ID,
+      expiresAt: new Date(Date.now() + 86400000),
+    },
   },
   headers: new Headers(),
 } as any);
@@ -132,7 +140,9 @@ describe("exercises.createCustom", () => {
 
     expect(result.status).toBe("pending");
     expect(result.isCustom).toBe(true);
-    expect(result.linkedExerciseId).toBe("00000000-0000-4000-8000-000000000010");
+    expect(result.linkedExerciseId).toBe(
+      "00000000-0000-4000-8000-000000000010",
+    );
   });
 
   it("throws UNAUTHORIZED for unauthenticated callers", async () => {
@@ -152,7 +162,13 @@ describe("exercises.createCustom", () => {
 describe("exercises.myCustomExercises", () => {
   it("returns the authenticated user's custom exercises", async () => {
     const exercises = [
-      { id: EXERCISE_ID, name: "My Custom Squat", isCustom: true, status: "pending", createdByUserId: USER_ID },
+      {
+        id: EXERCISE_ID,
+        name: "My Custom Squat",
+        isCustom: true,
+        status: "pending",
+        createdByUserId: USER_ID,
+      },
     ];
     mockDb.select.mockReturnValue(makeChain(exercises));
 
@@ -171,7 +187,9 @@ describe("admin.isAdmin", () => {
   });
 
   it("throws FORBIDDEN for non-admin users", async () => {
-    await expect(userCaller.admin.isAdmin()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(userCaller.admin.isAdmin()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 });
 
@@ -291,7 +309,13 @@ describe("admin.rejectExercise", () => {
 describe("notifications.list", () => {
   it("returns the authenticated user's notifications", async () => {
     const notifs = [
-      { id: NOTIF_ID, title: "Exercise Approved!", userId: USER_ID, readAt: null, createdAt: new Date() },
+      {
+        id: NOTIF_ID,
+        title: "Exercise Approved!",
+        userId: USER_ID,
+        readAt: null,
+        createdAt: new Date(),
+      },
     ];
     mockDb.select.mockReturnValue(makeChain(notifs));
 

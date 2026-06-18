@@ -17,8 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { RunningPaceTrendPoint } from "@src/api/lib/analytics-queries";
-import { formatDateLabel, formatPaceFromMinPerUnit } from "@src/api/lib/index";
+import type { RunningPaceTrendPoint } from "@life-tracker/api/lib/analytics-queries";
+import {
+  formatDateLabel,
+  formatPaceFromMinPerUnit,
+} from "@life-tracker/api/lib/index";
 
 interface RunningPaceTrendChartProps {
   data: RunningPaceTrendPoint[];

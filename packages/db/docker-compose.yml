@@ -1,11 +1,11 @@
-name: fitness-app
+name: life-tracker
 
 services:
   postgres:
     image: postgres
-    container_name: fitness-app-postgres
+    container_name: life-tracker-postgres
     environment:
-      POSTGRES_DB: fitness-app
+      POSTGRES_DB: life-tracker
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:

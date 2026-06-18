@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { db } from "@src/db";
-import { exercise, exerciseLog, workout } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { exercise, exerciseLog, workout } from "@life-tracker/db/schema/index";
 import { and, eq } from "drizzle-orm";
 import { createWorkoutWithLogs } from "../packages/api/src/lib/workout-create";
 import {
@@ -34,7 +34,9 @@ interface ImportArgs {
 function parseArgs(): ImportArgs {
   const args = process.argv.slice(2);
   const get = (name: string) => {
-    const i = args.findIndex((arg) => arg === name || arg.startsWith(`${name}=`));
+    const i = args.findIndex(
+      (arg) => arg === name || arg.startsWith(`${name}=`),
+    );
     if (i < 0) {
       return undefined;
     }
@@ -50,7 +52,8 @@ function parseArgs(): ImportArgs {
   };
 
   return {
-    inputDir: get("--input") ?? `${process.env.HOME}/Downloads/nikeuserdata/tcx`,
+    inputDir:
+      get("--input") ?? `${process.env.HOME}/Downloads/nikeuserdata/tcx`,
     userId: get("--user-id"),
     dryRun: args.includes("--dry-run"),
   };
@@ -200,7 +203,9 @@ async function main() {
     }
   }
 
-  console.log(`Parsed ${parsed.length}/${files.length} runs (errors: ${parseErrors})`);
+  console.log(
+    `Parsed ${parsed.length}/${files.length} runs (errors: ${parseErrors})`,
+  );
 
   if (dryRun) {
     for (const run of parsed.slice(0, 5)) {

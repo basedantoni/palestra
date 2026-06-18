@@ -7,8 +7,8 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@src/db";
-import { whoopSleep } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { whoopSleep } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 
@@ -23,8 +23,8 @@ export const whoopSleepRouter = router({
       z.object({
         limit: z.number().int().min(1).max(50).default(25),
         cursor: z.string().optional(), // ISO datetime — start of last fetched row
-        from: z.string().optional(),  // ISO date/datetime string (inclusive)
-        to: z.string().optional(),    // ISO date/datetime string (inclusive)
+        from: z.string().optional(), // ISO date/datetime string (inclusive)
+        to: z.string().optional(), // ISO date/datetime string (inclusive)
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -54,7 +54,9 @@ export const whoopSleepRouter = router({
 
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
-      const nextCursor = hasMore ? items[items.length - 1]!.start.toISOString() : null;
+      const nextCursor = hasMore
+        ? items[items.length - 1]!.start.toISOString()
+        : null;
 
       return { items, nextCursor };
     }),

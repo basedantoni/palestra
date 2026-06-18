@@ -9,8 +9,8 @@
 
 import { eq } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { notification, whoopConnection } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { notification, whoopConnection } from "@life-tracker/db/schema/index";
 
 import type { WhoopActivityDetail } from "./whoop-activity-dto";
 import { upsertWhoopWorkout } from "./whoop-upsert";
@@ -144,7 +144,12 @@ export async function triggerBackfill(
         isFirstPage = false;
         // Set a rough total so the UI shows something; we'll increment as we go
         setBackfillState(userId, {
-          ...(getBackfillState(userId) ?? { running: true, importedCount: 0, totalCount: 0, shouldStop: false }),
+          ...(getBackfillState(userId) ?? {
+            running: true,
+            importedCount: 0,
+            totalCount: 0,
+            shouldStop: false,
+          }),
           totalCount: records.length,
         });
       }

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateLabel } from "@src/api/lib/index";
+import { formatDateLabel } from "@life-tracker/api/lib/index";
 
 interface HrTrendPoint {
   date: string;

@@ -9,8 +9,12 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WeeklyRunningVolumePoint } from "@src/api/lib/analytics-queries";
-import { metersToDisplayUnit, formatPeriodLabel, formatChartDuration } from "@src/api/lib/index";
+import type { WeeklyRunningVolumePoint } from "@life-tracker/api/lib/analytics-queries";
+import {
+  metersToDisplayUnit,
+  formatPeriodLabel,
+  formatChartDuration,
+} from "@life-tracker/api/lib/index";
 
 interface RunningVolumeChartProps {
   data: WeeklyRunningVolumePoint[];

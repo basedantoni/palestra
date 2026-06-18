@@ -80,9 +80,9 @@ const { mockDb, mockTx, makeChain, makeTxUpdate } = vi.hoisted(() => {
   return { mockDb, mockTx, makeChain, makeTxUpdate };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -109,7 +109,7 @@ vi.mock("../lib/whoop-client", () => ({
 }));
 
 import { appRouter } from "../routers/index";
-import { whoopActivityToExerciseLog } from "@src/shared";
+import { whoopActivityToExerciseLog } from "@life-tracker/shared";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test constants
@@ -284,7 +284,13 @@ describe("whoop.listUnlinkedCardioActivities", () => {
 
     // The running activity is already linked
     mockDb.select.mockReturnValueOnce(
-      makeChain([{ whoopActivityId: WHOOP_ACTIVITY_ID, id: "workout-123", date: new Date("2026-04-28") }]),
+      makeChain([
+        {
+          whoopActivityId: WHOOP_ACTIVITY_ID,
+          id: "workout-123",
+          date: new Date("2026-04-28"),
+        },
+      ]),
     );
 
     const result = await userCaller.whoop.listUnlinkedCardioActivities({
@@ -308,7 +314,8 @@ describe("whoop.listUnlinkedCardioActivities", () => {
 
     // Verify fetch was called with appropriate start/end params
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const fetchUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+    const fetchUrl = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as string;
     expect(fetchUrl).toContain("start=2026-04-25");
     expect(fetchUrl).toContain("end=2026-05-01");
   });
@@ -322,7 +329,8 @@ describe("whoop.listUnlinkedCardioActivities", () => {
       nextToken: "cursor-abc",
     });
 
-    const fetchUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+    const fetchUrl = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as string;
     expect(fetchUrl).toContain("nextToken=cursor-abc");
   });
 
@@ -375,9 +383,13 @@ describe("whoop.linkToWorkout", () => {
   it("writes all DTO fields to the exercise log and sets whoopActivityId", async () => {
     // 1. Workout lookup → found, not linked
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]))
+      .mockReturnValueOnce(
+        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
+      )
       // 2. Exercise log lookup → no existing metrics
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]));
+      .mockReturnValueOnce(
+        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
+      );
 
     // Whoop activity detail fetch
     mockFetch(RUNNING_ACTIVITY);
@@ -409,9 +421,13 @@ describe("whoop.linkToWorkout", () => {
 
   it("returns metricConflict: true when exercise log has existing metrics and force is false", async () => {
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]))
+      .mockReturnValueOnce(
+        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
+      )
       // Exercise log with existing metrics
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]));
+      .mockReturnValueOnce(
+        makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]),
+      );
 
     mockFetch(RUNNING_ACTIVITY);
 
@@ -429,8 +445,12 @@ describe("whoop.linkToWorkout", () => {
 
   it("overwrites existing metrics when force is true", async () => {
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]))
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]));
+      .mockReturnValueOnce(
+        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
+      )
+      .mockReturnValueOnce(
+        makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]),
+      );
 
     mockFetch(RUNNING_ACTIVITY);
 
@@ -449,8 +469,12 @@ describe("whoop.linkToWorkout", () => {
 
   it("throws CONFLICT when same Whoop activity is linked to two workouts (unique constraint)", async () => {
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: WORKOUT_ID_2, whoopActivityId: null }]))
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]));
+      .mockReturnValueOnce(
+        makeChain([{ id: WORKOUT_ID_2, whoopActivityId: null }]),
+      )
+      .mockReturnValueOnce(
+        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
+      );
 
     mockFetch(RUNNING_ACTIVITY);
 
@@ -493,8 +517,12 @@ describe("whoop.linkToWorkout", () => {
 
   it("writes null metrics when score_state !== SCORED", async () => {
     mockDb.select
-      .mockReturnValueOnce(makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]))
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]));
+      .mockReturnValueOnce(
+        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
+      )
+      .mockReturnValueOnce(
+        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
+      );
 
     mockFetch(UNSCORED_RUNNING_ACTIVITY);
 

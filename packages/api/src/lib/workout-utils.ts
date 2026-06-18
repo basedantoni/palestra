@@ -149,7 +149,12 @@ export interface WorkoutSetFormData {
   durationSeconds: number | undefined; // for timed/isometric sets; mutually exclusive with reps
 }
 
-export type CardioSubtype = "running" | "cycling" | "swimming" | "rowing" | "other";
+export type CardioSubtype =
+  | "running"
+  | "cycling"
+  | "swimming"
+  | "rowing"
+  | "other";
 
 export interface WorkoutExerciseFormData {
   tempId: string;
@@ -193,7 +198,10 @@ export interface ApiWorkoutSet {
 export interface ApiWorkoutLog {
   exerciseId: string | null;
   exerciseName: string;
-  exercise?: { exerciseType: ExerciseType; cardioSubtype?: CardioSubtype | null } | null;
+  exercise?: {
+    exerciseType: ExerciseType;
+    cardioSubtype?: CardioSubtype | null;
+  } | null;
   order: number;
   rounds: number | null;
   workDurationSeconds: number | null;
@@ -237,7 +245,6 @@ export interface ExerciseProgressionSuggestion {
     unit: string;
   };
 }
-
 
 // Volume calculation (client-side)
 export function calculateSetVolume(set: WorkoutSetFormData): number {
@@ -362,13 +369,21 @@ export function formDataToApiInput(form: WorkoutFormData) {
         exerciseName: ex.exerciseName,
         order: idx,
         rounds: cfg.hasRounds ? ex.rounds : undefined,
-        workDurationSeconds: cfg.hasWorkRestDuration ? ex.workDurationSeconds : undefined,
-        restDurationSeconds: cfg.hasWorkRestDuration ? ex.restDurationSeconds : undefined,
+        workDurationSeconds: cfg.hasWorkRestDuration
+          ? ex.workDurationSeconds
+          : undefined,
+        restDurationSeconds: cfg.hasWorkRestDuration
+          ? ex.restDurationSeconds
+          : undefined,
         intensity: cfg.hasIntensity ? ex.intensity : undefined,
         distanceMeter: cfg.hasDistance ? ex.distanceMeter : undefined,
-        durationSeconds: cfg.hasDurationSeconds ? ex.durationSeconds : undefined,
+        durationSeconds: cfg.hasDurationSeconds
+          ? ex.durationSeconds
+          : undefined,
         heartRate: cfg.hasHeartRate ? ex.heartRate : undefined,
-        durationMinutes: cfg.hasDurationMinutes ? ex.durationMinutes : undefined,
+        durationMinutes: cfg.hasDurationMinutes
+          ? ex.durationMinutes
+          : undefined,
         notes: ex.notes || undefined,
         sets: cfg.hasSets
           ? ex.sets
@@ -391,7 +406,9 @@ export function formDataToApiInput(form: WorkoutFormData) {
   };
 }
 
-export function apiWorkoutToFormData(workout: ApiWorkoutForEdit): WorkoutFormData {
+export function apiWorkoutToFormData(
+  workout: ApiWorkoutForEdit,
+): WorkoutFormData {
   return {
     workoutType: workout.workoutType,
     notes: workout.notes ?? "",
@@ -444,7 +461,10 @@ export function templateToWorkoutFormData(
   options?: {
     exerciseNameById?: Record<string, string>;
     exerciseTypeById?: Record<string, ExerciseType>;
-    suggestionsByExerciseId?: Record<string, ExerciseProgressionSuggestion | null>;
+    suggestionsByExerciseId?: Record<
+      string,
+      ExerciseProgressionSuggestion | null
+    >;
     date?: Date;
   },
 ): WorkoutFormData {
@@ -478,10 +498,11 @@ export function templateToWorkoutFormData(
                 exercise.defaultSets ?? 1,
                 Math.max(1, Math.round(suggestion.details.suggestedValue)),
               )
-            : exercise.defaultSets ?? 1;
+            : (exercise.defaultSets ?? 1);
         const suggestedWeight =
           suggestion?.details &&
-          (suggestion.details.unit === "lbs" || suggestion.details.unit === "kg")
+          (suggestion.details.unit === "lbs" ||
+            suggestion.details.unit === "kg")
             ? suggestion.details.suggestedValue
             : undefined;
         const suggestedReps =
@@ -585,35 +606,22 @@ const METERS_PER_KM = 1000;
  * Convert meters to the user's preferred distance unit.
  * Returns the numeric value (not formatted).
  */
-export function metersToDisplayUnit(
-  meters: number,
-  unit: "mi" | "km",
-): number {
-  return unit === "mi"
-    ? meters / METERS_PER_MILE
-    : meters / METERS_PER_KM;
+export function metersToDisplayUnit(meters: number, unit: "mi" | "km"): number {
+  return unit === "mi" ? meters / METERS_PER_MILE : meters / METERS_PER_KM;
 }
 
 /**
  * Convert from the user's preferred distance unit back to meters.
  */
-export function displayUnitToMeters(
-  value: number,
-  unit: "mi" | "km",
-): number {
-  return unit === "mi"
-    ? value * METERS_PER_MILE
-    : value * METERS_PER_KM;
+export function displayUnitToMeters(value: number, unit: "mi" | "km"): number {
+  return unit === "mi" ? value * METERS_PER_MILE : value * METERS_PER_KM;
 }
 
 /**
  * Format a distance for display (1 decimal place).
  * Example: formatDistance(8046.72, "mi") → "5.0 mi"
  */
-export function formatDistance(
-  meters: number,
-  unit: "mi" | "km",
-): string {
+export function formatDistance(meters: number, unit: "mi" | "km"): string {
   const value = metersToDisplayUnit(meters, unit);
   return `${value.toFixed(1)} ${unit}`;
 }

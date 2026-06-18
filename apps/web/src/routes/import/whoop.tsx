@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import { WORKOUT_TYPE_LABELS } from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/import/whoop")({
   component: WhoopImportPage,
@@ -31,7 +31,14 @@ export const Route = createFileRoute("/import/whoop")({
   },
 });
 
-type WorkoutType = "weightlifting" | "hiit" | "cardio" | "calisthenics" | "yoga" | "sports" | "mixed";
+type WorkoutType =
+  | "weightlifting"
+  | "hiit"
+  | "cardio"
+  | "calisthenics"
+  | "yoga"
+  | "sports"
+  | "mixed";
 
 type WhoopActivity = {
   id: string;
@@ -72,8 +79,12 @@ function WhoopImportPage() {
 
   // Pagination: accumulated list of activities across pages
   const [allActivities, setAllActivities] = useState<WhoopActivity[]>([]);
-  const [nextToken, setNextToken] = useState<string | null | undefined>(undefined); // undefined = not yet loaded
-  const [currentToken, setCurrentToken] = useState<string | undefined>(undefined);
+  const [nextToken, setNextToken] = useState<string | null | undefined>(
+    undefined,
+  ); // undefined = not yet loaded
+  const [currentToken, setCurrentToken] = useState<string | undefined>(
+    undefined,
+  );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
@@ -85,7 +96,9 @@ function WhoopImportPage() {
   const [selectAll, setSelectAll] = useState(false); // "select all in date range" flag
 
   // Review step: per-activity type overrides
-  const [typeOverrides, setTypeOverrides] = useState<Record<string, WorkoutType>>({});
+  const [typeOverrides, setTypeOverrides] = useState<
+    Record<string, WorkoutType>
+  >({});
 
   // First page query — controlled by appliedFrom/appliedTo
   const firstPageQuery = useQuery({
@@ -143,9 +156,9 @@ function WhoopImportPage() {
       setAllActivities((prev) => {
         // Deduplicate by id in case of re-render
         const existingIds = new Set(prev.map((a) => a.whoopActivityId));
-        const newActivities = (nextPageQuery.data.activities as WhoopActivity[]).filter(
-          (a) => !existingIds.has(a.whoopActivityId),
-        );
+        const newActivities = (
+          nextPageQuery.data.activities as WhoopActivity[]
+        ).filter((a) => !existingIds.has(a.whoopActivityId));
         return [...prev, ...newActivities];
       });
       setNextToken(nextPageQuery.data.nextToken);
@@ -253,20 +266,22 @@ function WhoopImportPage() {
   if (connectionQuery.isLoading) {
     return (
       <div className="container mx-auto max-w-2xl px-4 py-6">
-        <div className="text-sm text-muted-foreground">Checking Whoop connection...</div>
+        <div className="text-sm text-muted-foreground">
+          Checking Whoop connection...
+        </div>
       </div>
     );
   }
 
   // Not connected or invalid
-  if (
-    !connectionQuery.data?.connected ||
-    !connectionQuery.data?.isValid
-  ) {
+  if (!connectionQuery.data?.connected || !connectionQuery.data?.isValid) {
     return (
       <div className="container mx-auto max-w-2xl px-4 py-6">
         <div className="mb-4">
-          <Link to="/import" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            to="/import"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-4 w-4" />
             Back to Import
           </Link>
@@ -277,7 +292,8 @@ function WhoopImportPage() {
             <div>
               <h2 className="text-lg font-semibold">Whoop Not Connected</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                {connectionQuery.data?.connected && !connectionQuery.data?.isValid
+                {connectionQuery.data?.connected &&
+                !connectionQuery.data?.isValid
                   ? "Your Whoop connection has expired. Please reconnect to import activities."
                   : "Connect your Whoop account to import workout activities."}
               </p>
@@ -335,17 +351,19 @@ function WhoopImportPage() {
   const isFirstPageError = firstPageQuery.isError;
 
   const allLoadedCount = allActivities.length;
-  const selectedCount = selectAll
-    ? "all in range"
-    : selectedIds.size;
+  const selectedCount = selectAll ? "all in range" : selectedIds.size;
 
-  const hasMore = nextToken !== null && nextToken !== undefined && allActivities.length > 0;
+  const hasMore =
+    nextToken !== null && nextToken !== undefined && allActivities.length > 0;
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-6">
       {/* Header */}
       <div className="mb-4">
-        <Link to="/import" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          to="/import"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" />
           Back to Import
         </Link>
@@ -375,7 +393,9 @@ function WhoopImportPage() {
         <CardContent>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label htmlFor="from-date" className="text-xs">From</Label>
+              <Label htmlFor="from-date" className="text-xs">
+                From
+              </Label>
               <Input
                 id="from-date"
                 type="date"
@@ -385,7 +405,9 @@ function WhoopImportPage() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="to-date" className="text-xs">To</Label>
+              <Label htmlFor="to-date" className="text-xs">
+                To
+              </Label>
               <Input
                 id="to-date"
                 type="date"
@@ -408,8 +430,12 @@ function WhoopImportPage() {
           {(appliedFrom || appliedTo) && (
             <p className="text-xs text-muted-foreground mt-2">
               Showing activities
-              {appliedFrom ? ` from ${format(new Date(appliedFrom), "MMM d, yyyy")}` : ""}
-              {appliedTo ? ` to ${format(new Date(appliedTo), "MMM d, yyyy")}` : ""}
+              {appliedFrom
+                ? ` from ${format(new Date(appliedFrom), "MMM d, yyyy")}`
+                : ""}
+              {appliedTo
+                ? ` to ${format(new Date(appliedTo), "MMM d, yyyy")}`
+                : ""}
             </p>
           )}
         </CardContent>
@@ -455,7 +481,9 @@ function WhoopImportPage() {
                   onClick={handleSelectAll}
                   className="text-xs gap-1"
                 >
-                  {selectedIds.size === allLoadedCount && !selectAll && allLoadedCount > 0 ? (
+                  {selectedIds.size === allLoadedCount &&
+                  !selectAll &&
+                  allLoadedCount > 0 ? (
                     <>
                       <CheckSquare className="h-3.5 w-3.5" />
                       Deselect All Loaded
@@ -473,7 +501,9 @@ function WhoopImportPage() {
                   onClick={handleSelectAllInRange}
                   className="text-xs"
                 >
-                  {selectAll ? "Deselect All in Range" : "Select All in Date Range"}
+                  {selectAll
+                    ? "Deselect All in Range"
+                    : "Select All in Date Range"}
                 </Button>
                 {(selectAll ? true : selectedIds.size > 0) && (
                   <span className="text-xs text-muted-foreground">
@@ -486,14 +516,16 @@ function WhoopImportPage() {
 
               {selectAll && (
                 <div className="text-xs text-blue-600 dark:text-blue-400 mb-3 p-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-                  All activities in the current date range will be imported — including pages not yet loaded.
+                  All activities in the current date range will be imported —
+                  including pages not yet loaded.
                 </div>
               )}
 
               {/* Activity rows */}
               <div className="space-y-2 mb-4">
                 {allActivities.map((activity) => {
-                  const isSelected = selectAll || selectedIds.has(activity.whoopActivityId);
+                  const isSelected =
+                    selectAll || selectedIds.has(activity.whoopActivityId);
                   return (
                     <ActivityRow
                       key={activity.whoopActivityId}
@@ -509,7 +541,10 @@ function WhoopImportPage() {
               {loadMoreError && (
                 <div className="flex items-center gap-2 text-destructive text-sm mb-3">
                   <AlertCircle className="h-4 w-4" />
-                  <span>{loadMoreError} — previously loaded activities are still shown above.</span>
+                  <span>
+                    {loadMoreError} — previously loaded activities are still
+                    shown above.
+                  </span>
                 </div>
               )}
 
@@ -581,7 +616,9 @@ function ActivityRow({ activity, isSelected, onToggle }: ActivityRowProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium">{activity.sportName}</span>
           {activity.alreadyImported && (
-            <Badge variant="secondary" className="text-xs">Already imported</Badge>
+            <Badge variant="secondary" className="text-xs">
+              Already imported
+            </Badge>
           )}
         </div>
         <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
@@ -599,7 +636,13 @@ function ActivityRow({ activity, isSelected, onToggle }: ActivityRowProps) {
 // ─── Review Step ─────────────────────────────────────────────────────────────
 
 const WORKOUT_TYPES: WorkoutType[] = [
-  "weightlifting", "hiit", "cardio", "calisthenics", "yoga", "sports", "mixed",
+  "weightlifting",
+  "hiit",
+  "cardio",
+  "calisthenics",
+  "yoga",
+  "sports",
+  "mixed",
 ];
 
 interface ReviewStepProps {
@@ -669,8 +712,10 @@ function ReviewStep({
   // Helper: build the auto-generated notes for preview
   const buildNotes = (activity: WhoopActivity): string => {
     const parts = [`Imported from Whoop. Sport: ${activity.sportName}.`];
-    if (activity.strain !== null) parts.push(`Strain: ${activity.strain.toFixed(1)}.`);
-    if (activity.averageHeartRate !== null) parts.push(`Avg HR: ${activity.averageHeartRate} bpm.`);
+    if (activity.strain !== null)
+      parts.push(`Strain: ${activity.strain.toFixed(1)}.`);
+    if (activity.averageHeartRate !== null)
+      parts.push(`Avg HR: ${activity.averageHeartRate} bpm.`);
     return parts.join(" ");
   };
 
@@ -712,14 +757,16 @@ function ReviewStep({
 
       {selectAll && (
         <div className="text-xs text-blue-600 dark:text-blue-400 mb-4 p-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-          Showing loaded activities only. All activities in the date range (including unloaded pages) will be imported.
+          Showing loaded activities only. All activities in the date range
+          (including unloaded pages) will be imported.
         </div>
       )}
 
       {/* Activity review cards */}
       <div className="space-y-3 mb-6">
         {selectedActivities.map((activity) => {
-          const effectiveType = typeOverrides[activity.whoopActivityId] ?? activity.workoutType;
+          const effectiveType =
+            typeOverrides[activity.whoopActivityId] ?? activity.workoutType;
           const intensity = buildIntensity(activity);
           const notes = buildNotes(activity);
 
@@ -728,13 +775,20 @@ function ReviewStep({
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-base">{activity.sportName}</CardTitle>
+                    <CardTitle className="text-base">
+                      {activity.sportName}
+                    </CardTitle>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {format(new Date(activity.start), "MMM d, yyyy 'at' h:mm a")}
+                      {format(
+                        new Date(activity.start),
+                        "MMM d, yyyy 'at' h:mm a",
+                      )}
                     </p>
                   </div>
                   {activity.alreadyImported && (
-                    <Badge variant="secondary" className="text-xs shrink-0">Already imported — will skip</Badge>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      Already imported — will skip
+                    </Badge>
                   )}
                 </div>
               </CardHeader>
@@ -746,21 +800,27 @@ function ReviewStep({
 
                   {activity.averageHeartRate !== null && (
                     <>
-                      <div className="text-muted-foreground">Avg Heart Rate</div>
+                      <div className="text-muted-foreground">
+                        Avg Heart Rate
+                      </div>
                       <div>{activity.averageHeartRate} bpm</div>
                     </>
                   )}
 
                   {activity.strain !== null && (
                     <>
-                      <div className="text-muted-foreground">Strain (Whoop)</div>
+                      <div className="text-muted-foreground">
+                        Strain (Whoop)
+                      </div>
                       <div>{activity.strain.toFixed(1)} / 21</div>
                     </>
                   )}
 
                   {intensity !== null && (
                     <>
-                      <div className="text-muted-foreground">Intensity (0–100)</div>
+                      <div className="text-muted-foreground">
+                        Intensity (0–100)
+                      </div>
                       <div>{intensity}</div>
                     </>
                   )}
@@ -812,7 +872,11 @@ function ReviewStep({
 
       {/* Actions */}
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack} disabled={commitMutation.isPending}>
+        <Button
+          variant="outline"
+          onClick={onBack}
+          disabled={commitMutation.isPending}
+        >
           Back
         </Button>
         <Button onClick={handleCommit} disabled={commitMutation.isPending}>
@@ -863,7 +927,9 @@ function CompleteStep({ result, onStartOver }: CompleteStepProps) {
               <div className="text-2xl font-bold text-muted-foreground">
                 {result.skippedCount}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">Skipped (already imported)</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Skipped (already imported)
+              </div>
             </div>
           </div>
 

@@ -12,10 +12,10 @@
   "dependencies": {
     "@hono/node-server": "^1.14.4",
     "@hono/trpc-server": "^0.4.0",
-    "@src/api": "workspace:*",
-    "@src/auth": "workspace:*",
-    "@src/db": "workspace:*",
-    "@src/env": "workspace:*",
+    "@life-tracker/api": "workspace:*",
+    "@life-tracker/auth": "workspace:*",
+    "@life-tracker/db": "workspace:*",
+    "@life-tracker/env": "workspace:*",
     "@trpc/server": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
@@ -23,7 +23,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "@types/node": "^22.13.14",
     "tsdown": "^0.16.5",
     "tsx": "^4.19.2",

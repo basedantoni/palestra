@@ -10,8 +10,11 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { WORKOUT_TYPE_LABELS, formatPeriodLabel } from "@src/api/lib/index";
-import type { WorkoutTypeMixPoint } from "@src/api/lib/analytics-queries";
+import {
+  WORKOUT_TYPE_LABELS,
+  formatPeriodLabel,
+} from "@life-tracker/api/lib/index";
+import type { WorkoutTypeMixPoint } from "@life-tracker/api/lib/analytics-queries";
 
 interface WorkoutTypeMixChartProps {
   data: WorkoutTypeMixPoint[];

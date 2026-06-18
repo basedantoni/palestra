@@ -7,7 +7,7 @@ import {
   exerciseSet,
   workout,
   workoutTypeEnum,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 import * as personalRecords from "./personal-records";
 import type { Tx } from "./personal-records";

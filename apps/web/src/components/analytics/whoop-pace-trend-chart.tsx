@@ -9,7 +9,10 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateLabel, formatPaceFromSecPerUnit } from "@src/api/lib/index";
+import {
+  formatDateLabel,
+  formatPaceFromSecPerUnit,
+} from "@life-tracker/api/lib/index";
 
 interface PaceTrendPoint {
   date: string;
@@ -61,7 +64,9 @@ export function WhoopPaceTrendChart({
           tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
           width={56}
           tickFormatter={(val) =>
-            typeof val === "number" ? formatPaceFromSecPerUnit(val) : String(val)
+            typeof val === "number"
+              ? formatPaceFromSecPerUnit(val)
+              : String(val)
           }
           label={{
             value: `min/${unit}`,
@@ -74,7 +79,10 @@ export function WhoopPaceTrendChart({
         <Tooltip
           formatter={(value) => {
             if (value == null) return ["—", `Pace (min/${unit})`];
-            return [`${formatPaceFromSecPerUnit(Number(value))} /${unit}`, "Pace"];
+            return [
+              `${formatPaceFromSecPerUnit(Number(value))} /${unit}`,
+              "Pace",
+            ];
           }}
           labelFormatter={(label) => `Date: ${String(label)}`}
           labelStyle={{ color: "var(--muted-foreground)" }}

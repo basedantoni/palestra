@@ -1,14 +1,14 @@
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { startOfISOWeek, endOfISOWeek } from "date-fns";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   exercise,
   exerciseLog,
   exerciseSet,
   muscleGroupVolume,
   workout,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 /**
  * Recomputes muscle group volume totals for the ISO week containing `weekOf`.
@@ -91,7 +91,13 @@ export async function recalculateMuscleGroupVolumeForWeek(
     insertRows.push({
       id: crypto.randomUUID(),
       userId,
-      muscleGroup: mg as "chest" | "back" | "shoulders" | "arms" | "legs" | "core",
+      muscleGroup: mg as
+        | "chest"
+        | "back"
+        | "shoulders"
+        | "arms"
+        | "legs"
+        | "core",
       categorizationSystem: "bodybuilding",
       weekStartDate: weekStartStr,
       totalVolume: acc.volume,

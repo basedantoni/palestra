@@ -5,7 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import { WORKOUT_TYPE_LABELS } from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/templates/")({
   component: RouteComponent,
@@ -28,14 +28,18 @@ export const Route = createFileRoute("/templates/")({
 });
 
 function RouteComponent() {
-  const { data: templates, isLoading } = useQuery(trpc.templates.list.queryOptions());
+  const { data: templates, isLoading } = useQuery(
+    trpc.templates.list.queryOptions(),
+  );
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
       <h1 className="text-2xl font-bold mb-6">Templates</h1>
 
       {isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading templates...</div>
+        <div className="text-sm text-muted-foreground">
+          Loading templates...
+        </div>
       ) : templates && templates.length > 0 ? (
         <div className="space-y-3">
           {templates.map((template) => (

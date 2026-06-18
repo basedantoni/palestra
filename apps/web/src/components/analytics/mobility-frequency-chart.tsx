@@ -10,8 +10,8 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import type { MobilityFrequencyPoint } from "@src/api/lib/analytics-queries";
-import { formatPeriodLabel } from "@src/api/lib/index";
+import type { MobilityFrequencyPoint } from "@life-tracker/api/lib/analytics-queries";
+import { formatPeriodLabel } from "@life-tracker/api/lib/index";
 
 interface MobilityFrequencyChartProps {
   data: MobilityFrequencyPoint[];

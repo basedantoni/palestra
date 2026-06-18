@@ -2,14 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@src/db";
-import { exercise, exerciseLog, workout } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { exercise, exerciseLog, workout } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
-import {
-  type ParsedTcxRun,
-  fingerprintTcxRun,
-} from "../lib/tcx-import";
+import { type ParsedTcxRun, fingerprintTcxRun } from "../lib/tcx-import";
 import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
 import { createWorkoutWithLogs } from "../lib/workout-create";
@@ -51,7 +48,9 @@ function normalizeSource(source: string | undefined): string {
   return source?.trim() || DEFAULT_TCX_IMPORT_SOURCE;
 }
 
-function exerciseNameForDistance(distanceMeter: number): "Short Run" | "Long Run" {
+function exerciseNameForDistance(
+  distanceMeter: number,
+): "Short Run" | "Long Run" {
   return distanceMeter >= LONG_RUN_THRESHOLD_M ? "Long Run" : "Short Run";
 }
 
@@ -296,7 +295,9 @@ export const tcxImportRouter = router({
         skippedDuplicateCount,
         skippedInvalidCount,
         totalCount:
-          selectedFingerprints == null ? input.runs.length : selectedFingerprints.size,
+          selectedFingerprints == null
+            ? input.runs.length
+            : selectedFingerprints.size,
       };
     }),
 });

@@ -1,5 +1,5 @@
-import { refreshAllValidWhoopTokens } from "@src/api/lib/whoop-client";
-import { env } from "@src/env/server";
+import { refreshAllValidWhoopTokens } from "@life-tracker/api/lib/whoop-client";
+import { env } from "@life-tracker/env/server";
 import { Hono } from "hono";
 
 export const internalApp = new Hono();
@@ -11,6 +11,8 @@ internalApp.post("/whoop/refresh-tokens", async (c) => {
   }
 
   const result = await refreshAllValidWhoopTokens();
-  console.log(`[internal] Whoop token refresh: ${result.refreshed} refreshed, ${result.failed} failed`);
+  console.log(
+    `[internal] Whoop token refresh: ${result.refreshed} refreshed, ${result.failed} failed`,
+  );
   return c.json({ ok: true, ...result });
 });

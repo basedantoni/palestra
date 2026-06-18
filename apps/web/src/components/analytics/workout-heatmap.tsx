@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type {
   WorkoutFrequencyDay,
   StreakResult,
-} from "@src/api/lib/analytics-queries";
+} from "@life-tracker/api/lib/analytics-queries";
 
 interface WorkoutHeatmapProps {
   days: WorkoutFrequencyDay[];

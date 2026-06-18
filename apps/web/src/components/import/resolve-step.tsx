@@ -15,7 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ExerciseResolution, FuzzyMatchResult } from "@src/api/lib/index";
+import type {
+  ExerciseResolution,
+  FuzzyMatchResult,
+} from "@life-tracker/api/lib/index";
 
 export type ExerciseCategory =
   | "chest"
@@ -90,7 +93,8 @@ function ExerciseRow({
 }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createName, setCreateName] = useState(resolution.parsedName);
-  const [createCategory, setCreateCategory] = useState<ExerciseCategory>("other");
+  const [createCategory, setCreateCategory] =
+    useState<ExerciseCategory>("other");
   const [createType, setCreateType] = useState<ExerciseType>("weightlifting");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -102,7 +106,11 @@ function ExerciseRow({
   );
 
   const handleSelectExisting = (match: FuzzyMatchResult) => {
-    onChange({ type: "existing", exerciseId: match.exerciseId, exerciseName: match.exerciseName });
+    onChange({
+      type: "existing",
+      exerciseId: match.exerciseId,
+      exerciseName: match.exerciseName,
+    });
     setShowCreateForm(false);
   };
 
@@ -124,7 +132,10 @@ function ExerciseRow({
       </Badge>
     ),
     low: (
-      <Badge variant="outline" className="text-yellow-600 border-yellow-400 text-xs">
+      <Badge
+        variant="outline"
+        className="text-yellow-600 border-yellow-400 text-xs"
+      >
         Low confidence
       </Badge>
     ),
@@ -148,7 +159,9 @@ function ExerciseRow({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{resolution.parsedName}</p>
+          <p className="text-sm font-medium truncate">
+            {resolution.parsedName}
+          </p>
           {userResolution?.type === "existing" && (
             <p className="text-xs text-green-600">
               Mapped to: {userResolution.exerciseName}
@@ -179,8 +192,8 @@ function ExerciseRow({
       {/* Cross-batch similarity warning */}
       {resolution.similarTo && resolution.similarTo.length > 0 && (
         <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-700 rounded-none px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-200">
-          <span className="font-medium">Possible duplicate:</span>{" "}
-          May be the same as{" "}
+          <span className="font-medium">Possible duplicate:</span> May be the
+          same as{" "}
           {resolution.similarTo.map((name, i) => (
             <span key={name}>
               {i > 0 && ", "}
@@ -190,7 +203,9 @@ function ExerciseRow({
           {userResolution && userResolution.type !== "skip" && (
             <button
               className="ml-2 underline underline-offset-2 font-medium"
-              onClick={() => onApplyToSimilar(resolution.similarTo, userResolution)}
+              onClick={() =>
+                onApplyToSimilar(resolution.similarTo, userResolution)
+              }
             >
               Apply this resolution to similar
             </button>
@@ -199,98 +214,102 @@ function ExerciseRow({
       )}
 
       {/* Auto-matched high confidence -- show the match and allow changing */}
-      {resolution.confidence === "high" && !userResolution && resolution.bestMatch && (
-        <div className="text-xs text-muted-foreground">
-          Will map to:{" "}
-          <span className="font-medium text-foreground">
-            {resolution.bestMatch.exerciseName}
-          </span>{" "}
-          ({Math.round(resolution.bestMatch.score)}% match)
-          <button
-            className="ml-2 underline underline-offset-2"
-            onClick={() => {
-              // User wants to change -- apply best match first so they can see it, but open the picker
-              setSearchQuery("");
-            }}
-          >
-            change
-          </button>
-        </div>
-      )}
+      {resolution.confidence === "high" &&
+        !userResolution &&
+        resolution.bestMatch && (
+          <div className="text-xs text-muted-foreground">
+            Will map to:{" "}
+            <span className="font-medium text-foreground">
+              {resolution.bestMatch.exerciseName}
+            </span>{" "}
+            ({Math.round(resolution.bestMatch.score)}% match)
+            <button
+              className="ml-2 underline underline-offset-2"
+              onClick={() => {
+                // User wants to change -- apply best match first so they can see it, but open the picker
+                setSearchQuery("");
+              }}
+            >
+              change
+            </button>
+          </div>
+        )}
 
       {/* Suggestions for low/no confidence or manual override */}
-      {(resolution.confidence !== "high" || isSkipped) && !showCreateForm && !isResolved && (
-        <div className="space-y-2">
-          {resolution.matches.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Suggestions:</p>
-              {resolution.matches.slice(0, 5).map((match) => (
-                <button
-                  key={match.exerciseId}
-                  className="w-full text-left text-xs border rounded-none px-2 py-1 hover:bg-muted/50 flex items-center justify-between"
-                  onClick={() => handleSelectExisting(match)}
-                >
-                  <span>{match.exerciseName}</span>
-                  <span className="text-muted-foreground ml-2">
-                    {Math.round(match.score)}%
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Search input for finding exercises */}
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              Search exercise library:
-            </p>
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-7 text-xs"
-            />
-            {searchQuery && (
-              <div className="max-h-32 overflow-y-auto space-y-0.5 border rounded-none">
-                {isSearching ? (
-                  <p className="text-xs text-muted-foreground px-2 py-1">
-                    Searching...
-                  </p>
-                ) : searchResults && searchResults.length > 0 ? (
-                  searchResults.map((exercise) => (
-                    <button
-                      key={exercise.id}
-                      className="w-full text-left text-xs px-2 py-1 hover:bg-muted/50 flex items-center justify-between"
-                      onClick={() =>
-                        onChange({
-                          type: "existing",
-                          exerciseId: exercise.id,
-                          exerciseName: exercise.name,
-                        })
-                      }
-                    >
-                      <span>{exercise.name}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground px-2 py-1">
-                    No matches found
-                  </p>
-                )}
+      {(resolution.confidence !== "high" || isSkipped) &&
+        !showCreateForm &&
+        !isResolved && (
+          <div className="space-y-2">
+            {resolution.matches.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Suggestions:</p>
+                {resolution.matches.slice(0, 5).map((match) => (
+                  <button
+                    key={match.exerciseId}
+                    className="w-full text-left text-xs border rounded-none px-2 py-1 hover:bg-muted/50 flex items-center justify-between"
+                    onClick={() => handleSelectExisting(match)}
+                  >
+                    <span>{match.exerciseName}</span>
+                    <span className="text-muted-foreground ml-2">
+                      {Math.round(match.score)}%
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
-          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setShowCreateForm(true)}
-          >
-            Create New Exercise
-          </Button>
-        </div>
-      )}
+            {/* Search input for finding exercises */}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Search exercise library:
+              </p>
+              <Input
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-7 text-xs"
+              />
+              {searchQuery && (
+                <div className="max-h-32 overflow-y-auto space-y-0.5 border rounded-none">
+                  {isSearching ? (
+                    <p className="text-xs text-muted-foreground px-2 py-1">
+                      Searching...
+                    </p>
+                  ) : searchResults && searchResults.length > 0 ? (
+                    searchResults.map((exercise) => (
+                      <button
+                        key={exercise.id}
+                        className="w-full text-left text-xs px-2 py-1 hover:bg-muted/50 flex items-center justify-between"
+                        onClick={() =>
+                          onChange({
+                            type: "existing",
+                            exerciseId: exercise.id,
+                            exerciseName: exercise.name,
+                          })
+                        }
+                      >
+                        <span>{exercise.name}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground px-2 py-1">
+                      No matches found
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setShowCreateForm(true)}
+            >
+              Create New Exercise
+            </Button>
+          </div>
+        )}
 
       {/* Create new exercise form */}
       {showCreateForm && (
@@ -409,9 +428,9 @@ export function ResolveStep({
     trpc.import.resolveExercises.queryOptions({ exerciseNames }),
   );
 
-  const [resolutionMap, setResolutionMap] = useState<Record<string, Resolution>>(
-    {},
-  );
+  const [resolutionMap, setResolutionMap] = useState<
+    Record<string, Resolution>
+  >({});
 
   if (isLoading || !resolutions) {
     return (
@@ -429,7 +448,9 @@ export function ResolveStep({
   };
 
   // Compute effective resolution for each exercise
-  const effectiveResolution = (r: ExerciseResolution): Resolution | undefined => {
+  const effectiveResolution = (
+    r: ExerciseResolution,
+  ): Resolution | undefined => {
     const user = resolutionMap[r.parsedName];
     if (user) return user;
     // Auto-apply high-confidence matches

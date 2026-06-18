@@ -1,5 +1,5 @@
-import { getEffectiveDurationSeconds } from "@src/api/lib/index";
-import type { HrZoneDurations } from "@src/shared";
+import { getEffectiveDurationSeconds } from "@life-tracker/api/lib/index";
+import type { HrZoneDurations } from "@life-tracker/shared";
 
 interface WorkoutLog {
   distanceMeter: number | null;

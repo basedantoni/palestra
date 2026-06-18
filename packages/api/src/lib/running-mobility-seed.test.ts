@@ -8,13 +8,15 @@ import {
   SEED_WORKOUT_TEMPLATE_EXERCISES,
   SEED_WORKOUT_TEMPLATES,
   SYSTEM_TEMPLATES,
-} from "@src/db/seed";
+} from "@life-tracker/db/seed";
 
 describe("running and mobility seed data", () => {
   it("seeds running exercises as cardio-category entries with cardio/hiit typing", () => {
     expect(RUNNING_SEED_EXERCISES).toHaveLength(17);
     expect(
-      RUNNING_SEED_EXERCISES.every((exercise) => exercise.category === "cardio"),
+      RUNNING_SEED_EXERCISES.every(
+        (exercise) => exercise.category === "cardio",
+      ),
     ).toBe(true);
     expect(
       RUNNING_SEED_EXERCISES.every(
@@ -76,12 +78,15 @@ describe("running and mobility seed data", () => {
       "Full-Body Mobility",
     ]);
 
-    const templateExercisesById = new Map<string, typeof SEED_WORKOUT_TEMPLATE_EXERCISES>(
+    const templateExercisesById = new Map<
+      string,
+      typeof SEED_WORKOUT_TEMPLATE_EXERCISES
+    >(
       SEED_WORKOUT_TEMPLATES.map((template) => [
         template.id,
-        SEED_WORKOUT_TEMPLATE_EXERCISES
-          .filter((exercise) => exercise.workoutTemplateId === template.id)
-          .sort((left, right) => left.order - right.order),
+        SEED_WORKOUT_TEMPLATE_EXERCISES.filter(
+          (exercise) => exercise.workoutTemplateId === template.id,
+        ).sort((left, right) => left.order - right.order),
       ]),
     );
 
@@ -91,7 +96,9 @@ describe("running and mobility seed data", () => {
 
       expect(seededExercises).toBeDefined();
       expect(seededExercises?.map((exercise) => exercise.exerciseId)).toEqual(
-        template.exercises.map((exerciseName) => deterministicUUID(exerciseName)),
+        template.exercises.map((exerciseName) =>
+          deterministicUUID(exerciseName),
+        ),
       );
       expect(
         seededExercises?.every((exercise) => exercise.defaultSets === null),
@@ -105,7 +112,9 @@ describe("running and mobility seed data", () => {
   });
 
   it("keeps exercise and template identifiers deterministic and unique", () => {
-    const exerciseIds = SEED_EXERCISES.map((exercise) => deterministicUUID(exercise.name));
+    const exerciseIds = SEED_EXERCISES.map((exercise) =>
+      deterministicUUID(exercise.name),
+    );
     const templateIds = SEED_WORKOUT_TEMPLATES.map((template) => template.id);
     const templateExerciseIds = SEED_WORKOUT_TEMPLATE_EXERCISES.map(
       (exercise) => exercise.id,

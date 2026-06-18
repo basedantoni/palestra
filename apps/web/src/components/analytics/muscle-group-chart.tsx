@@ -11,7 +11,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatWeekLabel } from "@src/api/lib/index";
+import { formatWeekLabel } from "@life-tracker/api/lib/index";
 
 interface MuscleGroupDataRow {
   weekStartDate: string;

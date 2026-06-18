@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   exercise,
   exerciseLog,
@@ -10,8 +10,8 @@ import {
   workout,
   workoutTemplate,
   workoutTemplateExercise,
-} from "@src/db/schema/index";
-import { whoopActivityToExerciseLog } from "@src/shared";
+} from "@life-tracker/db/schema/index";
+import { whoopActivityToExerciseLog } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
@@ -87,7 +87,7 @@ async function insertExerciseLogAndSets(
   tx: WorkoutsTx,
   workoutId: string,
   log: ExerciseLogInputItem,
-): Promise<(typeof exerciseLog.$inferSelect) | undefined> {
+): Promise<typeof exerciseLog.$inferSelect | undefined> {
   const logId = crypto.randomUUID();
   const [createdLog] = await tx
     .insert(exerciseLog)
@@ -132,12 +132,12 @@ function fireAndForgetRecalcs(
   date: Date,
 ): void {
   if (exerciseIds.length > 0) {
-    recalculateProgressiveOverload(userId, exerciseIds).catch(
-      (err) => console.error("Progressive overload recalc failed:", err),
+    recalculateProgressiveOverload(userId, exerciseIds).catch((err) =>
+      console.error("Progressive overload recalc failed:", err),
     );
   }
-  recalculateMuscleGroupVolumeForWeek(userId, date).catch(
-    (err) => console.error("Muscle group volume recalc failed:", err),
+  recalculateMuscleGroupVolumeForWeek(userId, date).catch((err) =>
+    console.error("Muscle group volume recalc failed:", err),
   );
 }
 
@@ -266,7 +266,10 @@ export const workoutsRouter = router({
 
       // Track which exercise has cardioSubtype=running for Whoop metric application
       const cardioSubtypeByExerciseId = new Map<string, string>();
-      const exerciseMetadataById = new Map<string, CreateWorkoutExerciseMetadata>();
+      const exerciseMetadataById = new Map<
+        string,
+        CreateWorkoutExerciseMetadata
+      >();
 
       if (exerciseIds.length > 0) {
         const exerciseRows = await db
@@ -287,16 +290,20 @@ export const workoutsRouter = router({
       }
 
       // If a Whoop activity is being linked, fetch its data before the transaction
-      let whoopPatch: ReturnType<typeof whoopActivityToExerciseLog> | null = null;
+      let whoopPatch: ReturnType<typeof whoopActivityToExerciseLog> | null =
+        null;
       if (input.whoopActivityId) {
         try {
-          const accessToken = await getValidWhoopAccessToken(ctx.session.user.id);
+          const accessToken = await getValidWhoopAccessToken(
+            ctx.session.user.id,
+          );
           const response = await fetch(
             `${WHOOP_API_BASE}/activity/workout/${input.whoopActivityId}`,
             { headers: { Authorization: `Bearer ${accessToken}` } },
           );
           if (response.ok) {
-            const whoopActivity = await response.json() as import("@src/shared").WhoopActivityScore;
+            const whoopActivity =
+              (await response.json()) as import("@life-tracker/shared").WhoopActivityScore;
             whoopPatch = whoopActivityToExerciseLog(whoopActivity);
           }
           // On fetch failure, proceed without Whoop data — don't block save
@@ -391,7 +398,10 @@ export const workoutsRouter = router({
             updatedAt: new Date(),
           })
           .where(
-            and(eq(workout.id, input.id), eq(workout.userId, ctx.session.user.id)),
+            and(
+              eq(workout.id, input.id),
+              eq(workout.userId, ctx.session.user.id),
+            ),
           )
           .returning();
 
@@ -404,7 +414,11 @@ export const workoutsRouter = router({
           .where(eq(exerciseLog.workoutId, updated.id));
 
         for (const log of input.logs) {
-          const createdLog = await insertExerciseLogAndSets(tx, updated.id, log);
+          const createdLog = await insertExerciseLogAndSets(
+            tx,
+            updated.id,
+            log,
+          );
           if (createdLog && log.exerciseId) {
             if (runningExerciseIdSet.has(log.exerciseId)) {
               await recordRunningPrs(tx, {
@@ -507,7 +521,10 @@ export const workoutsRouter = router({
       const [deleted] = await db
         .delete(workout)
         .where(
-          and(eq(workout.id, input.id), eq(workout.userId, ctx.session.user.id)),
+          and(
+            eq(workout.id, input.id),
+            eq(workout.userId, ctx.session.user.id),
+          ),
         )
         .returning();
       return deleted ?? null;

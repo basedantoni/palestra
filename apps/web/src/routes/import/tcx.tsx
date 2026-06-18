@@ -19,7 +19,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { parseTcxRun, type ParsedTcxRun } from "@src/api/lib/tcx-import";
+import {
+  parseTcxRun,
+  type ParsedTcxRun,
+} from "@life-tracker/api/lib/tcx-import";
 
 export const Route = createFileRoute("/import/tcx")({
   component: TcxImportPage,
@@ -152,7 +155,9 @@ function TcxImportPage() {
     const files = Array.from(fileList ?? []) as FileWithPath[];
     const tcxFiles = files
       .filter((file) => file.name.toLowerCase().endsWith(".tcx"))
-      .sort((a, b) => getFileDisplayName(a).localeCompare(getFileDisplayName(b)));
+      .sort((a, b) =>
+        getFileDisplayName(a).localeCompare(getFileDisplayName(b)),
+      );
 
     setParseError(null);
     setParseWarnings([]);
@@ -198,7 +203,9 @@ function TcxImportPage() {
       setParseWarnings(warnings);
 
       if (runs.length === 0) {
-        setParseError("No running activities were parsed from the selected folder.");
+        setParseError(
+          "No running activities were parsed from the selected folder.",
+        );
         return;
       }
 
@@ -340,11 +347,11 @@ function TcxImportPage() {
                 className="flex min-h-32 w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed border-border p-8 text-center transition-colors hover:border-primary/50 hover:bg-muted/30"
                 onClick={() => fileInputRef.current?.click()}
               >
-              <FolderOpen className="mb-3 size-9 text-muted-foreground" />
-              <span className="text-sm font-medium">Select TCX folder</span>
-              <span className="mt-1 text-xs text-muted-foreground">
-                {SOURCE_LABELS[source] ?? source}
-              </span>
+                <FolderOpen className="mb-3 size-9 text-muted-foreground" />
+                <span className="text-sm font-medium">Select TCX folder</span>
+                <span className="mt-1 text-xs text-muted-foreground">
+                  {SOURCE_LABELS[source] ?? source}
+                </span>
               </button>
             </div>
           </div>
@@ -352,7 +359,9 @@ function TcxImportPage() {
           {isParsing || previewMutation.isPending ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Upload className="size-4" />
-              <span>{isParsing ? "Parsing TCX files..." : "Checking duplicates..."}</span>
+              <span>
+                {isParsing ? "Parsing TCX files..." : "Checking duplicates..."}
+              </span>
             </div>
           ) : null}
 
@@ -502,7 +511,9 @@ function ReviewStep({
           <RunRow
             key={`${run.fingerprint}:${run.fileName}`}
             run={run}
-            selected={!run.isDuplicate && selectedFingerprints.has(run.fingerprint)}
+            selected={
+              !run.isDuplicate && selectedFingerprints.has(run.fingerprint)
+            }
             onToggle={() => onToggleRun(run)}
           />
         ))}
@@ -576,7 +587,9 @@ function RunRow({
           <span>{format(startedAt, "MMM d, yyyy 'at' h:mm a")}</span>
           <span>{formatDistanceMeters(run.distanceMeter)}</span>
           <span>{formatDuration(run.durationSeconds)}</span>
-          {run.avgHeartRate != null ? <span>{run.avgHeartRate} bpm avg</span> : null}
+          {run.avgHeartRate != null ? (
+            <span>{run.avgHeartRate} bpm avg</span>
+          ) : null}
           {run.calories != null ? <span>{run.calories} cal</span> : null}
         </div>
       </div>

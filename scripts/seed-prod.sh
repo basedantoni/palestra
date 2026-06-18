@@ -17,4 +17,4 @@ fly machine run \
   --vm-memory 512 \
   --rm \
   "$IMAGE" \
-  -- sh -c 'cd /app && pnpm -F @src/db db:seed'
+  -- sh -c 'cd /app && pnpm -F @life-tracker/db db:seed'

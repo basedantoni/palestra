@@ -16,12 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  mockGetValidToken,
-} = vi.hoisted(() => {
+const { mockDb, mockTx, makeChain, mockGetValidToken } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
       {},
@@ -64,9 +59,9 @@ const {
   return { mockDb, mockTx, makeChain, mockGetValidToken };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -74,7 +69,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   },
 }));
 
@@ -290,7 +286,9 @@ describe("sleepProcessor — autoImportEnabled = false", () => {
     expect(mockDb.insert).not.toHaveBeenCalled();
 
     // Event marked skipped
-    const skippedUpdate = capturedUpdateSets.find((s) => s.status === "skipped");
+    const skippedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "skipped",
+    );
     expect(skippedUpdate).toBeDefined();
   });
 });
@@ -312,7 +310,9 @@ describe("sleepProcessor — error handling", () => {
       }),
     }));
 
-    await expect(sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID)).resolves.not.toThrow();
+    await expect(
+      sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID),
+    ).resolves.not.toThrow();
 
     const failedUpdate = capturedUpdateSets.find((s) => s.status === "failed");
     expect(failedUpdate).toBeDefined();
@@ -351,7 +351,9 @@ describe("sleepDeleteProcessor", () => {
     expect(mockDb.delete).toHaveBeenCalledOnce();
 
     // Event marked processed
-    const processedUpdate = capturedUpdateSets.find((s) => s.status === "processed");
+    const processedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "processed",
+    );
     expect(processedUpdate).toBeDefined();
   });
 
@@ -373,7 +375,9 @@ describe("sleepDeleteProcessor", () => {
     expect(mockDb.delete).not.toHaveBeenCalled();
 
     // Still marks event processed
-    const processedUpdate = capturedUpdateSets.find((s) => s.status === "processed");
+    const processedUpdate = capturedUpdateSets.find(
+      (s) => s.status === "processed",
+    );
     expect(processedUpdate).toBeDefined();
   });
 });
@@ -455,7 +459,11 @@ describe("whoopSleep.list", () => {
 
   it("6b. returns nextCursor when there are more results (limit reached)", async () => {
     // Simulate limit=2, returns 3 rows → has more
-    const rows = [SLEEP_ROW_1, SLEEP_ROW_2, { ...SLEEP_ROW_2, id: "sleep-row-3", whoopSleepId: "whoop-sleep-003" }];
+    const rows = [
+      SLEEP_ROW_1,
+      SLEEP_ROW_2,
+      { ...SLEEP_ROW_2, id: "sleep-row-3", whoopSleepId: "whoop-sleep-003" },
+    ];
 
     mockDb.select.mockReturnValueOnce({
       from: vi.fn().mockReturnValue({

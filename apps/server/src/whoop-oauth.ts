@@ -2,15 +2,21 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { Hono } from "hono";
 
-import { auth } from "@src/auth";
-import { env } from "@src/env/server";
-import { handleWhoopCallback } from "@src/api/lib/whoop-oauth";
-import { getValidWhoopAccessToken, WHOOP_API_BASE } from "@src/api/lib/whoop-client";
-import { whoopWebhookApp } from "@src/api/lib/whoop-webhook";
+import { auth } from "@life-tracker/auth";
+import { env } from "@life-tracker/env/server";
+import { handleWhoopCallback } from "@life-tracker/api/lib/whoop-oauth";
+import {
+  getValidWhoopAccessToken,
+  WHOOP_API_BASE,
+} from "@life-tracker/api/lib/whoop-client";
+import { whoopWebhookApp } from "@life-tracker/api/lib/whoop-webhook";
 
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
 
-function getSettingsUrl(baseUrl: string, params?: Record<string, string>): string {
+function getSettingsUrl(
+  baseUrl: string,
+  params?: Record<string, string>,
+): string {
   const url = new URL("/settings", baseUrl);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -44,7 +50,9 @@ whoopOAuthApp.get("/connect", async (c) => {
 
   if (!clientId || !redirectUri) {
     return c.redirect(
-      getSettingsUrl(corsOrigin, { whoop_error: "Whoop integration is not configured" }),
+      getSettingsUrl(corsOrigin, {
+        whoop_error: "Whoop integration is not configured",
+      }),
     );
   }
 
@@ -61,13 +69,18 @@ whoopOAuthApp.get("/connect", async (c) => {
 
   // Encode verifier in state so the callback can retrieve it without server-side storage.
   // State format: base64url(userId + ":" + verifier)
-  const statePayload = Buffer.from(`${session.user.id}:${verifier}`).toString("base64url");
+  const statePayload = Buffer.from(`${session.user.id}:${verifier}`).toString(
+    "base64url",
+  );
 
   const authUrl = new URL(WHOOP_AUTH_URL);
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "read:workout read:recovery read:sleep read:profile offline");
+  authUrl.searchParams.set(
+    "scope",
+    "read:workout read:recovery read:sleep read:profile offline",
+  );
   authUrl.searchParams.set("state", statePayload);
   authUrl.searchParams.set("code_challenge", challenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
@@ -100,7 +113,8 @@ if (process.env.NODE_ENV !== "production") {
 
     const body = await response.text();
     return c.text(body, response.status as any, {
-      "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+      "Content-Type":
+        response.headers.get("Content-Type") ?? "application/json",
     });
   });
 }
@@ -119,7 +133,8 @@ whoopOAuthApp.get("/callback", async (c) => {
   // Check for error from Whoop (user cancelled or denied)
   const error = c.req.query("error");
   if (error) {
-    const errorDescription = c.req.query("error_description") ?? "OAuth authorization failed";
+    const errorDescription =
+      c.req.query("error_description") ?? "OAuth authorization failed";
     return redirect({ whoop_error: errorDescription });
   }
 

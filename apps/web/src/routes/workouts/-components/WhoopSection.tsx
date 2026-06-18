@@ -15,12 +15,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WhoopActivityPicker } from "@/components/workout/whoop-activity-picker";
-import { formatDistance, derivePace } from "@src/api/lib/index";
+import { formatDistance, derivePace } from "@life-tracker/api/lib/index";
 import {
   type HrZoneDurations,
   HR_ZONE_COLORS,
   HR_ZONE_LABELS_FULL,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 // ── HR Zone bar chart ─────────────────────────────────────────────────────────
 
@@ -314,8 +314,8 @@ export function WhoopSection({
           <DialogHeader>
             <DialogTitle>Overwrite existing metrics?</DialogTitle>
             <DialogDescription>
-              This workout already has heart rate or intensity data. Linking this
-              Whoop activity will overwrite those values with Whoop data.
+              This workout already has heart rate or intensity data. Linking
+              this Whoop activity will overwrite those values with Whoop data.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

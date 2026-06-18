@@ -53,7 +53,7 @@ const { mockDb, makeChain, mockTrackInFlight } = vi.hoisted(() => {
   return { mockDb, makeChain, mockTrackInFlight };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 vi.mock("../lib/whoop-inflight", () => ({
   trackInFlight: mockTrackInFlight,
   getInFlightCount: vi.fn().mockReturnValue(0),
@@ -61,7 +61,7 @@ vi.mock("../lib/whoop-inflight", () => ({
 }));
 
 // v2: webhook secret is an app-level env var, not per-user DB field
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -69,7 +69,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     WHOOP_CLIENT_SECRET: "test-webhook-secret-for-hmac",
   },
 }));

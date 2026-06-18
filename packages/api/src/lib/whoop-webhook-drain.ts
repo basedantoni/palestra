@@ -11,13 +11,13 @@
 
 import { eq, sql } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { whoopWebhookEvent } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { whoopWebhookEvent } from "@life-tracker/db/schema/index";
 import { trackInFlight } from "./whoop-inflight";
 import { dispatchWhoopEvent } from "./whoop-webhook";
 
 const DRAIN_BATCH_LIMIT = 200;
-const PENDING_GRACE_MS = 5_000;        // grace window before hot path gives up claim
+const PENDING_GRACE_MS = 5_000; // grace window before hot path gives up claim
 const ORPHAN_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes — orphaned from crashed machine
 
 export async function drainPendingWhoopEvents(): Promise<{
@@ -69,7 +69,9 @@ export async function drainPendingWhoopEvents(): Promise<{
         .update(whoopWebhookEvent)
         .set({ status: "skipped", processedAt: new Date() })
         .where(eq(whoopWebhookEvent.id, row.id))
-        .catch((err) => console.error("[whoop-drain] Failed to skip event:", err));
+        .catch((err) =>
+          console.error("[whoop-drain] Failed to skip event:", err),
+        );
       continue;
     }
 

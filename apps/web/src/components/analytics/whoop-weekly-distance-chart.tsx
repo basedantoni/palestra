@@ -9,7 +9,10 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { metersToDisplayUnit, formatWeekLabel } from "@src/api/lib/index";
+import {
+  metersToDisplayUnit,
+  formatWeekLabel,
+} from "@life-tracker/api/lib/index";
 
 interface WeeklyDistancePoint {
   weekStart: string;

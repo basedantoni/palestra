@@ -7,8 +7,8 @@
 import { and, desc, eq, lte } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@src/db";
-import { whoopRecovery } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { whoopRecovery } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 
@@ -46,7 +46,9 @@ export const whoopRecoveryRouter = router({
 
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
-      const nextCursor = hasMore ? items[items.length - 1]!.createdAt.toISOString() : null;
+      const nextCursor = hasMore
+        ? items[items.length - 1]!.createdAt.toISOString()
+        : null;
 
       return { items, nextCursor };
     }),

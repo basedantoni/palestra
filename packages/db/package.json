@@ -1,5 +1,5 @@
 {
-  "name": "@src/db",
+  "name": "@life-tracker/db",
   "type": "module",
   "exports": {
     ".": {
@@ -21,14 +21,14 @@
     "db:down": "docker compose down"
   },
   "dependencies": {
-    "@src/env": "workspace:*",
+    "@life-tracker/env": "workspace:*",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
     "pg": "^8.17.1",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "@types/pg": "^8.16.0",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.21.0",

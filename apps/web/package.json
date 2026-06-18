@@ -13,10 +13,10 @@
   "dependencies": {
     "@base-ui/react": "^1.0.0",
     "@hookform/resolvers": "^5.1.1",
-    "@src/api": "workspace:*",
-    "@src/auth": "workspace:*",
-    "@src/env": "workspace:*",
-    "@src/shared": "workspace:*",
+    "@life-tracker/api": "workspace:*",
+    "@life-tracker/auth": "workspace:*",
+    "@life-tracker/env": "workspace:*",
+    "@life-tracker/shared": "workspace:*",
     "@tailwindcss/vite": "^4.0.15",
     "@tanstack/react-form": "^1.12.3",
     "@tanstack/react-query": "catalog:",
@@ -42,7 +42,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "@tanstack/react-query-devtools": "^5.91.1",
     "@tanstack/react-router-devtools": "^1.141.1",
     "@tanstack/router-plugin": "^1.141.1",

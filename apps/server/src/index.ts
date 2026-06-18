@@ -1,8 +1,8 @@
 import { trpcServer } from "@hono/trpc-server";
-import { createContext } from "@src/api/context";
-import { appRouter } from "@src/api/routers/index";
-import { auth } from "@src/auth";
-import { env } from "@src/env/server";
+import { createContext } from "@life-tracker/api/context";
+import { appRouter } from "@life-tracker/api/routers/index";
+import { auth } from "@life-tracker/auth";
+import { env } from "@life-tracker/env/server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -21,10 +21,10 @@ function getClientIp(headers: Headers): string {
     if (first) return first;
   }
   return (
-    headers.get("fly-client-ip")
-    ?? headers.get("cf-connecting-ip")
-    ?? headers.get("x-real-ip")
-    ?? "unknown"
+    headers.get("fly-client-ip") ??
+    headers.get("cf-connecting-ip") ??
+    headers.get("x-real-ip") ??
+    "unknown"
   );
 }
 
@@ -102,8 +102,11 @@ app.get("/", (c) => {
 });
 
 import { serve } from "@hono/node-server";
-import { drainPendingWhoopEvents } from "@src/api/lib/whoop-webhook-drain";
-import { getInFlightCount, getInFlightPromises } from "@src/api/lib/whoop-inflight";
+import { drainPendingWhoopEvents } from "@life-tracker/api/lib/whoop-webhook-drain";
+import {
+  getInFlightCount,
+  getInFlightPromises,
+} from "@life-tracker/api/lib/whoop-inflight";
 
 const SHUTDOWN_TIMEOUT_MS = 38_000; // fly.toml kill_timeout = 45s → 7s safety margin
 
@@ -126,7 +129,9 @@ let isShuttingDown = false;
 async function gracefulShutdown(signal: string): Promise<void> {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`[shutdown] Received ${signal}, draining ${getInFlightCount()} in-flight processors`);
+  console.log(
+    `[shutdown] Received ${signal}, draining ${getInFlightCount()} in-flight processors`,
+  );
 
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));

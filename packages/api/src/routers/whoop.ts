@@ -2,13 +2,17 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@src/db";
-import { exerciseLog, whoopConnection, workout } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import {
+  exerciseLog,
+  whoopConnection,
+  workout,
+} from "@life-tracker/db/schema/index";
 import {
   whoopActivityToExerciseLog,
   whoopSportToCardioSubtype,
   whoopSportToWorkoutType,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import {
@@ -21,7 +25,7 @@ import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 import { decryptToken } from "../lib/token-encryption";
-import { env } from "@src/env/server";
+import { env } from "@life-tracker/env/server";
 import {
   getBackfillState,
   triggerBackfill,
@@ -54,17 +58,12 @@ async function deleteWhoopSubscription(
       );
     }
   } catch (err) {
-    console.warn(
-      `[whoop] Error deleting subscription ${subscriptionId}:`,
-      err,
-    );
+    console.warn(`[whoop] Error deleting subscription ${subscriptionId}:`, err);
   }
 }
 
-const toIsoStart = (s: string) =>
-  s.includes("T") ? s : `${s}T00:00:00.000Z`;
-const toIsoEnd = (s: string) =>
-  s.includes("T") ? s : `${s}T23:59:59.999Z`;
+const toIsoStart = (s: string) => (s.includes("T") ? s : `${s}T00:00:00.000Z`);
+const toIsoEnd = (s: string) => (s.includes("T") ? s : `${s}T23:59:59.999Z`);
 
 interface WhoopWorkoutRecord {
   id: string;
@@ -136,7 +135,9 @@ export const whoopRouter = router({
     // isValid: secret configured, AND either never received (fresh) or received within 7 days
     let isValid = false;
     if (subscribed) {
-      isValid = lastReceivedAt === null || Date.now() - lastReceivedAt.getTime() < SEVEN_DAYS_MS;
+      isValid =
+        lastReceivedAt === null ||
+        Date.now() - lastReceivedAt.getTime() < SEVEN_DAYS_MS;
     }
 
     const backfillState = getBackfillState(userId);
@@ -306,9 +307,15 @@ export const whoopRouter = router({
       try {
         // Decrypt the access token we already fetched — avoid a second DB round-trip
         const accessToken = decryptToken(connection.accessToken, encryptionKey);
-        await deleteWhoopSubscription(connection.webhookSubscriptionId, accessToken);
+        await deleteWhoopSubscription(
+          connection.webhookSubscriptionId,
+          accessToken,
+        );
       } catch (err) {
-        console.warn("[whoop] Could not delete subscription on disconnect:", err);
+        console.warn(
+          "[whoop] Could not delete subscription on disconnect:",
+          err,
+        );
       }
     }
 
@@ -427,12 +434,7 @@ export const whoopRouter = router({
         z.object({
           selectAll: z.literal(false).optional(),
           activityIds: z.array(z.string()).min(1),
-          typeOverrides: z
-            .record(
-              z.string(),
-              WORKOUT_TYPE_ENUM,
-            )
-            .optional(),
+          typeOverrides: z.record(z.string(), WORKOUT_TYPE_ENUM).optional(),
           from: z.string().optional(),
           to: z.string().optional(),
         }),
@@ -440,12 +442,7 @@ export const whoopRouter = router({
         z.object({
           selectAll: z.literal(true),
           activityIds: z.array(z.string()).optional(),
-          typeOverrides: z
-            .record(
-              z.string(),
-              WORKOUT_TYPE_ENUM,
-            )
-            .optional(),
+          typeOverrides: z.record(z.string(), WORKOUT_TYPE_ENUM).optional(),
           from: z.string().optional(),
           to: z.string().optional(),
         }),

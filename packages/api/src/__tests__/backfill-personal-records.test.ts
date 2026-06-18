@@ -24,7 +24,7 @@ import {
   exerciseSet,
   personalRecord,
   workout,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mock db (must run before importing the router)
@@ -36,9 +36,9 @@ const { mockDb } = vi.hoisted(() => {
   return { mockDb };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -522,7 +522,11 @@ describe("admin.backfillPersonalRecords (KOI-80)", () => {
     // exerciseId points to a strength exercise (cardioSubtype null) but the log
     // carries a distanceMeter → backfill must dispatch to recordRunningPrs.
     const wId = `w-${uuidCounter++}`;
-    store.workouts.push({ id: wId, userId: USER_A, date: new Date(2026, 0, 1) });
+    store.workouts.push({
+      id: wId,
+      userId: USER_A,
+      date: new Date(2026, 0, 1),
+    });
     store.logs.push({
       id: `l-${uuidCounter++}`,
       workoutId: wId,

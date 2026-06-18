@@ -8,7 +8,7 @@ import {
   STEP_FIELD_NAMES,
   TOTAL_STEPS,
   type OnboardingFormData,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 import StepGoals from "./step-goals";
 import StepWorkouts from "./step-workouts";
@@ -31,15 +31,15 @@ export default function OnboardingPage() {
       onError: (error) => {
         toast.error(error.message || "Failed to save preferences");
       },
-    })
+    }),
   );
 
   const form = useOnboardingForm(async (value) => {
-      saveMutation.mutate({
-        ...value,
-        plateauThreshold: 3,
-        onboardingCompleted: true,
-      });
+    saveMutation.mutate({
+      ...value,
+      plateauThreshold: 3,
+      onboardingCompleted: true,
+    });
   });
 
   const handleNext = useCallback(async () => {
@@ -47,7 +47,7 @@ export default function OnboardingPage() {
 
     // Validate all fields in the current step
     const validationResults = await Promise.all(
-      fieldNames.map((fieldName) => form.validateField(fieldName, "change"))
+      fieldNames.map((fieldName) => form.validateField(fieldName, "change")),
     );
 
     // Check if any field in this step has errors
@@ -106,7 +106,11 @@ export default function OnboardingPage() {
                 {(state) => (
                   <Button
                     type="submit"
-                    disabled={!state.canSubmit || state.isSubmitting || saveMutation.isPending}
+                    disabled={
+                      !state.canSubmit ||
+                      state.isSubmitting ||
+                      saveMutation.isPending
+                    }
                   >
                     {saveMutation.isPending ? "Saving..." : "Complete Setup"}
                   </Button>

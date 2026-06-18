@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
+import { EXERCISE_CATEGORY_LABELS } from "@life-tracker/api/lib/index";
 
 type ExerciseResult = {
   id: string;
@@ -85,8 +85,9 @@ export function CreateCustomExerciseModal({
     useState<(typeof EXERCISE_TYPES)[number]>("weightlifting");
   const [linkedExerciseQuery, setLinkedExerciseQuery] = useState("");
   const [linkedExerciseSearch, setLinkedExerciseSearch] = useState("");
-  const [linkedExercise, setLinkedExercise] =
-    useState<ExerciseResult | null>(null);
+  const [linkedExercise, setLinkedExercise] = useState<ExerciseResult | null>(
+    null,
+  );
   const [showLinkedSearch, setShowLinkedSearch] = useState(false);
 
   const { data: linkedSearchResults } = useQuery(
@@ -155,9 +156,7 @@ export function CreateCustomExerciseModal({
               id="exercise-name"
               placeholder="e.g. Zercher Squat"
               value={name}
-              onChange={(e) =>
-                setName(e.target.value)
-              }
+              onChange={(e) => setName(e.target.value)}
             />
           </div>
 
@@ -240,8 +239,8 @@ export function CreateCustomExerciseModal({
                   onChange={(e) => handleLinkedSearchChange(e.target.value)}
                 />
                 {showLinkedSearch &&
-                  linkedSearchResults &&
-                  linkedSearchResults.length > 0 ? (
+                linkedSearchResults &&
+                linkedSearchResults.length > 0 ? (
                   <div className="absolute z-50 mt-1 w-full border bg-background shadow-md">
                     <ScrollArea className="max-h-48">
                       {linkedSearchResults.map((ex) => (
@@ -258,7 +257,11 @@ export function CreateCustomExerciseModal({
                         >
                           <span>{ex.name}</span>
                           <Badge variant="outline" className="text-xs">
-                            {EXERCISE_CATEGORY_LABELS[ex.category as keyof typeof EXERCISE_CATEGORY_LABELS]}
+                            {
+                              EXERCISE_CATEGORY_LABELS[
+                                ex.category as keyof typeof EXERCISE_CATEGORY_LABELS
+                              ]
+                            }
                           </Badge>
                         </button>
                       ))}

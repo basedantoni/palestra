@@ -6,7 +6,7 @@ import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatDistance } from "@src/api/lib/index";
+import { formatDistance } from "@life-tracker/api/lib/index";
 
 export interface WhoopActivity {
   id: string;

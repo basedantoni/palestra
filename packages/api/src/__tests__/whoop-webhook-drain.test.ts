@@ -52,9 +52,9 @@ const { mockDb, makeChain, mockDispatchWhoopEvent } = vi.hoisted(() => {
   return { mockDb, makeChain, mockDispatchWhoopEvent };
 });
 
-vi.mock("@src/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 
-vi.mock("@src/env/server", () => ({
+vi.mock("@life-tracker/env/server", () => ({
   env: {
     ADMIN_EMAILS: "admin@test.internal",
     NODE_ENV: "test",
@@ -62,7 +62,8 @@ vi.mock("@src/env/server", () => ({
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters-long!!",
     BETTER_AUTH_URL: "http://localhost:3000",
     CORS_ORIGIN: "http://localhost:3001",
-    TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    TOKEN_ENCRYPTION_KEY:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     WHOOP_CLIENT_SECRET: "test-webhook-secret-for-hmac",
   },
 }));
@@ -73,7 +74,11 @@ vi.mock("../lib/whoop-webhook", () => ({
 
 // Import after mocks are set up
 import { drainPendingWhoopEvents } from "../lib/whoop-webhook-drain";
-import { getInFlightCount, getInFlightPromises, trackInFlight } from "../lib/whoop-inflight";
+import {
+  getInFlightCount,
+  getInFlightPromises,
+  trackInFlight,
+} from "../lib/whoop-inflight";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -193,7 +198,9 @@ describe("trackInFlight lifecycle", () => {
 
   it("6. getInFlightPromises() returns a snapshot — mutations to Set after call don't affect returned array", async () => {
     let resolve1!: () => void;
-    const p1 = new Promise<void>((resolve) => { resolve1 = resolve; });
+    const p1 = new Promise<void>((resolve) => {
+      resolve1 = resolve;
+    });
 
     trackInFlight(p1);
     const snapshot = getInFlightPromises();
@@ -201,7 +208,9 @@ describe("trackInFlight lifecycle", () => {
 
     // Add another promise after taking snapshot
     let resolve2!: () => void;
-    const p2 = new Promise<void>((resolve) => { resolve2 = resolve; });
+    const p2 = new Promise<void>((resolve) => {
+      resolve2 = resolve;
+    });
     trackInFlight(p2);
 
     // Snapshot should not include p2

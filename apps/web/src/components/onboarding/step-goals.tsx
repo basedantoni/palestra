@@ -1,7 +1,7 @@
 import z from "zod";
 
 import { Label } from "@/components/ui/label";
-import { GOALS, EXPERIENCE_LEVELS } from "@src/shared";
+import { GOALS, EXPERIENCE_LEVELS } from "@life-tracker/shared";
 import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepGoalsProps {
@@ -12,13 +12,19 @@ export default function StepGoals({ form }: StepGoalsProps) {
   return (
     <div className="space-y-6">
       <div>
-        <Label className="text-base font-semibold">What's your primary fitness goal?</Label>
+        <Label className="text-base font-semibold">
+          What's your primary fitness goal?
+        </Label>
         <form.Field
           name="fitnessGoal"
           validators={{
             onChange: z.enum([
-              "build_muscle", "lose_fat", "increase_strength",
-              "improve_endurance", "general_fitness", "flexibility",
+              "build_muscle",
+              "lose_fat",
+              "increase_strength",
+              "improve_endurance",
+              "general_fitness",
+              "flexibility",
             ]),
           }}
         >
@@ -37,12 +43,17 @@ export default function StepGoals({ form }: StepGoalsProps) {
                     }`}
                   >
                     <span className="text-sm font-medium">{goal.label}</span>
-                    <span className="text-xs text-muted-foreground">{goal.description}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {goal.description}
+                    </span>
                   </button>
                 ))}
               </div>
               {field.state.meta.errors.map((error) => (
-                <p key={error?.message} className="mt-1 text-xs text-destructive">
+                <p
+                  key={error?.message}
+                  className="mt-1 text-xs text-destructive"
+                >
                   {error?.message}
                 </p>
               ))}
@@ -52,7 +63,9 @@ export default function StepGoals({ form }: StepGoalsProps) {
       </div>
 
       <div>
-        <Label className="text-base font-semibold">What's your experience level?</Label>
+        <Label className="text-base font-semibold">
+          What's your experience level?
+        </Label>
         <form.Field
           name="experienceLevel"
           validators={{
@@ -74,12 +87,17 @@ export default function StepGoals({ form }: StepGoalsProps) {
                     }`}
                   >
                     <span className="text-sm font-medium">{level.label}</span>
-                    <span className="text-xs text-muted-foreground">{level.description}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {level.description}
+                    </span>
                   </button>
                 ))}
               </div>
               {field.state.meta.errors.map((error) => (
-                <p key={error?.message} className="mt-1 text-xs text-destructive">
+                <p
+                  key={error?.message}
+                  className="mt-1 text-xs text-destructive"
+                >
                   {error?.message}
                 </p>
               ))}

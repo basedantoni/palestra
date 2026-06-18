@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { and, eq, or } from "drizzle-orm";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   workoutTemplate,
   workoutTemplateExercise,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -130,7 +130,9 @@ export const templatesRouter = router({
 
         await tx
           .delete(workoutTemplateExercise)
-          .where(eq(workoutTemplateExercise.workoutTemplateId, updatedTemplate.id));
+          .where(
+            eq(workoutTemplateExercise.workoutTemplateId, updatedTemplate.id),
+          );
 
         if (input.exercises.length) {
           await tx.insert(workoutTemplateExercise).values(

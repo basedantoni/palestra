@@ -19,13 +19,16 @@
  *    based on eventType (workout.updated, workout.deleted, sleep.*, recovery.*, etc.)
  */
 
-import { createHmac, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  timingSafeEqual as cryptoTimingSafeEqual,
+} from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { trackInFlight } from "./whoop-inflight";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   notification,
   whoopConnection,
@@ -33,9 +36,9 @@ import {
   whoopSleep,
   whoopWebhookEvent,
   workout,
-} from "@src/db/schema/index";
-import { env } from "@src/env/server";
-import { whoopSportToWorkoutType } from "@src/shared";
+} from "@life-tracker/db/schema/index";
+import { env } from "@life-tracker/env/server";
+import { whoopSportToWorkoutType } from "@life-tracker/shared";
 import { WORKOUT_TYPE_LABELS } from "./workout-utils";
 
 import {
@@ -52,9 +55,9 @@ export const whoopWebhookApp = new Hono();
 // Whoop v2 webhook payload shape
 interface WhoopWebhookPayload {
   user_id?: number | string;
-  id?: string;        // UUID of the resource (workout, sleep, or for recovery: sleep UUID)
-  type?: string;      // "workout.updated" | "workout.deleted" | "sleep.updated" | etc.
-  trace_id?: string;  // unique per delivery — used as dedup key
+  id?: string; // UUID of the resource (workout, sleep, or for recovery: sleep UUID)
+  type?: string; // "workout.updated" | "workout.deleted" | "sleep.updated" | etc.
+  trace_id?: string; // unique per delivery — used as dedup key
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -82,7 +85,10 @@ async function markEventSkipped(eventId: string): Promise<void> {
     .where(eq(whoopWebhookEvent.id, eventId));
 }
 
-async function markEventFailed(eventId: string, errorMessage: string): Promise<void> {
+async function markEventFailed(
+  eventId: string,
+  errorMessage: string,
+): Promise<void> {
   await db
     .update(whoopWebhookEvent)
     .set({ status: "failed", processedAt: new Date(), errorMessage })
@@ -144,7 +150,9 @@ export async function workoutProcessor(
       .limit(1);
 
     if (!connection?.autoImportEnabled) {
-      console.log(`[whoop-webhook] Auto-import disabled for user ${userId}, skipping event ${eventId}`);
+      console.log(
+        `[whoop-webhook] Auto-import disabled for user ${userId}, skipping event ${eventId}`,
+      );
       await markEventSkipped(eventId);
       return;
     }
@@ -167,7 +175,9 @@ export async function workoutProcessor(
 
     // 3. Skip PENDING_SCORE — real data not available yet
     if (activity.score_state === "PENDING_SCORE") {
-      console.log(`[whoop-webhook] PENDING_SCORE for activity ${whoopActivityId}, skipping event ${eventId}`);
+      console.log(
+        `[whoop-webhook] PENDING_SCORE for activity ${whoopActivityId}, skipping event ${eventId}`,
+      );
       await markEventSkipped(eventId);
       return;
     }
@@ -179,11 +189,19 @@ export async function workoutProcessor(
 
     // 5b. Emit notification for auto-update & new-import (not manual-link, not delete)
     if (result.path !== "manual-link" && shouldNotify) {
-      const workoutType = whoopSportToWorkoutType(activity.sport_id, activity.sport_name);
+      const workoutType = whoopSportToWorkoutType(
+        activity.sport_id,
+        activity.sport_name,
+      );
       const patch = whoopActivityToExerciseLog(activity);
       const typeLabel = WORKOUT_TYPE_LABELS[workoutType] ?? workoutType;
-      const durationMin = patch.durationMinutes
-        ?? Math.round((new Date(activity.end).getTime() - new Date(activity.start).getTime()) / 60_000);
+      const durationMin =
+        patch.durationMinutes ??
+        Math.round(
+          (new Date(activity.end).getTime() -
+            new Date(activity.start).getTime()) /
+            60_000,
+        );
       const message = `${typeLabel} · ${durationMin} min`;
 
       await db.insert(notification).values({
@@ -201,7 +219,9 @@ export async function workoutProcessor(
 
     // 7. Mark event processed
     await markEventProcessed(eventId);
-    console.log(`[whoop-webhook] Processed workout.updated event ${eventId} for activity ${whoopActivityId}`);
+    console.log(
+      `[whoop-webhook] Processed workout.updated event ${eventId} for activity ${whoopActivityId}`,
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.error(`[whoop-webhook] Failed to process event ${eventId}:`, err);
@@ -258,7 +278,10 @@ export async function workoutDeleteProcessor(
     await markEventProcessed(eventId);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[whoop-webhook] Failed to process delete event ${eventId}:`, err);
+    console.error(
+      `[whoop-webhook] Failed to process delete event ${eventId}:`,
+      err,
+    );
     await markEventFailed(eventId, errorMessage).catch(() => {});
   }
 }
@@ -313,7 +336,9 @@ export async function sleepProcessor(
       .limit(1);
 
     if (!connection?.autoImportEnabled) {
-      console.log(`[whoop-webhook] Auto-import disabled for user ${userId}, skipping sleep event ${eventId}`);
+      console.log(
+        `[whoop-webhook] Auto-import disabled for user ${userId}, skipping sleep event ${eventId}`,
+      );
       await markEventSkipped(eventId);
       return;
     }
@@ -380,10 +405,15 @@ export async function sleepProcessor(
 
     // 4. Mark event processed
     await markEventProcessed(eventId);
-    console.log(`[whoop-webhook] Processed sleep event ${eventId} for sleep ${whoopSleepId}`);
+    console.log(
+      `[whoop-webhook] Processed sleep event ${eventId} for sleep ${whoopSleepId}`,
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[whoop-webhook] Failed to process sleep event ${eventId}:`, err);
+    console.error(
+      `[whoop-webhook] Failed to process sleep event ${eventId}:`,
+      err,
+    );
     await markEventFailed(eventId, errorMessage).catch(() => {});
   }
 }
@@ -419,7 +449,9 @@ export async function sleepDeleteProcessor(
 
     if (existingSleep) {
       await db.delete(whoopSleep).where(eq(whoopSleep.id, existingSleep.id));
-      console.log(`[whoop-webhook] Deleted sleep ${existingSleep.id} for whoopSleepId ${whoopSleepId}`);
+      console.log(
+        `[whoop-webhook] Deleted sleep ${existingSleep.id} for whoopSleepId ${whoopSleepId}`,
+      );
     } else {
       console.log(
         `[whoop-webhook] sleep.deleted: no sleep found for whoopSleepId ${whoopSleepId} — marking processed (idempotent)`,
@@ -429,7 +461,10 @@ export async function sleepDeleteProcessor(
     await markEventProcessed(eventId);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[whoop-webhook] Failed to process sleep delete event ${eventId}:`, err);
+    console.error(
+      `[whoop-webhook] Failed to process sleep delete event ${eventId}:`,
+      err,
+    );
     await markEventFailed(eventId, errorMessage).catch(() => {});
   }
 }
@@ -477,17 +512,18 @@ export async function recoveryProcessor(
       .limit(1);
 
     if (!connection?.autoImportEnabled) {
-      console.log(`[whoop-webhook] Auto-import disabled for user ${userId}, skipping recovery event ${eventId}`);
+      console.log(
+        `[whoop-webhook] Auto-import disabled for user ${userId}, skipping recovery event ${eventId}`,
+      );
       await markEventSkipped(eventId);
       return;
     }
 
     // 2. Fetch recovery record from Whoop
     const accessToken = await getValidWhoopAccessToken(userId);
-    const response = await fetch(
-      `${WHOOP_API_BASE}/recovery/${whoopCycleId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+    const response = await fetch(`${WHOOP_API_BASE}/recovery/${whoopCycleId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -504,7 +540,8 @@ export async function recoveryProcessor(
         id: crypto.randomUUID(),
         userId,
         whoopCycleId: String(recoveryData.cycle_id),
-        whoopSleepId: recoveryData.sleep_id != null ? String(recoveryData.sleep_id) : null,
+        whoopSleepId:
+          recoveryData.sleep_id != null ? String(recoveryData.sleep_id) : null,
         createdAt: new Date(recoveryData.created_at),
         updatedAt: new Date(recoveryData.updated_at),
         scoreState: recoveryData.score_state ?? null,
@@ -518,7 +555,10 @@ export async function recoveryProcessor(
       .onConflictDoUpdate({
         target: [whoopRecovery.userId, whoopRecovery.whoopCycleId],
         set: {
-          whoopSleepId: recoveryData.sleep_id != null ? String(recoveryData.sleep_id) : null,
+          whoopSleepId:
+            recoveryData.sleep_id != null
+              ? String(recoveryData.sleep_id)
+              : null,
           updatedAt: new Date(recoveryData.updated_at),
           scoreState: recoveryData.score_state ?? null,
           recoveryScore: score?.recovery_score ?? null,
@@ -532,10 +572,15 @@ export async function recoveryProcessor(
 
     // 4. Mark event processed
     await markEventProcessed(eventId);
-    console.log(`[whoop-webhook] Processed recovery event ${eventId} for cycle ${whoopCycleId}`);
+    console.log(
+      `[whoop-webhook] Processed recovery event ${eventId} for cycle ${whoopCycleId}`,
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[whoop-webhook] Failed to process recovery event ${eventId}:`, err);
+    console.error(
+      `[whoop-webhook] Failed to process recovery event ${eventId}:`,
+      err,
+    );
     await markEventFailed(eventId, errorMessage).catch(() => {});
   }
 }
@@ -570,8 +615,12 @@ export async function recoveryDeleteProcessor(
       .limit(1);
 
     if (existingRecovery) {
-      await db.delete(whoopRecovery).where(eq(whoopRecovery.id, existingRecovery.id));
-      console.log(`[whoop-webhook] Deleted recovery ${existingRecovery.id} for whoopCycleId ${whoopCycleId}`);
+      await db
+        .delete(whoopRecovery)
+        .where(eq(whoopRecovery.id, existingRecovery.id));
+      console.log(
+        `[whoop-webhook] Deleted recovery ${existingRecovery.id} for whoopCycleId ${whoopCycleId}`,
+      );
     } else {
       console.log(
         `[whoop-webhook] recovery.deleted: no recovery found for whoopCycleId ${whoopCycleId} — marking processed (idempotent)`,
@@ -581,7 +630,10 @@ export async function recoveryDeleteProcessor(
     await markEventProcessed(eventId);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[whoop-webhook] Failed to process recovery delete event ${eventId}:`, err);
+    console.error(
+      `[whoop-webhook] Failed to process recovery delete event ${eventId}:`,
+      err,
+    );
     await markEventFailed(eventId, errorMessage).catch(() => {});
   }
 }
@@ -605,13 +657,20 @@ export function dispatchWhoopEvent(args: {
   if (!resourceId) return null;
 
   switch (eventType) {
-    case "workout.updated":  return workoutProcessor(eventId, userId, resourceId);
-    case "workout.deleted":  return workoutDeleteProcessor(eventId, userId, resourceId);
-    case "sleep.updated":    return sleepProcessor(eventId, userId, resourceId);
-    case "sleep.deleted":    return sleepDeleteProcessor(eventId, userId, resourceId);
-    case "recovery.updated": return recoveryProcessor(eventId, userId, resourceId);
-    case "recovery.deleted": return recoveryDeleteProcessor(eventId, userId, resourceId);
-    default: return null;
+    case "workout.updated":
+      return workoutProcessor(eventId, userId, resourceId);
+    case "workout.deleted":
+      return workoutDeleteProcessor(eventId, userId, resourceId);
+    case "sleep.updated":
+      return sleepProcessor(eventId, userId, resourceId);
+    case "sleep.deleted":
+      return sleepDeleteProcessor(eventId, userId, resourceId);
+    case "recovery.updated":
+      return recoveryProcessor(eventId, userId, resourceId);
+    case "recovery.deleted":
+      return recoveryDeleteProcessor(eventId, userId, resourceId);
+    default:
+      return null;
   }
 }
 
@@ -628,9 +687,9 @@ whoopWebhookApp.post("/webhook", async (c) => {
   }
 
   const whoopUserId = parsed.user_id != null ? String(parsed.user_id) : null;
-  const resourceId = parsed.id ?? null;       // UUID of workout/sleep/recovery
+  const resourceId = parsed.id ?? null; // UUID of workout/sleep/recovery
   const eventType = parsed.type ?? "unknown";
-  const traceId = parsed.trace_id ?? null;    // dedup key
+  const traceId = parsed.trace_id ?? null; // dedup key
 
   if (!whoopUserId || !traceId) {
     return c.json({ error: "Missing user_id or trace_id" }, 400);
@@ -673,7 +732,9 @@ whoopWebhookApp.post("/webhook", async (c) => {
 
   if (!connection) {
     // Valid signature but no connected user — return 200 to stop retries
-    console.log(`[whoop-webhook] No connection for whoopUserId ${whoopUserId}, ignoring`);
+    console.log(
+      `[whoop-webhook] No connection for whoopUserId ${whoopUserId}, ignoring`,
+    );
     return c.json({ ok: true }, 200);
   }
 
@@ -703,17 +764,29 @@ whoopWebhookApp.post("/webhook", async (c) => {
     const result = await db
       .update(whoopWebhookEvent)
       .set({ status: "processing" })
-      .where(and(eq(whoopWebhookEvent.id, traceId), eq(whoopWebhookEvent.status, "pending")));
+      .where(
+        and(
+          eq(whoopWebhookEvent.id, traceId),
+          eq(whoopWebhookEvent.status, "pending"),
+        ),
+      );
 
     if (result.rowCount === 0) return; // already claimed by drain or duplicate delivery
 
-    const promise = dispatchWhoopEvent({ eventId: traceId, userId, eventType, resourceId });
+    const promise = dispatchWhoopEvent({
+      eventId: traceId,
+      userId,
+      eventType,
+      resourceId,
+    });
     if (!promise) {
       await db
         .update(whoopWebhookEvent)
         .set({ status: "skipped", processedAt: new Date() })
         .where(eq(whoopWebhookEvent.id, traceId))
-        .catch((err) => console.error("[whoop-webhook] Failed to skip event:", err));
+        .catch((err) =>
+          console.error("[whoop-webhook] Failed to skip event:", err),
+        );
       return;
     }
     trackInFlight(promise);

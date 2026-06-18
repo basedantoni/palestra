@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { and, eq, ilike, or } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { exercise } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { exercise } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 
@@ -29,9 +29,7 @@ const exerciseInput = z.object({
     "mixed",
   ]),
   muscleGroupsBodybuilding: z
-    .array(
-      z.enum(["chest", "back", "shoulders", "arms", "legs", "core"]),
-    )
+    .array(z.enum(["chest", "back", "shoulders", "arms", "legs", "core"]))
     .optional(),
   muscleGroupsMovement: z
     .array(z.enum(["push", "pull", "squat", "hinge", "carry", "isometric"]))

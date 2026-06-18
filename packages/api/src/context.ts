@@ -1,6 +1,6 @@
 import type { Context as HonoContext } from "hono";
 
-import { auth } from "@src/auth";
+import { auth } from "@life-tracker/auth";
 
 export type CreateContextOptions = {
   context: HonoContext;

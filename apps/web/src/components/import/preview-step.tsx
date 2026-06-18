@@ -14,7 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { inferWorkoutType, WORKOUT_TYPE_LABELS } from "@src/api/lib/index";
+import {
+  inferWorkoutType,
+  WORKOUT_TYPE_LABELS,
+} from "@life-tracker/api/lib/index";
 import type { Resolution } from "./resolve-step";
 
 const WORKOUT_TYPES = [
@@ -56,7 +59,11 @@ interface PreviewStepProps {
   workouts: ParsedWorkoutPreview[];
   resolutionMap: Record<string, Resolution>;
   duplicateDates: string[];
-  onComplete: (importedCount: number, skippedCount: number, createdCount: number) => void;
+  onComplete: (
+    importedCount: number,
+    skippedCount: number,
+    createdCount: number,
+  ) => void;
   onBack: () => void;
 }
 
@@ -66,8 +73,7 @@ function SetLine({ set }: { set: ExercisePreview["sets"][number] }) {
   if (set.durationSeconds !== undefined && set.reps === undefined) {
     return (
       <span className="text-xs text-muted-foreground">
-        {set.durationSeconds}s
-        {set.rpe !== undefined && ` @ RPE ${set.rpe}`}
+        {set.durationSeconds}s{set.rpe !== undefined && ` @ RPE ${set.rpe}`}
       </span>
     );
   }
@@ -176,14 +182,16 @@ export function PreviewStep({
     (r) => r.type === "create",
   ).length;
 
-  const duplicateCount = activeWorkouts.filter((w) => isDuplicate(w.date)).length;
+  const duplicateCount = activeWorkouts.filter((w) =>
+    isDuplicate(w.date),
+  ).length;
 
   const handleCommit = () => {
     const workoutsToSend = activeWorkouts.map((w) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const inferred = inferWorkoutType(w.exercises as any);
       const workoutType =
-        (workoutTypeOverrides[w.date] as typeof WORKOUT_TYPES[number]) ??
+        (workoutTypeOverrides[w.date] as (typeof WORKOUT_TYPES)[number]) ??
         inferred;
       return {
         date: w.date,
@@ -321,14 +329,19 @@ export function PreviewStep({
           return (
             <Card
               key={w.date}
-              className={duplicate && !skipDuplicates ? "border-yellow-400/50" : ""}
+              className={
+                duplicate && !skipDuplicates ? "border-yellow-400/50" : ""
+              }
             >
               <CardHeader className="py-2 px-3">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-sm">{dateDisplay}</CardTitle>
                   <div className="flex items-center gap-2">
                     {duplicate && !skipDuplicates && (
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-400 text-xs">
+                      <Badge
+                        variant="outline"
+                        className="text-yellow-600 border-yellow-400 text-xs"
+                      >
                         Duplicate
                       </Badge>
                     )}
@@ -399,7 +412,11 @@ export function PreviewStep({
       )}
 
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack} disabled={commitMutation.isPending || committed}>
+        <Button
+          variant="outline"
+          onClick={onBack}
+          disabled={commitMutation.isPending || committed}
+        >
           Back
         </Button>
         <Button

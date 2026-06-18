@@ -22,7 +22,10 @@ interface OverloadStatusListProps {
 
 const TREND_ORDER = { improving: 0, plateau: 1, declining: 2 };
 
-export function OverloadStatusList({ data, isLoading }: OverloadStatusListProps) {
+export function OverloadStatusList({
+  data,
+  isLoading,
+}: OverloadStatusListProps) {
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -45,10 +48,8 @@ export function OverloadStatusList({ data, isLoading }: OverloadStatusListProps)
   }
 
   const sorted = [...data].sort((a, b) => {
-    const aOrder =
-      TREND_ORDER[a.trendStatus as keyof typeof TREND_ORDER] ?? 3;
-    const bOrder =
-      TREND_ORDER[b.trendStatus as keyof typeof TREND_ORDER] ?? 3;
+    const aOrder = TREND_ORDER[a.trendStatus as keyof typeof TREND_ORDER] ?? 3;
+    const bOrder = TREND_ORDER[b.trendStatus as keyof typeof TREND_ORDER] ?? 3;
     return aOrder - bOrder;
   });
 

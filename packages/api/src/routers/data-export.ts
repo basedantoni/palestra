@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 
 import { rowsToCsv } from "../lib/export-utils";
 import { protectedProcedure, router } from "../index";
@@ -10,40 +10,47 @@ export const dataExportRouter = router({
   generateJson: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
 
-    const [profile, preferences, workouts, templates, personalRecords, overloadStates, muscleGroupVolumes] =
-      await Promise.all([
-        db.query.user.findFirst({
-          where: (table, { eq }) => eq(table.id, userId),
-        }),
-        db.query.userPreferences.findFirst({
-          where: (table, { eq }) => eq(table.userId, userId),
-        }),
-        db.query.workout.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
-          with: {
-            logs: {
-              with: {
-                sets: true,
-              },
+    const [
+      profile,
+      preferences,
+      workouts,
+      templates,
+      personalRecords,
+      overloadStates,
+      muscleGroupVolumes,
+    ] = await Promise.all([
+      db.query.user.findFirst({
+        where: (table, { eq }) => eq(table.id, userId),
+      }),
+      db.query.userPreferences.findFirst({
+        where: (table, { eq }) => eq(table.userId, userId),
+      }),
+      db.query.workout.findMany({
+        where: (table, { eq }) => eq(table.userId, userId),
+        with: {
+          logs: {
+            with: {
+              sets: true,
             },
           },
-        }),
-        db.query.workoutTemplate.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
-          with: {
-            exercises: true,
-          },
-        }),
-        db.query.personalRecord.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
-        }),
-        db.query.progressiveOverloadState.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
-        }),
-        db.query.muscleGroupVolume.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
-        }),
-      ]);
+        },
+      }),
+      db.query.workoutTemplate.findMany({
+        where: (table, { eq }) => eq(table.userId, userId),
+        with: {
+          exercises: true,
+        },
+      }),
+      db.query.personalRecord.findMany({
+        where: (table, { eq }) => eq(table.userId, userId),
+      }),
+      db.query.progressiveOverloadState.findMany({
+        where: (table, { eq }) => eq(table.userId, userId),
+      }),
+      db.query.muscleGroupVolume.findMany({
+        where: (table, { eq }) => eq(table.userId, userId),
+      }),
+    ]);
 
     const customExercises = await db.query.exercise.findMany({
       where: (table) => eq(table.createdByUserId, userId),

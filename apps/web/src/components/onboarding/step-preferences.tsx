@@ -1,5 +1,10 @@
 import { Label } from "@/components/ui/label";
-import { WEIGHT_UNITS, DISTANCE_UNITS, MUSCLE_GROUP_SYSTEMS, THEMES } from "@src/shared";
+import {
+  WEIGHT_UNITS,
+  DISTANCE_UNITS,
+  MUSCLE_GROUP_SYSTEMS,
+  THEMES,
+} from "@life-tracker/shared";
 import type { OnboardingFormApi } from "./use-onboarding-form";
 
 interface StepPreferencesProps {
@@ -58,7 +63,9 @@ export default function StepPreferences({ form }: StepPreferencesProps) {
       </div>
 
       <div>
-        <Label className="text-base font-semibold">Muscle Group Categorization</Label>
+        <Label className="text-base font-semibold">
+          Muscle Group Categorization
+        </Label>
         <form.Field name="muscleGroupSystem">
           {(field) => (
             <div className="mt-2 grid grid-cols-1 gap-3">
@@ -74,7 +81,9 @@ export default function StepPreferences({ form }: StepPreferencesProps) {
                   }`}
                 >
                   <span className="text-sm font-medium">{sys.label}</span>
-                  <span className="text-xs text-muted-foreground">{sys.description}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {sys.description}
+                  </span>
                 </button>
               ))}
             </div>

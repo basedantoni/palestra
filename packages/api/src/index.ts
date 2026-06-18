@@ -1,6 +1,6 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 
-import { env } from "@src/env/server";
+import { env } from "@life-tracker/env/server";
 
 import type { Context } from "./context";
 

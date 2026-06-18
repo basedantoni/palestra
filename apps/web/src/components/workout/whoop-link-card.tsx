@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { formatDistance } from "@src/api/lib/index";
+import { formatDistance } from "@life-tracker/api/lib/index";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +44,9 @@ export function WhoopLinkCard({
       onSuccess: () => {
         // queryOptions() with no args gives the base key prefix — matches all date variants
         queryClient.invalidateQueries({
-          queryKey: trpc.whoop.listUnlinkedCardioActivities.queryOptions({ date: "" }).queryKey.slice(0, 1),
+          queryKey: trpc.whoop.listUnlinkedCardioActivities
+            .queryOptions({ date: "" })
+            .queryKey.slice(0, 1),
         });
         setConfirmOpen(false);
       },
@@ -96,7 +98,9 @@ export function WhoopLinkCard({
                 {selectedActivity.sportName}
               </span>
               <span className="mx-1.5">·</span>
-              <span>{format(new Date(selectedActivity.start), "MMM d, h:mm a")}</span>
+              <span>
+                {format(new Date(selectedActivity.start), "MMM d, h:mm a")}
+              </span>
               <span className="mx-1.5">·</span>
               <span>{selectedActivity.durationMinutes} min</span>
               {selectedActivity.averageHeartRate != null && (
@@ -108,12 +112,22 @@ export function WhoopLinkCard({
               {selectedActivity.distanceMeter != null && (
                 <>
                   <span className="mx-1.5">·</span>
-                  <span>{formatDistance(selectedActivity.distanceMeter, distanceUnit)}</span>
+                  <span>
+                    {formatDistance(
+                      selectedActivity.distanceMeter,
+                      distanceUnit,
+                    )}
+                  </span>
                 </>
               )}
               {isReassign && selectedActivity.linkedWorkoutDate && (
                 <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                  Linked to {format(new Date(selectedActivity.linkedWorkoutDate), "MMM d")} workout
+                  Linked to{" "}
+                  {format(
+                    new Date(selectedActivity.linkedWorkoutDate),
+                    "MMM d",
+                  )}{" "}
+                  workout
                 </span>
               )}
             </div>
@@ -147,7 +161,9 @@ export function WhoopLinkCard({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isReassign ? "Reassign Whoop activity?" : "Unlink Whoop activity?"}
+              {isReassign
+                ? "Reassign Whoop activity?"
+                : "Unlink Whoop activity?"}
             </DialogTitle>
             <DialogDescription>
               {isReassign && selectedActivity?.linkedWorkoutDate

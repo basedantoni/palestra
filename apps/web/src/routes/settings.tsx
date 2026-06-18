@@ -14,15 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/utils/trpc";
-import { env } from "@src/env/web";
+import { env } from "@life-tracker/env/web";
 import { CustomExerciseStatusBadge } from "@/components/custom-exercise-status-badge";
-import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
+import { EXERCISE_CATEGORY_LABELS } from "@life-tracker/api/lib/index";
 import {
   DISTANCE_UNITS,
   MUSCLE_GROUP_SYSTEMS,
   THEMES,
   WEIGHT_UNITS,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 type SettingsFormData = {
   weightUnit: "lbs" | "kg";
@@ -98,8 +98,8 @@ function RouteComponent() {
     } else if (search.whoop_error) {
       toast.error(`Whoop connection failed: ${search.whoop_error}`);
     }
-  // Only run once on mount to avoid repeated toasts on re-render
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only run once on mount to avoid repeated toasts on re-render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -249,7 +249,11 @@ function RouteComponent() {
     }),
   );
 
-  const downloadTextFile = (fileName: string, content: string, contentType: string) => {
+  const downloadTextFile = (
+    fileName: string,
+    content: string,
+    contentType: string,
+  ) => {
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -264,7 +268,11 @@ function RouteComponent() {
   const exportWorkoutsCsvMutation = useMutation(
     trpc.dataExport.generateCsv.mutationOptions({
       onSuccess: (payload) => {
-        downloadTextFile(payload.fileName, payload.content, "text/csv;charset=utf-8");
+        downloadTextFile(
+          payload.fileName,
+          payload.content,
+          "text/csv;charset=utf-8",
+        );
         toast.success("Workouts CSV downloaded");
       },
       onError: (error) => {
@@ -276,7 +284,11 @@ function RouteComponent() {
   const exportTemplatesCsvMutation = useMutation(
     trpc.dataExport.generateCsv.mutationOptions({
       onSuccess: (payload) => {
-        downloadTextFile(payload.fileName, payload.content, "text/csv;charset=utf-8");
+        downloadTextFile(
+          payload.fileName,
+          payload.content,
+          "text/csv;charset=utf-8",
+        );
         toast.success("Templates CSV downloaded");
       },
       onError: (error) => {
@@ -287,7 +299,11 @@ function RouteComponent() {
 
   const handleSave = () => {
     const plateauThreshold = Number(formData.plateauThreshold);
-    if (!Number.isInteger(plateauThreshold) || plateauThreshold < 1 || plateauThreshold > 20) {
+    if (
+      !Number.isInteger(plateauThreshold) ||
+      plateauThreshold < 1 ||
+      plateauThreshold > 20
+    ) {
       toast.error("Plateau threshold must be a whole number between 1 and 20");
       return;
     }
@@ -360,7 +376,8 @@ function RouteComponent() {
                   onClick={() =>
                     setFormData((prev) => ({
                       ...prev,
-                      distanceUnit: unit.value as SettingsFormData["distanceUnit"],
+                      distanceUnit:
+                        unit.value as SettingsFormData["distanceUnit"],
                     }))
                   }
                   className={`flex cursor-pointer items-center gap-2 border p-3 text-left transition-colors hover:bg-muted ${
@@ -376,7 +393,9 @@ function RouteComponent() {
           </div>
 
           <div>
-            <Label className="text-base font-semibold">Muscle Group Categorization</Label>
+            <Label className="text-base font-semibold">
+              Muscle Group Categorization
+            </Label>
             <div className="mt-2 grid grid-cols-1 gap-3">
               {MUSCLE_GROUP_SYSTEMS.map((system) => (
                 <button
@@ -430,7 +449,10 @@ function RouteComponent() {
           </div>
 
           <div>
-            <Label htmlFor="plateau-threshold" className="text-base font-semibold">
+            <Label
+              htmlFor="plateau-threshold"
+              className="text-base font-semibold"
+            >
               Plateau Threshold
             </Label>
             <p className="text-xs text-muted-foreground mt-1 mb-2">
@@ -464,7 +486,9 @@ function RouteComponent() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => exportWorkoutsCsvMutation.mutate({ dataset: "workouts" })}
+              onClick={() =>
+                exportWorkoutsCsvMutation.mutate({ dataset: "workouts" })
+              }
               disabled={exportWorkoutsCsvMutation.isPending}
             >
               {exportWorkoutsCsvMutation.isPending
@@ -473,7 +497,9 @@ function RouteComponent() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => exportTemplatesCsvMutation.mutate({ dataset: "templates" })}
+              onClick={() =>
+                exportTemplatesCsvMutation.mutate({ dataset: "templates" })
+              }
               disabled={exportTemplatesCsvMutation.isPending}
             >
               {exportTemplatesCsvMutation.isPending
@@ -496,36 +522,52 @@ function RouteComponent() {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-sm">Whoop</span>
-                  {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
-                    <Badge variant="secondary" className="text-xs">Connected</Badge>
-                  ) : whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid ? (
-                    <Badge variant="destructive" className="text-xs">Reconnect required</Badge>
+                  {whoopStatusQuery.data?.connected &&
+                  whoopStatusQuery.data.isValid ? (
+                    <Badge variant="secondary" className="text-xs">
+                      Connected
+                    </Badge>
+                  ) : whoopStatusQuery.data?.connected &&
+                    !whoopStatusQuery.data.isValid ? (
+                    <Badge variant="destructive" className="text-xs">
+                      Reconnect required
+                    </Badge>
                   ) : null}
                 </div>
-                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.connectedAt ? (
+                {whoopStatusQuery.data?.connected &&
+                whoopStatusQuery.data.connectedAt ? (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Connected since {format(new Date(whoopStatusQuery.data.connectedAt), "MMM d, yyyy")}
+                    Connected since{" "}
+                    {format(
+                      new Date(whoopStatusQuery.data.connectedAt),
+                      "MMM d, yyyy",
+                    )}
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">
                     Sync your Whoop workouts automatically.
                   </p>
                 )}
-                {whoopStatusQuery.data?.connected && !whoopStatusQuery.data.isValid && (
-                  <p className="text-xs text-destructive mt-1">
-                    Your Whoop connection expired. Please reconnect to continue syncing.
-                  </p>
-                )}
+                {whoopStatusQuery.data?.connected &&
+                  !whoopStatusQuery.data.isValid && (
+                    <p className="text-xs text-destructive mt-1">
+                      Your Whoop connection expired. Please reconnect to
+                      continue syncing.
+                    </p>
+                  )}
               </div>
               <div className="flex gap-2">
-                {whoopStatusQuery.data?.connected && whoopStatusQuery.data.isValid ? (
+                {whoopStatusQuery.data?.connected &&
+                whoopStatusQuery.data.isValid ? (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => whoopDisconnectMutation.mutate()}
                     disabled={whoopDisconnectMutation.isPending}
                   >
-                    {whoopDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                    {whoopDisconnectMutation.isPending
+                      ? "Disconnecting..."
+                      : "Disconnect"}
                   </Button>
                 ) : (
                   <a
@@ -546,11 +588,14 @@ function RouteComponent() {
                   <div>
                     <p className="text-sm font-medium">Auto-import workouts</p>
                     <p className="text-xs text-muted-foreground">
-                      Automatically import workouts when they complete on your Whoop.
+                      Automatically import workouts when they complete on your
+                      Whoop.
                     </p>
                   </div>
                   <Switch
-                    checked={webhookStatusQuery.data?.autoImportEnabled ?? false}
+                    checked={
+                      webhookStatusQuery.data?.autoImportEnabled ?? false
+                    }
                     onCheckedChange={(checked) =>
                       setAutoImportMutation.mutate({ enabled: checked })
                     }
@@ -562,13 +607,18 @@ function RouteComponent() {
                 {/* Notify on auto-import toggle */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">Notify me on auto-import</p>
+                    <p className="text-sm font-medium">
+                      Notify me on auto-import
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      Receive an in-app notification each time a Whoop workout is imported.
+                      Receive an in-app notification each time a Whoop workout
+                      is imported.
                     </p>
                   </div>
                   <Switch
-                    checked={webhookStatusQuery.data?.notifyOnAutoImport ?? false}
+                    checked={
+                      webhookStatusQuery.data?.notifyOnAutoImport ?? false
+                    }
                     onCheckedChange={(checked) =>
                       setNotifyOnAutoImportMutation.mutate({ enabled: checked })
                     }
@@ -581,7 +631,8 @@ function RouteComponent() {
                 {webhookStatusQuery.data?.backfill?.running && (
                   <div className="flex items-center justify-between gap-3 bg-muted/50 border rounded px-3 py-2">
                     <p className="text-xs text-muted-foreground">
-                      Importing {webhookStatusQuery.data.backfill.importedCount} workouts&hellip;
+                      Importing {webhookStatusQuery.data.backfill.importedCount}{" "}
+                      workouts&hellip;
                     </p>
                     <Button
                       variant="outline"
@@ -600,7 +651,10 @@ function RouteComponent() {
                     <p className="text-xs text-muted-foreground">Last synced</p>
                     <p className="text-xs text-muted-foreground">
                       {webhookStatusQuery.data.lastReceivedAt
-                        ? formatDistanceToNow(new Date(webhookStatusQuery.data.lastReceivedAt), { addSuffix: true })
+                        ? formatDistanceToNow(
+                            new Date(webhookStatusQuery.data.lastReceivedAt),
+                            { addSuffix: true },
+                          )
                         : "never"}
                     </p>
                   </div>
@@ -620,7 +674,8 @@ function RouteComponent() {
                         Set up your webhook URL and secret
                       </a>{" "}
                       in the Whoop Developer Dashboard, then add{" "}
-                      <code className="font-mono">WHOOP_WEBHOOK_SECRET</code> to your server environment.
+                      <code className="font-mono">WHOOP_WEBHOOK_SECRET</code> to
+                      your server environment.
                     </p>
                   </div>
                 )}
@@ -646,7 +701,10 @@ function RouteComponent() {
           ) : (
             <div className="divide-y">
               {customExercises.map((ex) => (
-                <div key={ex.id} className="flex items-center justify-between py-3">
+                <div
+                  key={ex.id}
+                  className="flex items-center justify-between py-3"
+                >
                   <div>
                     <div className="font-medium text-sm">{ex.name}</div>
                     <div className="mt-1 flex gap-1 flex-wrap">

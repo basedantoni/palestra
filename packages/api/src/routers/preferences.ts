@@ -1,7 +1,7 @@
-import { preferencesInputSchema } from "@src/shared";
+import { preferencesInputSchema } from "@life-tracker/shared";
 
-import { db } from "@src/db";
-import { userPreferences } from "@src/db/schema/index";
+import { db } from "@life-tracker/db";
+import { userPreferences } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 

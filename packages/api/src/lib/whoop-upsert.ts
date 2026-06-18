@@ -23,9 +23,13 @@
 
 import { and, eq } from "drizzle-orm";
 
-import { db } from "@src/db";
-import { exerciseLog, whoopConnection, workout } from "@src/db/schema/index";
-import { whoopSportToWorkoutType } from "@src/shared";
+import { db } from "@life-tracker/db";
+import {
+  exerciseLog,
+  whoopConnection,
+  workout,
+} from "@life-tracker/db/schema/index";
+import { whoopSportToWorkoutType } from "@life-tracker/shared";
 
 import {
   whoopActivityToExerciseLog,

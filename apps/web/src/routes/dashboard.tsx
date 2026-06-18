@@ -12,7 +12,7 @@ import {
   formatVolume,
   metersToDisplayUnit,
   WORKOUT_TYPE_LABELS,
-} from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/dashboard")({
   component: RouteComponent,
@@ -100,7 +100,10 @@ function RouteComponent() {
               <div>
                 <div className="text-sm text-muted-foreground">Distance</div>
                 <div className="text-2xl font-bold">
-                  {metersToDisplayUnit(runningWeek.totalDistance, distanceUnit).toFixed(2)}{" "}
+                  {metersToDisplayUnit(
+                    runningWeek.totalDistance,
+                    distanceUnit,
+                  ).toFixed(2)}{" "}
                   {distanceUnit}
                 </div>
               </div>

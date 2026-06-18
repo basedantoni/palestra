@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EXERCISE_CATEGORY_LABELS } from "@src/api/lib/index";
+import { EXERCISE_CATEGORY_LABELS } from "@life-tracker/api/lib/index";
 
 export const Route = createFileRoute("/admin/exercises/")({
   component: AdminExercisesPage,
@@ -74,7 +74,8 @@ function AdminExercisesPage() {
       <div className="mb-4">
         <h2 className="text-xl font-semibold">Exercise Review Queue</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Review user-submitted and imported exercises for public library inclusion.
+          Review user-submitted and imported exercises for public library
+          inclusion.
         </p>
       </div>
 
@@ -101,7 +102,10 @@ function AdminExercisesPage() {
                     {ex.exerciseType}
                   </Badge>
                   {ex.status === "imported" && (
-                    <Badge variant="outline" className="text-xs border-blue-400 text-blue-600">
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-blue-400 text-blue-600"
+                    >
                       Imported
                     </Badge>
                   )}

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateLabel } from "@src/api/lib/index";
+import { formatDateLabel } from "@life-tracker/api/lib/index";
 
 interface SleepRow {
   id: string;
@@ -67,7 +67,8 @@ export function WhoopSleepChart({ data, isLoading }: WhoopSleepChartProps) {
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
     .map((s) => ({
       label: formatDateLabel(new Date(s.start).toISOString().slice(0, 10)),
-      performancePct: s.performancePct != null ? Math.round(s.performancePct) : null,
+      performancePct:
+        s.performancePct != null ? Math.round(s.performancePct) : null,
     }));
 
   return (
@@ -97,7 +98,9 @@ export function WhoopSleepChart({ data, isLoading }: WhoopSleepChartProps) {
           />
           <Tooltip
             formatter={(value) =>
-              value != null ? [`${value}%`, "Sleep Performance"] : ["—", "Sleep Performance"]
+              value != null
+                ? [`${value}%`, "Sleep Performance"]
+                : ["—", "Sleep Performance"]
             }
             labelFormatter={(label) => `Date: ${String(label)}`}
             labelStyle={{ color: "var(--muted-foreground)" }}
@@ -129,7 +132,10 @@ export function WhoopSleepChart({ data, isLoading }: WhoopSleepChartProps) {
           </thead>
           <tbody>
             {mainSleeps.map((s) => (
-              <tr key={s.id} className="border-b border-border/50 last:border-0">
+              <tr
+                key={s.id}
+                className="border-b border-border/50 last:border-0"
+              >
                 <td className="py-2 pr-4 text-foreground">
                   {new Date(s.start).toLocaleDateString("en-US", {
                     month: "short",

@@ -7,7 +7,7 @@
  * circular dependency between whoop-webhook.ts and whoop-backfill.ts.
  *
  * The pure transform `whoopActivityToExerciseLog` and its input type
- * `WhoopActivityScore` remain the source-of-truth in `@src/shared`; we re-export
+ * `WhoopActivityScore` remain the source-of-truth in `@life-tracker/shared`; we re-export
  * them here so callers have one place to import everything activity-related.
  */
 
@@ -15,7 +15,7 @@ export {
   whoopActivityToExerciseLog,
   type WhoopActivityScore,
   type ExerciseLogPatch,
-} from "@src/shared";
+} from "@life-tracker/shared";
 
 /**
  * Full Whoop workout activity detail, as returned by

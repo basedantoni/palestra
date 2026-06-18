@@ -1,5 +1,5 @@
 {
-  "name": "@src/shared",
+  "name": "@life-tracker/shared",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@src/config": "workspace:*",
+    "@life-tracker/config": "workspace:*",
     "typescript": "catalog:",
     "vitest": "^4.0.18"
   }

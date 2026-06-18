@@ -17,8 +17,8 @@ import {
   calculateTotalVolume,
   createBlankExercise,
   formDataToApiInput,
-} from "@src/api/lib/index";
-import type { WorkoutFormData } from "@src/api/lib/index";
+} from "@life-tracker/api/lib/index";
+import type { WorkoutFormData } from "@life-tracker/api/lib/index";
 
 export interface WorkoutEditModeHandle {
   save: () => void;
@@ -48,8 +48,8 @@ export const WorkoutEditMode = forwardRef<
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<
     number | null
   >(null);
-  const [formData, setFormData] = useState<WorkoutFormData | null>(
-    () => apiWorkoutToFormData(workout),
+  const [formData, setFormData] = useState<WorkoutFormData | null>(() =>
+    apiWorkoutToFormData(workout),
   );
 
   // Re-sync if the workout prop changes (e.g., after a refetch)

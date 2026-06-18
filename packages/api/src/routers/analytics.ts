@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { and, asc, eq, gte, lte, sql, sum } from "drizzle-orm";
 
-import { db } from "@src/db";
+import { db } from "@life-tracker/db";
 import {
   exercise,
   exerciseLog,
@@ -9,7 +9,7 @@ import {
   personalRecord,
   progressiveOverloadState,
   workout,
-} from "@src/db/schema/index";
+} from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import {
@@ -25,7 +25,10 @@ import {
   groupPersonalRecordsByExercise,
 } from "../lib/analytics-queries";
 import { toLocalDateKey } from "../lib/date-utils";
-import { getEffectiveDurationSeconds, WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
+import {
+  getEffectiveDurationSeconds,
+  WORKOUT_TYPE_ENUM,
+} from "../lib/workout-utils";
 
 export const analyticsRouter = router({
   personalRecords: protectedProcedure
@@ -145,7 +148,7 @@ export const analyticsRouter = router({
 
       return aggregateRunningPaceTrend(
         rows.filter(
-          (row): row is typeof rows[number] & { exerciseId: string } =>
+          (row): row is (typeof rows)[number] & { exerciseId: string } =>
             row.exerciseId != null,
         ),
       );
@@ -233,9 +236,7 @@ export const analyticsRouter = router({
         eq(progressiveOverloadState.userId, ctx.session.user.id),
       ];
       if (input?.exerciseId) {
-        clauses.push(
-          eq(progressiveOverloadState.exerciseId, input.exerciseId),
-        );
+        clauses.push(eq(progressiveOverloadState.exerciseId, input.exerciseId));
       }
 
       const rows = await db
@@ -263,7 +264,11 @@ export const analyticsRouter = router({
         suggestion: row.nextSuggestedProgression as {
           type: string;
           message: string;
-          details: { currentValue: number; suggestedValue: number; unit: string };
+          details: {
+            currentValue: number;
+            suggestedValue: number;
+            unit: string;
+          };
         } | null,
         lastCalculatedAt: row.lastCalculatedAt,
       }));
@@ -294,7 +299,11 @@ export const analyticsRouter = router({
         suggestion: row.nextSuggestedProgression as {
           type: string;
           message: string;
-          details: { currentValue: number; suggestedValue: number; unit: string };
+          details: {
+            currentValue: number;
+            suggestedValue: number;
+            unit: string;
+          };
         } | null,
         lastCalculatedAt: row.lastCalculatedAt,
       };
@@ -328,7 +337,10 @@ export const analyticsRouter = router({
 
       if (input?.categorizationSystem) {
         clauses.push(
-          eq(muscleGroupVolume.categorizationSystem, input.categorizationSystem),
+          eq(
+            muscleGroupVolume.categorizationSystem,
+            input.categorizationSystem,
+          ),
         );
       }
 
@@ -567,7 +579,9 @@ export const analyticsRouter = router({
         .orderBy(asc(sql`date_trunc('week', ${workout.date}::date)`));
 
       return rows
-        .filter((row) => row.distanceMeter != null && Number(row.distanceMeter) > 0)
+        .filter(
+          (row) => row.distanceMeter != null && Number(row.distanceMeter) > 0,
+        )
         .map((row) => ({
           weekStart: row.weekStart,
           distanceMeter: Number(row.distanceMeter),

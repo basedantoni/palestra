@@ -13,14 +13,14 @@ primary_region = 'dfw'
   PORT = '3000'
 
 [deploy]
-  release_command = "sh -c 'cd /app && pnpm -F @src/db db:migrate && pnpm -F @src/db db:seed'"
+  release_command = "sh -c 'cd /app && pnpm -F @life-tracker/db db:migrate && pnpm -F @life-tracker/db db:seed'"
 
 [http_service]
   internal_port = 3000
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   kill_timeout = '45s'
 
   [http_service.concurrency]
