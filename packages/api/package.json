@@ -24,6 +24,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
+    "plaid": "^42.2.0",
     "zod": "catalog:"
   },
   "devDependencies": {

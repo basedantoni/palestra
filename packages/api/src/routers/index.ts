@@ -5,6 +5,7 @@ import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
 import { importRouter } from "./import";
 import { notificationsRouter } from "./notifications";
+import { plaidRouter } from "./plaid";
 import { preferencesRouter } from "./preferences";
 import { templatesRouter } from "./templates";
 import { tcxImportRouter } from "./tcx-import";
@@ -36,5 +37,6 @@ export const appRouter = router({
   whoop: whoopRouter,
   whoopSleep: whoopSleepRouter,
   whoopRecovery: whoopRecoveryRouter,
+  plaid: plaidRouter,
 });
 export type AppRouter = typeof appRouter;
