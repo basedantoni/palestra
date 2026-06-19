@@ -46,3 +46,25 @@ export const plaidItemRelations = relations(plaidItem, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+/**
+ * Inbound Plaid webhook log. Persist-then-drain: the handler records the event
+ * and triggers a sync; the startup drain re-runs any rows still `pending`.
+ */
+export const plaidWebhookEvent = pgTable(
+  "plaid_webhook_event",
+  {
+    id: uuid("id").primaryKey(),
+    itemId: text("item_id").notNull(),
+    webhookType: text("webhook_type").notNull(),
+    webhookCode: text("webhook_code").notNull(),
+    receivedAt: timestamp("received_at").defaultNow().notNull(),
+    processedAt: timestamp("processed_at"),
+    status: text("status").default("pending").notNull(),
+    errorMessage: text("error_message"),
+  },
+  (table) => [
+    index("plaid_webhook_event_itemId_idx").on(table.itemId),
+    index("plaid_webhook_event_status_idx").on(table.status),
+  ],
+);

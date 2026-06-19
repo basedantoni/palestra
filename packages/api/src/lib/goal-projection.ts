@@ -59,15 +59,15 @@ export function projectGoal(args: {
   }
 
   let ratePerDay = 0;
-  if (sorted.length >= 2) {
-    const first = sorted[0];
+  const first = sorted[0];
+  if (sorted.length >= 2 && first && last) {
     const days = dayDiff(first.asOfDate, last.asOfDate);
     if (days > 0) {
       ratePerDay = Math.max(0, (last.balance - first.balance) / days);
     }
   }
 
-  if (ratePerDay <= 0) {
+  if (ratePerDay <= 0 || !last) {
     return { currentBalance, percent, complete: false, ratePerDay: 0, projectedDate: null, onTrack: null };
   }
 

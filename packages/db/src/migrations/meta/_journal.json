@@ -169,6 +169,13 @@
       "when": 1781903219610,
       "tag": "0023_polite_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781904637224,
+      "tag": "0024_known_galactus",
+      "breakpoints": true
     }
   ]
 }
