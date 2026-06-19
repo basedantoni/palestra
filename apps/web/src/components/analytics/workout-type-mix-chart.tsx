@@ -44,7 +44,7 @@ export function WorkoutTypeMixChart({
     return (
       <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
         <p className="text-sm text-muted-foreground">
-          No workout mix data yet.
+          No workout mix data in the selected range.
         </p>
       </div>
     );

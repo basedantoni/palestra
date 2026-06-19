@@ -35,7 +35,7 @@ export function RunningVolumeChart({
     return (
       <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
         <p className="text-sm text-muted-foreground">
-          No running volume yet. Log a run to see weekly distance.
+          No running volume in the selected range.
         </p>
       </div>
     );

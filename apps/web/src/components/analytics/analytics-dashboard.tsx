@@ -20,17 +20,45 @@ import { WhoopPaceTrendChart } from "./whoop-pace-trend-chart";
 import { WhoopWeeklyDistanceChart } from "./whoop-weekly-distance-chart";
 import { WhoopSleepChart } from "./whoop-sleep-chart";
 import { WhoopRecoveryChart } from "./whoop-recovery-chart";
-import { resolveAnalyticsRangeBounds } from "@life-tracker/shared";
+import {
+  formatLocalDate,
+  parseLocalDate,
+  resolveAnalyticsRangeBounds,
+} from "@life-tracker/shared";
 
-function useLast30DaysRange(): { from: string; to: string } {
-  return useMemo(() => {
-    const now = new Date();
-    const to = now.toISOString().slice(0, 10);
-    const from30 = new Date(now);
-    from30.setDate(from30.getDate() - 30);
-    const from = from30.toISOString().slice(0, 10);
-    return { from, to };
-  }, []);
+type OptionalDateRangeInput = {
+  startDate: Date;
+  endDate: Date;
+};
+
+// Matches the server-side MAX_WHOOP_LIST_LIMIT so an unbounded ("All") range
+// returns the complete set of Whoop sleep/recovery rows rather than truncating.
+const WHOOP_CHART_LIST_LIMIT = 5000;
+
+function shiftDays(date: Date, delta: number): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + delta,
+    12,
+    0,
+    0,
+    0,
+  );
+}
+
+function buildOptionalDateRangeInput(
+  from?: string,
+  to?: string,
+): OptionalDateRangeInput | undefined {
+  if (!from || !to) {
+    return undefined;
+  }
+
+  return {
+    startDate: parseLocalDate(from),
+    endDate: parseLocalDate(to),
+  };
 }
 
 export function AnalyticsDashboard() {
@@ -45,11 +73,53 @@ export function AnalyticsDashboard() {
   const preferences = useQuery(trpc.preferences.get.queryOptions());
   const distanceUnit = preferences.data?.distanceUnit ?? "mi";
 
-  const whoopDateRange = useLast30DaysRange();
   const resolvedDateRange = useMemo(
     () => resolveAnalyticsRangeBounds(search),
     [search],
   );
+  const scopedDateRangeInput = useMemo(
+    () =>
+      buildOptionalDateRangeInput(
+        resolvedDateRange.from,
+        resolvedDateRange.to,
+      ),
+    [resolvedDateRange.from, resolvedDateRange.to],
+  );
+  const workoutHeatmapRange = useMemo(() => {
+    const today = parseLocalDate(formatLocalDate(new Date()));
+    const selectedRange =
+      buildOptionalDateRangeInput(
+        resolvedDateRange.from,
+        resolvedDateRange.to,
+      ) ?? {
+        startDate: shiftDays(today, -364),
+        endDate: today,
+      };
+    const windowDays =
+      Math.floor(
+        (selectedRange.endDate.getTime() - selectedRange.startDate.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ) + 1;
+
+    if (windowDays <= 365) {
+      return {
+        ...selectedRange,
+        from: formatLocalDate(selectedRange.startDate),
+        to: formatLocalDate(selectedRange.endDate),
+        isClamped: false,
+      };
+    }
+
+    const clampedStartDate = shiftDays(selectedRange.endDate, -364);
+
+    return {
+      startDate: clampedStartDate,
+      endDate: selectedRange.endDate,
+      from: formatLocalDate(clampedStartDate),
+      to: formatLocalDate(selectedRange.endDate),
+      isClamped: true,
+    };
+  }, [resolvedDateRange.from, resolvedDateRange.to]);
 
   const volumeData = useQuery(
     trpc.analytics.volumeOverTime.queryOptions({
@@ -60,51 +130,61 @@ export function AnalyticsDashboard() {
   );
   const muscleGroupData = useQuery(
     trpc.analytics.muscleGroupVolume.queryOptions({
+      startDate: scopedDateRangeInput?.startDate,
+      endDate: scopedDateRangeInput?.endDate,
       categorizationSystem,
     }),
   );
   const prData = useQuery(trpc.analytics.personalRecords.queryOptions());
   const frequencyData = useQuery(
-    trpc.analytics.workoutFrequency.queryOptions(),
+    trpc.analytics.workoutFrequency.queryOptions({
+      startDate: workoutHeatmapRange.startDate,
+      endDate: workoutHeatmapRange.endDate,
+    }),
   );
   const overloadData = useQuery(
     trpc.analytics.progressiveOverload.queryOptions(),
   );
 
   const runningVolumeData = useQuery(
-    trpc.analytics.weeklyRunningVolume.queryOptions(),
+    trpc.analytics.weeklyRunningVolume.queryOptions(scopedDateRangeInput),
   );
   const runningPaceTrend = useQuery(
-    trpc.analytics.runningPaceTrend.queryOptions(),
+    trpc.analytics.runningPaceTrend.queryOptions(scopedDateRangeInput),
   );
   const mobilityFrequency = useQuery(
-    trpc.analytics.mobilityFrequency.queryOptions(),
+    trpc.analytics.mobilityFrequency.queryOptions(scopedDateRangeInput),
   );
   const workoutTypeMix = useQuery(
-    trpc.analytics.workoutTypeMix.queryOptions(),
+    trpc.analytics.workoutTypeMix.queryOptions(scopedDateRangeInput),
+  );
+
+  const whoopRangeBounds = useMemo(
+    () => ({ from: resolvedDateRange.from, to: resolvedDateRange.to }),
+    [resolvedDateRange.from, resolvedDateRange.to],
   );
 
   const whoopHrTrend = useQuery(
-    trpc.analytics.runningHrTrend.queryOptions(whoopDateRange),
+    trpc.analytics.runningHrTrend.queryOptions(whoopRangeBounds),
   );
   const whoopPaceTrend = useQuery(
-    trpc.analytics.whoopPaceTrend.queryOptions(whoopDateRange),
+    trpc.analytics.whoopPaceTrend.queryOptions(whoopRangeBounds),
   );
   const whoopWeeklyDistance = useQuery(
-    trpc.analytics.weeklyRunDistance.queryOptions(whoopDateRange),
+    trpc.analytics.weeklyRunDistance.queryOptions(whoopRangeBounds),
   );
 
   const whoopConnection = useQuery(trpc.whoop.connectionStatus.queryOptions());
   const sleepData = useQuery(
     trpc.whoopSleep.list.queryOptions(
-      { limit: 30, from: whoopDateRange.from, to: whoopDateRange.to },
+      { limit: WHOOP_CHART_LIST_LIMIT, ...whoopRangeBounds },
       { enabled: whoopConnection.data?.connected === true },
     ),
   );
 
   const recoveryData = useQuery(
     trpc.whoopRecovery.list.queryOptions(
-      { limit: 30 },
+      { limit: WHOOP_CHART_LIST_LIMIT, ...whoopRangeBounds },
       { enabled: whoopConnection.data?.connected === true },
     ),
   );
@@ -206,6 +286,9 @@ export function AnalyticsDashboard() {
                 }
               }
               isLoading={frequencyData.isLoading}
+              from={workoutHeatmapRange.from}
+              to={workoutHeatmapRange.to}
+              isClamped={workoutHeatmapRange.isClamped}
             />
           </section>
 
@@ -269,7 +352,7 @@ export function AnalyticsDashboard() {
           <section>
             <h2 className="mb-4 text-lg font-semibold">Avg HR Trend</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-              Average heart rate per Whoop-linked run over the last 30 days.
+              Average heart rate per Whoop-linked run over the selected range.
             </p>
             <WhoopHrTrendChart
               data={whoopHrTrend.data ?? []}
@@ -310,7 +393,7 @@ export function AnalyticsDashboard() {
             <section>
               <h2 className="mb-2 text-lg font-semibold">Sleep Performance</h2>
               <p className="mb-4 text-sm text-muted-foreground">
-                Sleep performance score over the last 30 days, powered by Whoop.
+                Sleep performance score over the selected range, powered by Whoop.
               </p>
               <WhoopSleepChart
                 data={sleepData.data?.items ?? []}
@@ -331,7 +414,7 @@ export function AnalyticsDashboard() {
             <section>
               <h2 className="mb-2 text-lg font-semibold">Recovery Score</h2>
               <p className="mb-4 text-sm text-muted-foreground">
-                Daily recovery score over the last 30 days, powered by Whoop. Green ≥67, yellow 34–66, red ≤33.
+                Daily recovery score over the selected range, powered by Whoop. Green ≥67, yellow 34–66, red ≤33.
               </p>
               <WhoopRecoveryChart
                 data={recoveryData.data?.items ?? []}

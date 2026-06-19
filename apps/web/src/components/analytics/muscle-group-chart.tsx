@@ -109,7 +109,7 @@ export function MuscleGroupChart({
       {chartData.length === 0 ? (
         <div className="flex h-48 items-center justify-center rounded-md border border-dashed">
           <p className="text-sm text-muted-foreground">
-            No muscle group data yet.
+            No muscle group volume in the selected range.
           </p>
         </div>
       ) : (

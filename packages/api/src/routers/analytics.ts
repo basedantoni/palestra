@@ -24,6 +24,12 @@ import {
   getTodayLocalDateString,
   groupPersonalRecordsByExercise,
 } from "../lib/analytics-queries";
+import {
+  analyticsDateBoundsShape,
+  resolveAnalyticsDateBounds,
+  resolveClampedWorkoutFrequencyBounds,
+  whoopRangeBoundsShape,
+} from "../lib/analytics-bounds";
 import { toLocalDateKey } from "../lib/date-utils";
 import {
   getEffectiveDurationSeconds,
@@ -65,10 +71,7 @@ export const analyticsRouter = router({
   weeklyRunningVolume: protectedProcedure
     .input(
       z
-        .object({
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
-        })
+        .object(analyticsDateBoundsShape)
         .optional(),
     )
     .query(async ({ ctx, input }) => {
@@ -76,13 +79,18 @@ export const analyticsRouter = router({
         eq(workout.userId, ctx.session.user.id),
         eq(exercise.category, "cardio"),
       ];
+      const bounds = resolveAnalyticsDateBounds(input);
 
-      if (input?.startDate) {
-        clauses.push(gte(workout.date, input.startDate));
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      } else if (bounds.startDate) {
+        clauses.push(gte(workout.date, bounds.startDate));
       }
 
-      if (input?.endDate) {
-        clauses.push(lte(workout.date, input.endDate));
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      } else if (bounds.endDate) {
+        clauses.push(lte(workout.date, bounds.endDate));
       }
 
       const rows = await db
@@ -108,8 +116,7 @@ export const analyticsRouter = router({
       z
         .object({
           exerciseId: z.string().uuid().optional(),
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
+          ...analyticsDateBoundsShape,
         })
         .optional(),
     )
@@ -118,17 +125,22 @@ export const analyticsRouter = router({
         eq(workout.userId, ctx.session.user.id),
         eq(exercise.category, "cardio"),
       ];
+      const bounds = resolveAnalyticsDateBounds(input);
 
       if (input?.exerciseId) {
         clauses.push(eq(exerciseLog.exerciseId, input.exerciseId));
       }
 
-      if (input?.startDate) {
-        clauses.push(gte(workout.date, input.startDate));
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      } else if (bounds.startDate) {
+        clauses.push(gte(workout.date, bounds.startDate));
       }
 
-      if (input?.endDate) {
-        clauses.push(lte(workout.date, input.endDate));
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      } else if (bounds.endDate) {
+        clauses.push(lte(workout.date, bounds.endDate));
       }
 
       const rows = await db
@@ -156,10 +168,7 @@ export const analyticsRouter = router({
   mobilityFrequency: protectedProcedure
     .input(
       z
-        .object({
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
-        })
+        .object(analyticsDateBoundsShape)
         .optional(),
     )
     .query(async ({ ctx, input }) => {
@@ -167,13 +176,18 @@ export const analyticsRouter = router({
         eq(workout.userId, ctx.session.user.id),
         eq(exercise.exerciseType, "mobility"),
       ];
+      const bounds = resolveAnalyticsDateBounds(input);
 
-      if (input?.startDate) {
-        clauses.push(gte(workout.date, input.startDate));
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      } else if (bounds.startDate) {
+        clauses.push(gte(workout.date, bounds.startDate));
       }
 
-      if (input?.endDate) {
-        clauses.push(lte(workout.date, input.endDate));
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      } else if (bounds.endDate) {
+        clauses.push(lte(workout.date, bounds.endDate));
       }
 
       const rows = await db
@@ -195,21 +209,23 @@ export const analyticsRouter = router({
   workoutTypeMix: protectedProcedure
     .input(
       z
-        .object({
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
-        })
+        .object(analyticsDateBoundsShape)
         .optional(),
     )
     .query(async ({ ctx, input }) => {
       const clauses = [eq(workout.userId, ctx.session.user.id)];
+      const bounds = resolveAnalyticsDateBounds(input);
 
-      if (input?.startDate) {
-        clauses.push(gte(workout.date, input.startDate));
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      } else if (bounds.startDate) {
+        clauses.push(gte(workout.date, bounds.startDate));
       }
 
-      if (input?.endDate) {
-        clauses.push(lte(workout.date, input.endDate));
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      } else if (bounds.endDate) {
+        clauses.push(lte(workout.date, bounds.endDate));
       }
 
       const rows = await db
@@ -312,8 +328,7 @@ export const analyticsRouter = router({
     .input(
       z
         .object({
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
+          ...analyticsDateBoundsShape,
           categorizationSystem: z
             .enum(["bodybuilding", "movement_patterns"])
             .optional(),
@@ -322,14 +337,23 @@ export const analyticsRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const clauses = [eq(muscleGroupVolume.userId, ctx.session.user.id)];
+      const bounds = resolveAnalyticsDateBounds(input);
 
-      if (input?.startDate) {
+      if (bounds.from) {
+        clauses.push(
+          sql`${muscleGroupVolume.weekStartDate} >= ${bounds.from}`,
+        );
+      } else if (input?.startDate) {
         clauses.push(
           sql`${muscleGroupVolume.weekStartDate} >= ${input.startDate.toISOString().split("T")[0]}`,
         );
       }
 
-      if (input?.endDate) {
+      if (bounds.to) {
+        clauses.push(
+          sql`${muscleGroupVolume.weekStartDate} <= ${bounds.to}`,
+        );
+      } else if (input?.endDate) {
         clauses.push(
           sql`${muscleGroupVolume.weekStartDate} <= ${input.endDate.toISOString().split("T")[0]}`,
         );
@@ -390,24 +414,15 @@ export const analyticsRouter = router({
   workoutFrequency: protectedProcedure
     .input(
       z
-        .object({
-          startDate: z.coerce.date().optional(),
-          endDate: z.coerce.date().optional(),
-        })
+        .object(analyticsDateBoundsShape)
         .optional(),
     )
     .query(async ({ ctx, input }) => {
-      const now = new Date();
-      const defaultStart = new Date(now);
-      defaultStart.setFullYear(defaultStart.getFullYear() - 1);
-
       const clauses = [eq(workout.userId, ctx.session.user.id)];
+      const bounds = resolveClampedWorkoutFrequencyBounds(input);
 
-      const startDate = input?.startDate ?? defaultStart;
-      const endDate = input?.endDate ?? now;
-
-      clauses.push(gte(workout.date, startDate));
-      clauses.push(lte(workout.date, endDate));
+      clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
 
       const rows = await db
         .select({
@@ -450,12 +465,23 @@ export const analyticsRouter = router({
    */
   runningHrTrend: protectedProcedure
     .input(
-      z.object({
-        from: z.string(), // ISO date "YYYY-MM-DD"
-        to: z.string(),
-      }),
+      z.object(whoopRangeBoundsShape),
     )
     .query(async ({ ctx, input }) => {
+      const bounds = resolveAnalyticsDateBounds(input);
+      const clauses = [
+        eq(workout.userId, ctx.session.user.id),
+        eq(exercise.cardioSubtype, "running"),
+      ];
+
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      }
+
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      }
+
       const rows = await db
         .select({
           date: workout.date,
@@ -464,14 +490,7 @@ export const analyticsRouter = router({
         .from(exerciseLog)
         .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
         .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
-        .where(
-          and(
-            eq(workout.userId, ctx.session.user.id),
-            eq(exercise.cardioSubtype, "running"),
-            sql`${workout.date} >= ${input.from}::date`,
-            sql`${workout.date} <= ${input.to}::date`,
-          ),
-        )
+        .where(and(...clauses))
         .orderBy(asc(workout.date));
 
       return rows.map((row) => ({
@@ -486,13 +505,23 @@ export const analyticsRouter = router({
    */
   whoopPaceTrend: protectedProcedure
     .input(
-      z.object({
-        from: z.string(),
-        to: z.string(),
-      }),
+      z.object(whoopRangeBoundsShape),
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const bounds = resolveAnalyticsDateBounds(input);
+      const clauses = [
+        eq(workout.userId, userId),
+        eq(exercise.cardioSubtype, "running"),
+      ];
+
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      }
+
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      }
 
       const [prefs, rows] = await Promise.all([
         db.query.userPreferences.findFirst({
@@ -508,14 +537,7 @@ export const analyticsRouter = router({
           .from(exerciseLog)
           .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
           .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
-          .where(
-            and(
-              eq(workout.userId, userId),
-              eq(exercise.cardioSubtype, "running"),
-              sql`${workout.date} >= ${input.from}::date`,
-              sql`${workout.date} <= ${input.to}::date`,
-            ),
-          )
+          .where(and(...clauses))
           .orderBy(asc(workout.date)),
       ]);
 
@@ -549,12 +571,23 @@ export const analyticsRouter = router({
    */
   weeklyRunDistance: protectedProcedure
     .input(
-      z.object({
-        from: z.string(),
-        to: z.string(),
-      }),
+      z.object(whoopRangeBoundsShape),
     )
     .query(async ({ ctx, input }) => {
+      const bounds = resolveAnalyticsDateBounds(input);
+      const clauses = [
+        eq(workout.userId, ctx.session.user.id),
+        eq(exercise.cardioSubtype, "running"),
+      ];
+
+      if (bounds.from) {
+        clauses.push(sql`${workout.date}::date >= ${bounds.from}::date`);
+      }
+
+      if (bounds.to) {
+        clauses.push(sql`${workout.date}::date <= ${bounds.to}::date`);
+      }
+
       const rows = await db
         .select({
           // ISO week start (Monday) as a date string
@@ -567,14 +600,7 @@ export const analyticsRouter = router({
         .from(exerciseLog)
         .innerJoin(workout, eq(exerciseLog.workoutId, workout.id))
         .innerJoin(exercise, eq(exerciseLog.exerciseId, exercise.id))
-        .where(
-          and(
-            eq(workout.userId, ctx.session.user.id),
-            eq(exercise.cardioSubtype, "running"),
-            sql`${workout.date} >= ${input.from}::date`,
-            sql`${workout.date} <= ${input.to}::date`,
-          ),
-        )
+        .where(and(...clauses))
         .groupBy(sql`date_trunc('week', ${workout.date}::date)`)
         .orderBy(asc(sql`date_trunc('week', ${workout.date}::date)`));
 
