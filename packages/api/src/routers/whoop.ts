@@ -20,9 +20,7 @@ import {
   getValidWhoopAccessToken,
   resolveWhoopExerciseId,
 } from "../lib/whoop-client";
-import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
-import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
-import { isoWeekKey } from "../lib/date-utils";
+import { enqueueRecalcs } from "../lib/recalc-queue";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 import { decryptToken } from "../lib/token-encryption";
@@ -613,27 +611,18 @@ export const whoopRouter = router({
           .where(eq(whoopConnection.userId, userId));
       });
 
-      // --- Step 4: Fire-and-forget recalculations ---
-      // Dedup workout dates by ISO week, keeping one raw date per week; the
-      // callee normalizes to the week start itself.
-      const weekRepresentatives = new Map<string, Date>();
-      for (const d of insertedWorkoutDates) {
-        weekRepresentatives.set(isoWeekKey(d), d);
+      // --- Step 4: Enqueue durable recalculations ---
+      // enqueueRecalcs dedups dates by ISO week and only queues progressive
+      // overload when there are exercise ids. Awaited but wrapped so a failed
+      // enqueue never fails the import.
+      try {
+        await enqueueRecalcs(userId, {
+          exerciseIds: Array.from(insertedExerciseIds),
+          weekDates: insertedWorkoutDates,
+        });
+      } catch (err) {
+        console.error("Whoop import: failed to enqueue recalcs:", err);
       }
-
-      for (const weekDate of weekRepresentatives.values()) {
-        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
-          console.error("Whoop import: muscle group volume recalc failed:", err),
-        );
-      }
-
-      // Trigger progressive overload recalc for the exercises we resolved + inserted.
-      recalculateProgressiveOverload(
-        userId,
-        Array.from(insertedExerciseIds),
-      ).catch((err) =>
-        console.error("Whoop import: progressive overload recalc failed:", err),
-      );
 
       return { createdCount: newActivities.length, skippedCount };
     }),

@@ -4,8 +4,7 @@ const {
   mockDb,
   mockTx,
   makeChain,
-  recalculateProgressiveOverload,
-  recalculateMuscleGroupVolumeForWeek,
+  enqueueRecalcs,
 } = vi.hoisted(() => {
   function makeChain(
     resolveWith: unknown = [],
@@ -58,17 +57,13 @@ const {
     },
   };
 
-  const recalculateProgressiveOverload = vi.fn().mockResolvedValue(undefined);
-  const recalculateMuscleGroupVolumeForWeek = vi
-    .fn()
-    .mockResolvedValue(undefined);
+  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
 
   return {
     mockDb,
     mockTx,
     makeChain,
-    recalculateProgressiveOverload,
-    recalculateMuscleGroupVolumeForWeek,
+    enqueueRecalcs,
   };
 });
 
@@ -85,12 +80,8 @@ vi.mock("@life-tracker/env/server", () => ({
   },
 }));
 
-vi.mock("../lib/progressive-overload-db", () => ({
-  recalculateProgressiveOverload,
-}));
-
-vi.mock("../lib/muscle-group-volume-db", () => ({
-  recalculateMuscleGroupVolumeForWeek,
+vi.mock("../lib/recalc-queue", () => ({
+  enqueueRecalcs,
 }));
 
 import { appRouter } from "../routers/index";
@@ -253,10 +244,10 @@ describe("tcxImport router", () => {
       durationMinutes: 30,
       heartRate: shortRun.avgHeartRate,
     });
-    expect(recalculateProgressiveOverload).toHaveBeenCalledWith(USER_ID, [
-      SHORT_RUN_ID,
-    ]);
-    expect(recalculateMuscleGroupVolumeForWeek).toHaveBeenCalledTimes(1);
+    expect(enqueueRecalcs).toHaveBeenCalledWith(USER_ID, {
+      exerciseIds: [SHORT_RUN_ID],
+      weekDates: [new Date(shortRun.startedAt)],
+    });
   });
 
   it("maps runs under 8km to Short Run and 8km or longer to Long Run", async () => {

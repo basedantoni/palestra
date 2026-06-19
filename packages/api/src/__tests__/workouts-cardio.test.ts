@@ -4,8 +4,7 @@ const {
   mockDb,
   mockTx,
   makeChain,
-  recalculateProgressiveOverload,
-  recalculateMuscleGroupVolumeForWeek,
+  enqueueRecalcs,
 } = vi.hoisted(() => {
   function makeChain(
     resolveWith: unknown = [],
@@ -58,17 +57,13 @@ const {
     },
   };
 
-  const recalculateProgressiveOverload = vi.fn().mockResolvedValue(undefined);
-  const recalculateMuscleGroupVolumeForWeek = vi
-    .fn()
-    .mockResolvedValue(undefined);
+  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
 
   return {
     mockDb,
     mockTx,
     makeChain,
-    recalculateProgressiveOverload,
-    recalculateMuscleGroupVolumeForWeek,
+    enqueueRecalcs,
   };
 });
 
@@ -85,12 +80,8 @@ vi.mock("@life-tracker/env/server", () => ({
   },
 }));
 
-vi.mock("../lib/progressive-overload-db", () => ({
-  recalculateProgressiveOverload,
-}));
-
-vi.mock("../lib/muscle-group-volume-db", () => ({
-  recalculateMuscleGroupVolumeForWeek,
+vi.mock("../lib/recalc-queue", () => ({
+  enqueueRecalcs,
 }));
 
 import { appRouter } from "../routers/index";
