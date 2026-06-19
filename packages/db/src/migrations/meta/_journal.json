@@ -148,6 +148,13 @@
       "when": 1781839454017,
       "tag": "0020_smart_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781900754394,
+      "tag": "0021_flaky_kabuki",
+      "breakpoints": true
     }
   ]
 }

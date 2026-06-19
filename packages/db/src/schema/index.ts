@@ -1,5 +1,7 @@
+export * from "./account";
 export * from "./auth";
 export * from "./enums";
+export * from "./plaid-item";
 export * from "./exercise";
 export * from "./muscle-group-volume";
 export * from "./notification";

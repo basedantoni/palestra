@@ -131,3 +131,10 @@ export const recalcJobStatusEnum = pgEnum("recalc_job_status", [
   "done",
   "failed",
 ]);
+
+export const accountTypeEnum = pgEnum("account_type", [
+  "depository",
+  "credit",
+  "investment",
+  "loan",
+]);
