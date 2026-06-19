@@ -127,6 +127,18 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 const USER_ID = "00000000-0000-4000-8000-000000000301";
 
+function makeActivity(id: string) {
+  return {
+    id,
+    start: "2026-04-01T06:00:00.000Z",
+    end: "2026-04-01T07:00:00.000Z",
+    sport_id: 1,
+    sport_name: "running",
+    score_state: "SCORED",
+    score: { strain: 10, average_heart_rate: 150 },
+  };
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Tests: backfill state module (no router, pure unit tests)
 // ────────────────────────────────────────────────────────────────────────────
@@ -861,6 +873,115 @@ describe("triggerBackfill function — pagination and import logic", () => {
     await realTriggerBackfill(USER_ID, 30);
 
     expect(realGetBackfillState(USER_ID)).toBeNull();
+  });
+
+  it("o2. accumulates multi-page totalCount exactly once per page (25 + 10 → 35)", async () => {
+    const page1Response = {
+      records: Array.from({ length: 25 }, (_, index) =>
+        makeActivity(`act-page1-${index}`),
+      ),
+      next_token: "page-2",
+    };
+    const page2Response = {
+      records: Array.from({ length: 10 }, (_, index) =>
+        makeActivity(`act-page2-${index}`),
+      ),
+      next_token: null,
+    };
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(page1Response),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(page2Response),
+      });
+
+    mockDb.select.mockReturnValueOnce(
+      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
+    );
+    for (let index = 0; index < 35; index++) {
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+    }
+
+    const observedTotals: number[] = [];
+    mockDb.transaction.mockImplementation(async (fn: any) => {
+      const state = realGetBackfillState(USER_ID);
+      if (state) observedTotals.push(state.totalCount);
+
+      const tx = {
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
+      };
+      return fn(tx);
+    });
+
+    await realTriggerBackfill(USER_ID, 30);
+
+    expect(observedTotals[0]).toBe(25);
+    expect(observedTotals[24]).toBe(25);
+    expect(observedTotals[25]).toBe(35);
+    expect(Math.max(...observedTotals)).toBe(35);
+  });
+
+  it("o3. accumulates single-page totalCount exactly once (7 → 7)", async () => {
+    const pageResponse = {
+      records: Array.from({ length: 7 }, (_, index) =>
+        makeActivity(`act-single-${index}`),
+      ),
+      next_token: null,
+    };
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(pageResponse),
+    });
+
+    mockDb.select.mockReturnValueOnce(
+      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
+    );
+    for (let index = 0; index < 7; index++) {
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+    }
+
+    const observedTotals: number[] = [];
+    mockDb.transaction.mockImplementation(async (fn: any) => {
+      const state = realGetBackfillState(USER_ID);
+      if (state) observedTotals.push(state.totalCount);
+
+      const tx = {
+        insert: vi
+          .fn()
+          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        update: vi
+          .fn()
+          .mockReturnValue({
+            set: vi
+              .fn()
+              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
+      };
+      return fn(tx);
+    });
+
+    await realTriggerBackfill(USER_ID, 30);
+
+    expect(observedTotals).toHaveLength(7);
+    expect(new Set(observedTotals)).toEqual(new Set([7]));
   });
 
   it("p. clears state on error (never throws)", async () => {

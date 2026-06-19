@@ -41,5 +41,10 @@
     "turbo": "^2.9.18",
     "typescript": "catalog:"
   },
-  "packageManager": "pnpm@10.22.0"
+  "packageManager": "pnpm@10.22.0",
+  "pnpm": {
+    "overrides": {
+      "@modelcontextprotocol/sdk>@hono/node-server": "1.19.14"
+    }
+  }
 }

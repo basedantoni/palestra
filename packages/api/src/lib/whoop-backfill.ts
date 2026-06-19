@@ -108,7 +108,6 @@ export async function triggerBackfill(
 
     let importedCount = 0;
     let cursor: string | null = null;
-    let isFirstPage = true;
 
     // Paginate
     do {
@@ -138,19 +137,13 @@ export async function triggerBackfill(
       const data = (await response.json()) as WhoopWorkoutListResponse;
       const records = data.records ?? [];
 
-      // Update totalCount on first page (we don't have a total from Whoop API,
-      // so we accumulate as we go — we'll update it each page)
-      if (isFirstPage) {
-        isFirstPage = false;
-        // Set a rough total so the UI shows something; we'll increment as we go
+      // Whoop does not return a total count, so accumulate the true count
+      // as soon as each page arrives.
+      const latestState = getBackfillState(userId);
+      if (latestState) {
         setBackfillState(userId, {
-          ...(getBackfillState(userId) ?? {
-            running: true,
-            importedCount: 0,
-            totalCount: 0,
-            shouldStop: false,
-          }),
-          totalCount: records.length,
+          ...latestState,
+          totalCount: latestState.totalCount + records.length,
         });
       }
 
@@ -192,15 +185,6 @@ export async function triggerBackfill(
       }
 
       cursor = data.next_token ?? null;
-
-      // Update totalCount to running total as pages complete
-      const latestState = getBackfillState(userId);
-      if (latestState) {
-        setBackfillState(userId, {
-          ...latestState,
-          totalCount: latestState.totalCount + (cursor ? records.length : 0),
-        });
-      }
     } while (cursor !== null);
 
     // Emit summary notification on completion

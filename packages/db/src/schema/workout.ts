@@ -80,6 +80,10 @@ export const exerciseLog = pgTable(
   (table) => [
     index("exercise_log_workoutId_idx").on(table.workoutId),
     index("exercise_log_exerciseId_idx").on(table.exerciseId),
+    index("exercise_log_exerciseId_workoutId_idx").on(
+      table.exerciseId,
+      table.workoutId,
+    ),
   ],
 );
 
