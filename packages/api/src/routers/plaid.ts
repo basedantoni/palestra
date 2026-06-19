@@ -49,7 +49,6 @@ export const plaidRouter = router({
       const itemId = exchange.data.item_id;
 
       const accountsRes = await plaid.accountsGet({ access_token: accessToken });
-      const institutionName = accountsRes.data.item.institution_id ?? null;
 
       const plaidItemId = randomUUID();
       await db
@@ -59,7 +58,9 @@ export const plaidRouter = router({
           userId,
           itemId,
           institutionId: accountsRes.data.item.institution_id ?? null,
-          institutionName,
+          // institutionName is resolved separately (institutionsGetById); the
+          // institution_id is NOT a display name, so leave the name unset here.
+          institutionName: null,
           accessTokenEnc: encryptToken(accessToken, getTokenEncryptionKey()),
           status: "active",
         })

@@ -73,10 +73,19 @@ plaidWebhookApp.post("/webhook", async (c) => {
   });
 
   if (webhookType === "ITEM") {
-    // Surface connection health for the reconnect banner.
-    const status =
-      webhookCode === "LOGIN_REPAIRED" ? "active" : webhookCode.toLowerCase();
-    await db.update(plaidItem).set({ status }).where(eq(plaidItem.id, item.id));
+    // Only ITEM codes that change connection health touch status; benign codes
+    // (NEW_ACCOUNTS_AVAILABLE, WEBHOOK_UPDATE_ACKNOWLEDGED, ...) must NOT, or
+    // they'd falsely trip the reconnect banner.
+    const ITEM_STATUS: Record<string, string> = {
+      ERROR: "error",
+      PENDING_EXPIRATION: "pending_expiration",
+      USER_PERMISSION_REVOKED: "revoked",
+      LOGIN_REPAIRED: "active",
+    };
+    const status = ITEM_STATUS[webhookCode];
+    if (status) {
+      await db.update(plaidItem).set({ status }).where(eq(plaidItem.id, item.id));
+    }
     await db
       .update(plaidWebhookEvent)
       .set({ status: "done", processedAt: new Date() })
