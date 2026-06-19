@@ -13,7 +13,7 @@ primary_region = 'dfw'
   PORT = '3000'
 
 [deploy]
-  release_command = "sh -c 'cd /app && pnpm -F @life-tracker/db db:migrate && pnpm -F @life-tracker/db db:seed'"
+  release_command = "sh /app/scripts/fly-release.sh"
 
 [http_service]
   internal_port = 3000
