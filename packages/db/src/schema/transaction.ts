@@ -14,6 +14,7 @@ import {
 import { transactionFlowEnum } from "./enums";
 import { user } from "./auth";
 import { financialAccount } from "./account";
+import { category } from "./category";
 
 /**
  * A Plaid transaction.
@@ -46,7 +47,9 @@ export const transaction = pgTable(
     flow: transactionFlowEnum("flow"),
     plaidCategoryPrimary: text("plaid_category_primary"),
     plaidCategoryDetailed: text("plaid_category_detailed"),
-    categoryId: uuid("category_id"),
+    categoryId: uuid("category_id").references(() => category.id, {
+      onDelete: "set null",
+    }),
     excluded: boolean("excluded").default(false).notNull(),
     note: text("note"),
     transferPairId: uuid("transfer_pair_id"),
