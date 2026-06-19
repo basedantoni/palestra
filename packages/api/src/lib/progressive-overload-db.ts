@@ -44,22 +44,29 @@ export async function recalculateProgressiveOverload(
   // Use sensible defaults if the user has no preferences row yet
   const plateauThreshold = prefs[0]?.plateauThreshold ?? 3;
   const weightUnit: "lbs" | "kg" = prefs[0]?.weightUnit ?? "lbs";
+  const exerciseTypes =
+    uniqueExerciseIds.length === 0
+      ? new Map<string, string>()
+      : new Map(
+          (
+            await db
+              .select({
+                id: exercise.id,
+                exerciseType: exercise.exerciseType,
+              })
+              .from(exercise)
+              .where(inArray(exercise.id, uniqueExerciseIds))
+          ).map((row) => [row.id, row.exerciseType]),
+        );
 
   // 2. Process each exerciseId
   for (const exerciseId of uniqueExerciseIds) {
-    // a. Look up the exercise and check its type
-    const [exerciseRow] = await db
-      .select({ exerciseType: exercise.exerciseType })
-      .from(exercise)
-      .where(eq(exercise.id, exerciseId))
-      .limit(1);
-
-    if (!exerciseRow) {
+    const exerciseType = exerciseTypes.get(exerciseId);
+    if (!exerciseType) {
       // Exercise not found in catalog — skip
       continue;
     }
 
-    const { exerciseType } = exerciseRow;
     if (exerciseType !== "weightlifting" && exerciseType !== "calisthenics") {
       // Only track progressive overload for weightlifting and calisthenics
       continue;

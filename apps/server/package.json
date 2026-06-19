@@ -10,8 +10,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.4",
-    "@hono/trpc-server": "^0.4.0",
+    "@hono/node-server": "^2.0.5",
+    "@hono/trpc-server": "^0.4.2",
     "@life-tracker/api": "workspace:*",
     "@life-tracker/auth": "workspace:*",
     "@life-tracker/db": "workspace:*",

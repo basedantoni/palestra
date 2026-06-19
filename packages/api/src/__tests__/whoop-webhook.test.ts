@@ -83,7 +83,6 @@ import { whoopWebhookApp } from "../lib/whoop-webhook";
 // ────────────────────────────────────────────────────────────────────────────
 
 const WEBHOOK_SECRET = "test-webhook-secret-for-hmac";
-const TIMESTAMP = "1714000000";
 const WHOOP_USER_ID = "12345";
 const APP_USER_ID = "00000000-0000-4000-8000-000000000101";
 const TRACE_ID = "trace-abc-123";
@@ -105,12 +104,16 @@ function sign(timestamp: string, body: string, secret: string): string {
     .digest("base64");
 }
 
+function currentTimestamp(offsetMs = 0): string {
+  return Math.floor((Date.now() + offsetMs) / 1000).toString();
+}
+
 async function sendWebhook(options: {
   body: string;
   signature: string;
   timestamp?: string;
 }): Promise<Response> {
-  const ts = options.timestamp ?? TIMESTAMP;
+  const ts = options.timestamp ?? currentTimestamp();
   const request = new Request("http://localhost/webhook", {
     method: "POST",
     headers: {
@@ -177,13 +180,14 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("a. valid HMAC signature → 200 and event row created with status processed", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
     mockConnectionFound();
     mockInsertNoConflict();
     mockUpdateOk();
 
-    const res = await sendWebhook({ body, signature: sig });
+    const res = await sendWebhook({ body, signature: sig, timestamp });
 
     expect(res.status).toBe(200);
 
@@ -196,10 +200,11 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("b. invalid signature → 401, nothing written to DB", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, "wrong-secret");
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, "wrong-secret");
 
     // Signature check happens before user lookup — no DB mock needed
-    const res = await sendWebhook({ body, signature: sig });
+    const res = await sendWebhook({ body, signature: sig, timestamp });
 
     expect(res.status).toBe(401);
 
@@ -209,12 +214,13 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("c. unknown whoopUserId → 200 (valid sig, valid secret, no connected user)", async () => {
     const body = buildPayload(TRACE_ID, "unknown-whoop-user");
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
     mockConnectionNotFound();
 
     // v2: return 200 to stop Whoop from retrying (user simply hasn't connected)
-    const res = await sendWebhook({ body, signature: sig });
+    const res = await sendWebhook({ body, signature: sig, timestamp });
 
     expect(res.status).toBe(200);
 
@@ -224,14 +230,15 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("d. duplicate trace_id → 200, only one row (onConflictDoNothing)", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
     // First delivery
     mockConnectionFound();
     mockInsertNoConflict();
     mockUpdateOk();
 
-    const res1 = await sendWebhook({ body, signature: sig });
+    const res1 = await sendWebhook({ body, signature: sig, timestamp });
     expect(res1.status).toBe(200);
 
     // Second delivery (same trace_id) — simulates the DB returning rowCount: 0 due to conflict
@@ -239,7 +246,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     mockInsertConflict();
     mockUpdateOk();
 
-    const res2 = await sendWebhook({ body, signature: sig });
+    const res2 = await sendWebhook({ body, signature: sig, timestamp });
     expect(res2.status).toBe(200);
 
     // insert was called twice total (once per request), but the second would no-op at DB level
@@ -248,7 +255,8 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("e. webhookLastReceivedAt advances on successful delivery", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
     const capturedUpdateSets: Array<Record<string, unknown>> = [];
 
@@ -264,7 +272,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     });
 
     const before = Date.now();
-    const res = await sendWebhook({ body, signature: sig });
+    const res = await sendWebhook({ body, signature: sig, timestamp });
     const after = Date.now();
 
     expect(res.status).toBe(200);
@@ -278,12 +286,13 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("missing X-WHOOP-Signature header → 401", async () => {
     const body = buildPayload();
+    const timestamp = currentTimestamp();
 
     const request = new Request("http://localhost/webhook", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-WHOOP-Signature-Timestamp": TIMESTAMP,
+        "X-WHOOP-Signature-Timestamp": timestamp,
         // X-WHOOP-Signature omitted
       },
       body,
@@ -296,7 +305,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("missing X-WHOOP-Signature-Timestamp header → 401", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const sig = sign(currentTimestamp(), body, WEBHOOK_SECRET);
 
     const request = new Request("http://localhost/webhook", {
       method: "POST",
@@ -315,7 +324,8 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
   it("g. hot path fires atomic claim UPDATE (status='processing') and calls trackInFlight on success", async () => {
     const body = buildPayload();
-    const sig = sign(TIMESTAMP, body, WEBHOOK_SECRET);
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
     // Route handler mocks: connection lookup + insert + webhookLastReceivedAt update
     mockConnectionFound();
@@ -334,7 +344,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     // Update #3: markEventSkipped inside the processor
     mockUpdateOk();
 
-    const res = await sendWebhook({ body, signature: sig });
+    const res = await sendWebhook({ body, signature: sig, timestamp });
     expect(res.status).toBe(200);
 
     // Flush the setImmediate callback + any async continuations from it
@@ -348,5 +358,32 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     // trackInFlight should have been called with the processor promise
     expect(mockTrackInFlight).toHaveBeenCalledOnce();
     expect(mockTrackInFlight.mock.calls[0]![0]).toBeInstanceOf(Promise);
+  });
+
+  it("h. stale timestamp with valid HMAC → 401 and no DB write", async () => {
+    const body = buildPayload();
+    const timestamp = currentTimestamp(-10 * 60 * 1000);
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
+
+    const res = await sendWebhook({ body, signature: sig, timestamp });
+
+    expect(res.status).toBe(401);
+    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("i. fresh timestamp with valid HMAC → 200", async () => {
+    const body = buildPayload();
+    const timestamp = currentTimestamp();
+    const sig = sign(timestamp, body, WEBHOOK_SECRET);
+
+    mockConnectionFound();
+    mockInsertNoConflict();
+    mockUpdateOk();
+
+    const res = await sendWebhook({ body, signature: sig, timestamp });
+
+    expect(res.status).toBe(200);
   });
 });

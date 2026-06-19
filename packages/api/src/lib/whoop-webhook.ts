@@ -51,6 +51,7 @@ import { recalculateProgressiveOverload } from "./progressive-overload-db";
 import { recalculateMuscleGroupVolumeForWeek } from "./muscle-group-volume-db";
 
 export const whoopWebhookApp = new Hono();
+const WHOOP_REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
 // Whoop v2 webhook payload shape
 interface WhoopWebhookPayload {
@@ -65,6 +66,12 @@ function timingSafeEqual(a: string, b: string): boolean {
   const bufB = Buffer.from(b, "utf8");
   if (bufA.length !== bufB.length) return false;
   return cryptoTimingSafeEqual(bufA, bufB);
+}
+
+function parseWhoopTimestampMs(timestampHeader: string): number | null {
+  const numeric = Number(timestampHeader);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -710,6 +717,14 @@ whoopWebhookApp.post("/webhook", async (c) => {
   if (!webhookSecret) {
     console.error("[whoop-webhook] WHOOP_CLIENT_SECRET not configured");
     return c.json({ error: "Server configuration error" }, 500);
+  }
+
+  const timestampMs = parseWhoopTimestampMs(timestampHeader);
+  if (
+    timestampMs === null ||
+    Math.abs(Date.now() - timestampMs) > WHOOP_REPLAY_WINDOW_MS
+  ) {
+    return c.json({ error: "Unauthorized" }, 401);
   }
 
   const expectedSig = createHmac("sha256", webhookSecret)
