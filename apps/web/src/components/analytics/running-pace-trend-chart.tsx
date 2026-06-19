@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   CartesianGrid,
   Line,
@@ -22,6 +23,10 @@ import {
   formatDateLabel,
   formatPaceFromMinPerUnit,
 } from "@life-tracker/api/lib/index";
+import {
+  WorkoutChooserDialog,
+  type WorkoutChooserTarget,
+} from "./workout-chooser-dialog";
 
 interface RunningPaceTrendChartProps {
   data: RunningPaceTrendPoint[];
@@ -34,8 +39,27 @@ export function RunningPaceTrendChart({
   distanceUnit,
   isLoading,
 }: RunningPaceTrendChartProps) {
+  const navigate = useNavigate();
   const [selectedRunningExerciseId, setSelectedRunningExerciseId] =
     useState("");
+  const [chooserTarget, setChooserTarget] =
+    useState<WorkoutChooserTarget | null>(null);
+
+  function openWorkoutForPoint(point: RunningPaceTrendPoint) {
+    if (point.workoutIds.length === 0) return;
+    if (point.workoutIds.length === 1) {
+      navigate({
+        to: "/workouts/$workoutId",
+        params: { workoutId: point.workoutIds[0]! },
+      });
+      return;
+    }
+    setChooserTarget({
+      workoutIds: point.workoutIds,
+      label: formatDateLabel(point.date),
+      description: point.exerciseName,
+    });
+  }
 
   const exerciseOptions = useMemo(() => {
     const byId = new Map<string, string>();
@@ -81,7 +105,7 @@ export function RunningPaceTrendChart({
         </Select>
         <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
           <p className="text-sm text-muted-foreground">
-            No pace data yet. Log a run with pace to see the trend.
+            No pace data in the selected range.
           </p>
         </div>
       </div>
@@ -118,6 +142,13 @@ export function RunningPaceTrendChart({
         <LineChart
           data={chartData}
           margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+          onClick={(state) => {
+            const index = Number(state?.activeIndex);
+            const point = Number.isInteger(index)
+              ? chartData[index]
+              : undefined;
+            if (point) openWorkoutForPoint(point);
+          }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
@@ -144,10 +175,21 @@ export function RunningPaceTrendChart({
             stroke="var(--chart-2)"
             strokeWidth={2}
             dot={{ r: 3, fill: "var(--chart-2)" }}
-            activeDot={{ r: 5 }}
+            activeDot={{ r: 5, cursor: "pointer" }}
           />
         </LineChart>
       </ResponsiveContainer>
+
+      <p className="text-xs text-muted-foreground">
+        Tip: click a point to open that run.
+      </p>
+
+      <WorkoutChooserDialog
+        target={chooserTarget}
+        onOpenChange={(open) => {
+          if (!open) setChooserTarget(null);
+        }}
+      />
     </div>
   );
 }
