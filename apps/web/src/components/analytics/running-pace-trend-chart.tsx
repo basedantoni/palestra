@@ -34,9 +34,8 @@ export function RunningPaceTrendChart({
   distanceUnit,
   isLoading,
 }: RunningPaceTrendChartProps) {
-  const [selectedRunningExerciseId, setSelectedRunningExerciseId] = useState<
-    string | undefined
-  >(undefined);
+  const [selectedRunningExerciseId, setSelectedRunningExerciseId] =
+    useState("");
 
   const exerciseOptions = useMemo(() => {
     const byId = new Map<string, string>();
@@ -48,7 +47,7 @@ export function RunningPaceTrendChart({
 
   useEffect(() => {
     if (exerciseOptions.length === 0) {
-      setSelectedRunningExerciseId(undefined);
+      setSelectedRunningExerciseId("");
       return;
     }
 
@@ -60,21 +59,22 @@ export function RunningPaceTrendChart({
     }
   }, [exerciseOptions, selectedRunningExerciseId]);
 
+  const activeRunningExerciseId =
+    selectedRunningExerciseId || exerciseOptions[0]?.id || "";
+
   const selectedData = useMemo(() => {
-    if (!selectedRunningExerciseId) return [];
-    return data.filter(
-      (point) => point.exerciseId === selectedRunningExerciseId,
-    );
-  }, [data, selectedRunningExerciseId]);
+    if (!activeRunningExerciseId) return [];
+    return data.filter((point) => point.exerciseId === activeRunningExerciseId);
+  }, [activeRunningExerciseId, data]);
 
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
 
-  if (!selectedRunningExerciseId || selectedData.length === 0) {
+  if (!activeRunningExerciseId || selectedData.length === 0) {
     return (
       <div className="space-y-3">
-        <Select disabled>
+        <Select value="" disabled>
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="No run pace data yet" />
           </SelectTrigger>
@@ -99,10 +99,8 @@ export function RunningPaceTrendChart({
   return (
     <div className="space-y-3">
       <Select
-        value={selectedRunningExerciseId}
-        onValueChange={(value) =>
-          setSelectedRunningExerciseId(value ?? undefined)
-        }
+        value={activeRunningExerciseId}
+        onValueChange={(value) => setSelectedRunningExerciseId(value ?? "")}
       >
         <SelectTrigger className="w-[220px]">
           <SelectValue placeholder="Select exercise" />
