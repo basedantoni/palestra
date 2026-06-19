@@ -1,6 +1,8 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
+import { budgetsRouter } from "./budgets";
+import { categoriesRouter } from "./categories";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
 import { importRouter } from "./import";
@@ -38,5 +40,7 @@ export const appRouter = router({
   whoopSleep: whoopSleepRouter,
   whoopRecovery: whoopRecoveryRouter,
   plaid: plaidRouter,
+  categories: categoriesRouter,
+  budgets: budgetsRouter,
 });
 export type AppRouter = typeof appRouter;
