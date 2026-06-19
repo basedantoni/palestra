@@ -93,12 +93,8 @@ vi.mock("@life-tracker/env/server", () => ({
   },
 }));
 
-vi.mock("../lib/progressive-overload-db", () => ({
-  recalculateProgressiveOverload: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("../lib/muscle-group-volume-db", () => ({
-  recalculateMuscleGroupVolumeForWeek: vi.fn().mockResolvedValue(undefined),
+vi.mock("../lib/recalc-queue", () => ({
+  enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the Whoop client helper

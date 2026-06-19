@@ -17,8 +17,7 @@ const {
   mockDb,
   mockTx,
   makeChain,
-  recalculateProgressiveOverload,
-  recalculateMuscleGroupVolumeForWeek,
+  enqueueRecalcs,
   resolveWhoopExerciseId,
 } = vi.hoisted(() => {
   /**
@@ -77,18 +76,14 @@ const {
     },
   };
 
-  const recalculateProgressiveOverload = vi.fn().mockResolvedValue(undefined);
-  const recalculateMuscleGroupVolumeForWeek = vi
-    .fn()
-    .mockResolvedValue(undefined);
+  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
   const resolveWhoopExerciseId = vi.fn();
 
   return {
     mockDb,
     mockTx,
     makeChain,
-    recalculateProgressiveOverload,
-    recalculateMuscleGroupVolumeForWeek,
+    enqueueRecalcs,
     resolveWhoopExerciseId,
   };
 });
@@ -107,12 +102,8 @@ vi.mock("@life-tracker/env/server", () => ({
   },
 }));
 
-vi.mock("../lib/progressive-overload-db", () => ({
-  recalculateProgressiveOverload,
-}));
-
-vi.mock("../lib/muscle-group-volume-db", () => ({
-  recalculateMuscleGroupVolumeForWeek,
+vi.mock("../lib/recalc-queue", () => ({
+  enqueueRecalcs,
 }));
 
 // Mock the Whoop client: stub auth + exercise resolution, keep the real
