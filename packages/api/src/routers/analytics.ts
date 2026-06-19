@@ -353,20 +353,20 @@ export const analyticsRouter = router({
     .input(
       z.object({
         granularity: z.enum(["weekly", "monthly"]),
-        startDate: z.coerce.date().optional(),
-        endDate: z.coerce.date().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
         workoutType: WORKOUT_TYPE_ENUM.optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
       const clauses = [eq(workout.userId, ctx.session.user.id)];
 
-      if (input.startDate) {
-        clauses.push(gte(workout.date, input.startDate));
+      if (input.from) {
+        clauses.push(sql`${workout.date}::date >= ${input.from}::date`);
       }
 
-      if (input.endDate) {
-        clauses.push(lte(workout.date, input.endDate));
+      if (input.to) {
+        clauses.push(sql`${workout.date}::date <= ${input.to}::date`);
       }
 
       if (input.workoutType) {

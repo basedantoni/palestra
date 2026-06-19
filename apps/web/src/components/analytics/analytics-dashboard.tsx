@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { startTransition, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { trpc } from "@/utils/trpc";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalyticsDateRangeFilter } from "./analytics-date-range-filter";
 import { VolumeOverTimeChart } from "./volume-over-time-chart";
 import { MuscleGroupChart } from "./muscle-group-chart";
 import { PersonalRecordsGrid } from "./personal-records-grid";
@@ -18,6 +20,7 @@ import { WhoopPaceTrendChart } from "./whoop-pace-trend-chart";
 import { WhoopWeeklyDistanceChart } from "./whoop-weekly-distance-chart";
 import { WhoopSleepChart } from "./whoop-sleep-chart";
 import { WhoopRecoveryChart } from "./whoop-recovery-chart";
+import { resolveAnalyticsRangeBounds } from "@life-tracker/shared";
 
 function useLast30DaysRange(): { from: string; to: string } {
   return useMemo(() => {
@@ -31,6 +34,8 @@ function useLast30DaysRange(): { from: string; to: string } {
 }
 
 export function AnalyticsDashboard() {
+  const search = useSearch({ from: "/analytics" });
+  const navigate = useNavigate({ from: "/analytics" });
   const [granularity, setGranularity] = useState<"weekly" | "monthly">(
     "weekly",
   );
@@ -41,9 +46,17 @@ export function AnalyticsDashboard() {
   const distanceUnit = preferences.data?.distanceUnit ?? "mi";
 
   const whoopDateRange = useLast30DaysRange();
+  const resolvedDateRange = useMemo(
+    () => resolveAnalyticsRangeBounds(search),
+    [search],
+  );
 
   const volumeData = useQuery(
-    trpc.analytics.volumeOverTime.queryOptions({ granularity }),
+    trpc.analytics.volumeOverTime.queryOptions({
+      granularity,
+      from: resolvedDateRange.from,
+      to: resolvedDateRange.to,
+    }),
   );
   const muscleGroupData = useQuery(
     trpc.analytics.muscleGroupVolume.queryOptions({
@@ -117,6 +130,17 @@ export function AnalyticsDashboard() {
           Track your progress across lifting, running, and mobility.
         </p>
       </div>
+
+      <AnalyticsDateRangeFilter
+        search={search}
+        onChange={(next) => {
+          startTransition(() => {
+            navigate({
+              search: next,
+            });
+          });
+        }}
+      />
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-6">
