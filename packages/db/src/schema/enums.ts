@@ -138,3 +138,9 @@ export const accountTypeEnum = pgEnum("account_type", [
   "investment",
   "loan",
 ]);
+
+export const transactionFlowEnum = pgEnum("transaction_flow", [
+  "income",
+  "expense",
+  "transfer",
+]);
