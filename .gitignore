@@ -48,5 +48,5 @@ coverage
 .cache
 tmp
 temp
-tasks/
-plans/
+tasks/*
+plans/*
