@@ -3,6 +3,7 @@ import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
 import { budgetsRouter } from "./budgets";
 import { categoriesRouter } from "./categories";
+import { goalsRouter } from "./goals";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
 import { importRouter } from "./import";
@@ -11,6 +12,7 @@ import { plaidRouter } from "./plaid";
 import { preferencesRouter } from "./preferences";
 import { templatesRouter } from "./templates";
 import { tcxImportRouter } from "./tcx-import";
+import { transactionsRouter } from "./transactions";
 import { whoopRouter } from "./whoop";
 import { whoopRecoveryRouter } from "./whoop-recovery";
 import { whoopSleepRouter } from "./whoop-sleep";
@@ -42,5 +44,7 @@ export const appRouter = router({
   plaid: plaidRouter,
   categories: categoriesRouter,
   budgets: budgetsRouter,
+  transactions: transactionsRouter,
+  goals: goalsRouter,
 });
 export type AppRouter = typeof appRouter;
