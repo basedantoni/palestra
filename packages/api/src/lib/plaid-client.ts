@@ -44,12 +44,16 @@ export function getTokenEncryptionKey(): string {
   return env.TOKEN_ENCRYPTION_KEY;
 }
 
-export const PLAID_PRODUCTS: Products[] = env.PLAID_PRODUCTS.split(",")
+// Defaults applied defensively: when env validation is skipped (tests), zod
+// defaults are not materialized, so these can be undefined at import time.
+export const PLAID_PRODUCTS: Products[] = (env.PLAID_PRODUCTS ?? "transactions")
+  .split(",")
   .map((p) => p.trim())
   .filter(Boolean)
   .map((p) => p as Products);
 
-export const PLAID_COUNTRY_CODES: CountryCode[] = env.PLAID_COUNTRY_CODES.split(",")
+export const PLAID_COUNTRY_CODES: CountryCode[] = (env.PLAID_COUNTRY_CODES ?? "US")
+  .split(",")
   .map((c) => c.trim())
   .filter(Boolean)
   .map((c) => c as CountryCode);
