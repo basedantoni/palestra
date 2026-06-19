@@ -241,6 +241,7 @@ describe("aggregateRunningPaceTrend", () => {
         exerciseName: "Long Run",
         averagePace: 0.33,
         workoutCount: 2,
+        workoutIds: ["w-1", "w-2"],
       },
       {
         date: "2026-03-04",
@@ -248,6 +249,7 @@ describe("aggregateRunningPaceTrend", () => {
         exerciseName: "Tempo Run",
         averagePace: 0.375,
         workoutCount: 1,
+        workoutIds: ["w-3"],
       },
     ]);
   });
@@ -287,6 +289,7 @@ describe("aggregateRunningPaceTrend", () => {
       exerciseId: "ex-1",
       averagePace: 0.3,
       workoutCount: 1,
+      workoutIds: ["w-3"],
     });
   });
 });

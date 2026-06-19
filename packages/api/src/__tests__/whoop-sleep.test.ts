@@ -481,6 +481,34 @@ describe("whoopSleep.list", () => {
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).not.toBeNull();
   });
+
+  it("6c. returns the full in-range dataset when bounds are provided without a limit", async () => {
+    const rows = Array.from({ length: 40 }, (_, index) => ({
+      ...SLEEP_ROW_1,
+      id: `sleep-row-${index + 1}`,
+      whoopSleepId: `whoop-sleep-${String(index + 1).padStart(3, "0")}`,
+      start: new Date(`2026-05-${String((index % 28) + 1).padStart(2, "0")}T06:00:00.000Z`),
+      end: new Date(`2026-05-${String((index % 28) + 1).padStart(2, "0")}T14:00:00.000Z`),
+    }));
+
+    mockDb.select.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(rows),
+          }),
+        }),
+      }),
+    });
+
+    const result = await userCaller.whoopSleep.list({
+      from: "2026-05-01",
+      to: "2026-05-31",
+    });
+
+    expect(result.items).toHaveLength(40);
+    expect(result.nextCursor).toBeNull();
+  });
 });
 
 describe("whoopSleep.byId", () => {

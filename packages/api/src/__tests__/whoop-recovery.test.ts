@@ -503,6 +503,67 @@ describe("whoopRecovery.list", () => {
     expect(result.items).toHaveLength(2);
     expect(result.nextCursor).not.toBeNull();
   });
+
+  it("6c. preserves the legacy default page size when bounds are omitted", async () => {
+    const rows = Array.from({ length: 26 }, (_, index) => ({
+      ...RECOVERY_ROW_1,
+      id: `recovery-row-${index + 1}`,
+      whoopCycleId: `${93845 - index}`,
+      createdAt: new Date(
+        `2026-05-${String((index % 28) + 1).padStart(2, "0")}T17:00:00.000Z`,
+      ),
+      updatedAt: new Date(
+        `2026-05-${String((index % 28) + 1).padStart(2, "0")}T17:00:00.000Z`,
+      ),
+    }));
+
+    mockDb.select.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(rows),
+          }),
+        }),
+      }),
+    });
+
+    const result = await userCaller.whoopRecovery.list({});
+
+    expect(result.items).toHaveLength(25);
+    expect(result.nextCursor).not.toBeNull();
+  });
+
+  it("6d. returns the full in-range dataset when bounds are provided without a limit", async () => {
+    const rows = Array.from({ length: 40 }, (_, index) => ({
+      ...RECOVERY_ROW_1,
+      id: `recovery-row-${index + 1}`,
+      whoopCycleId: `${93845 - index}`,
+      createdAt: new Date(
+        `2026-05-${String((index % 28) + 1).padStart(2, "0")}T17:00:00.000Z`,
+      ),
+      updatedAt: new Date(
+        `2026-05-${String((index % 28) + 1).padStart(2, "0")}T17:00:00.000Z`,
+      ),
+    }));
+
+    mockDb.select.mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(rows),
+          }),
+        }),
+      }),
+    });
+
+    const result = await userCaller.whoopRecovery.list({
+      from: "2026-05-01",
+      to: "2026-05-31",
+    });
+
+    expect(result.items).toHaveLength(40);
+    expect(result.nextCursor).toBeNull();
+  });
 });
 
 describe("whoopRecovery.latest", () => {

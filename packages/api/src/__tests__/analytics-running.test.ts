@@ -143,6 +143,16 @@ describe("analytics.runningHrTrend", () => {
     expect(result).toEqual([]);
   });
 
+  it("allows omitted bounds for all-time Whoop running charts", async () => {
+    mockDb.select.mockReturnValueOnce(
+      makeChain([{ date: new Date("2026-04-10T12:00:00.000Z"), avgHr: 155 }]),
+    );
+
+    const result = await userCaller.analytics.runningHrTrend({});
+
+    expect(result).toEqual([{ date: "2026-04-10", avgHr: 155 }]);
+  });
+
   it("respects date range — passes from/to correctly to the query", async () => {
     mockDb.select.mockReturnValueOnce(makeChain([]));
 
@@ -314,6 +324,27 @@ describe("analytics.whoopPaceTrend", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("allows omitted bounds for all-time pace charts", async () => {
+    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+      distanceUnit: "mi",
+    });
+    mockDb.select.mockReturnValueOnce(
+      makeChain([
+        {
+          date: new Date("2026-04-10T12:00:00.000Z"),
+          distanceMeter: 10000,
+          durationSeconds: 3600,
+        },
+      ]),
+    );
+
+    const result = await userCaller.analytics.whoopPaceTrend({});
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.unit).toBe("mi");
+    expect(result[0]!.paceSecPerUnit).toBeCloseTo(579.36, 0);
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -375,6 +406,21 @@ describe("analytics.weeklyRunDistance", () => {
     });
 
     expect(result).toEqual([]);
+  });
+
+  it("allows omitted bounds for all-time weekly distance charts", async () => {
+    mockDb.select.mockReturnValueOnce(
+      makeChain([{ weekStart: "2026-04-06", distanceMeter: "8046.72" }]),
+    );
+
+    const result = await userCaller.analytics.weeklyRunDistance({});
+
+    expect(result).toEqual([
+      {
+        weekStart: "2026-04-06",
+        distanceMeter: 8046.72,
+      },
+    ]);
   });
 
   it("coerces distanceMeter from string (Postgres SUM returns string) to number", async () => {

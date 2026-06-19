@@ -29,7 +29,9 @@ export function MobilityFrequencyChart({
   if (data.length === 0) {
     return (
       <div className="flex h-56 items-center justify-center rounded-md border border-dashed">
-        <p className="text-sm text-muted-foreground">No mobility data yet.</p>
+        <p className="text-sm text-muted-foreground">
+          No mobility sessions in the selected range.
+        </p>
       </div>
     );
   }

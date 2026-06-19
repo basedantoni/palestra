@@ -28,6 +28,7 @@ export interface RunningPaceTrendPoint {
   exerciseName: string;
   averagePace: number;
   workoutCount: number;
+  workoutIds: string[];
 }
 
 export interface MobilityFrequencyPoint {
@@ -251,6 +252,7 @@ export function aggregateRunningPaceTrend(
           (item.totalPaceSecsPerMeter / item.paceEntries) * 1e6,
         ) / 1e6,
       workoutCount: item.workoutIds.size,
+      workoutIds: Array.from(item.workoutIds),
     }))
     .sort(
       (a, b) =>
