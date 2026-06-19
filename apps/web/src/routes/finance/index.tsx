@@ -6,6 +6,7 @@ import { BudgetGrid } from "@/components/finance/budget-grid";
 import { GoalsList } from "@/components/finance/goals-list";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
+import { ReconnectBanner } from "@/components/finance/reconnect-banner";
 
 export const Route = createFileRoute("/finance/")({
   component: FinanceOverview,
@@ -38,6 +39,7 @@ function FinanceOverview() {
         <h1 className="text-2xl font-bold">Finance</h1>
         <PlaidLinkButton />
       </div>
+      <ReconnectBanner />
       <Section title="Accounts" to="/finance/accounts">
         <AccountsList />
       </Section>

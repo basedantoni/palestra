@@ -110,4 +110,17 @@ export const plaidRouter = router({
       .from(financialAccount)
       .where(eq(financialAccount.userId, ctx.session.user.id));
   }),
+
+  /** List linked institutions + their connection health (for the reconnect banner). */
+  listItems: protectedProcedure.query(async ({ ctx }) => {
+    return db
+      .select({
+        id: plaidItem.id,
+        institutionId: plaidItem.institutionId,
+        institutionName: plaidItem.institutionName,
+        status: plaidItem.status,
+      })
+      .from(plaidItem)
+      .where(eq(plaidItem.userId, ctx.session.user.id));
+  }),
 });
