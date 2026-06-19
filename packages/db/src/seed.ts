@@ -19,6 +19,7 @@ type SeedExercise = {
     | "mobility";
   muscleGroupsBodybuilding: MuscleGroupBodybuilding[];
   muscleGroupsMovement: MuscleGroupMovement[];
+  cardioSubtype?: "running" | "cycling" | "swimming" | "rowing" | "other" | null;
   isCustom: false;
   createdByUserId: null;
 };
@@ -64,6 +65,7 @@ function createSeedExercise(
   exerciseType: SeedExercise["exerciseType"],
   muscleGroupsBodybuilding: MuscleGroupBodybuilding[] = [],
   muscleGroupsMovement: MuscleGroupMovement[] = [],
+  cardioSubtype: SeedExercise["cardioSubtype"] = null,
 ): SeedExercise {
   return {
     name,
@@ -71,6 +73,7 @@ function createSeedExercise(
     exerciseType,
     muscleGroupsBodybuilding,
     muscleGroupsMovement,
+    cardioSubtype,
     isCustom: false,
     createdByUserId: null,
   };
@@ -90,7 +93,7 @@ function getTemplateExerciseId(
   );
 }
 
-const BASE_SEED_EXERCISES = [
+const BASE_SEED_EXERCISES: SeedExercise[] = [
   // Chest (8 exercises)
   {
     name: "Barbell Bench Press",
@@ -798,10 +801,10 @@ const RUNNING_HIIT_EXERCISE_NAMES = [
 
 export const RUNNING_SEED_EXERCISES = [
   ...RUNNING_CARDIO_EXERCISE_NAMES.map((name) =>
-    createSeedExercise(name, "cardio", "cardio"),
+    createSeedExercise(name, "cardio", "cardio", [], [], "running"),
   ),
   ...RUNNING_HIIT_EXERCISE_NAMES.map((name) =>
-    createSeedExercise(name, "cardio", "hiit"),
+    createSeedExercise(name, "cardio", "hiit", [], [], "running"),
   ),
 ];
 
@@ -932,6 +935,7 @@ export async function seed() {
             exerciseType: seededExercise.exerciseType,
             muscleGroupsBodybuilding: seededExercise.muscleGroupsBodybuilding,
             muscleGroupsMovement: seededExercise.muscleGroupsMovement,
+            cardioSubtype: seededExercise.cardioSubtype ?? null,
             isCustom: seededExercise.isCustom,
             createdByUserId: seededExercise.createdByUserId,
           },
