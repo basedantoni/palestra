@@ -119,3 +119,15 @@ export const cardioSubtypeEnum = pgEnum("cardio_subtype", [
   "rowing",
   "other",
 ]);
+
+export const recalcJobKindEnum = pgEnum("recalc_job_kind", [
+  "progressive_overload",
+  "muscle_group_volume",
+]);
+
+export const recalcJobStatusEnum = pgEnum("recalc_job_status", [
+  "pending",
+  "processing",
+  "done",
+  "failed",
+]);

@@ -5,6 +5,7 @@ export * from "./muscle-group-volume";
 export * from "./notification";
 export * from "./personal-record";
 export * from "./progressive-overload";
+export * from "./recalc-job";
 export * from "./template";
 export * from "./user-preferences";
 export * from "./whoop";
