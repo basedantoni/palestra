@@ -1,11 +1,11 @@
-name: life-tracker
+name: palestra
 
 services:
   postgres:
     image: postgres
-    container_name: life-tracker-postgres
+    container_name: palestra-postgres
     environment:
-      POSTGRES_DB: life-tracker
+      POSTGRES_DB: palestra
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
