@@ -7,9 +7,7 @@ import { exercise, exerciseLog, workout } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { type ParsedTcxRun, fingerprintTcxRun } from "../lib/tcx-import";
-import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
-import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
-import { isoWeekKey } from "../lib/date-utils";
+import { enqueueRecalcs } from "../lib/recalc-queue";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 
 const DEFAULT_TCX_IMPORT_SOURCE = "nike_run_club";
@@ -261,24 +259,16 @@ export const tcxImportRouter = router({
         });
       }
 
-      const exerciseIdList = Array.from(importedExerciseIds);
-      if (exerciseIdList.length > 0) {
-        recalculateProgressiveOverload(userId, exerciseIdList).catch((err) =>
-          console.error("TCX import: progressive overload recalc failed:", err),
-        );
-      }
-
-      // Dedup workout dates by ISO week, keeping one raw date per week; the
-      // callee normalizes to the week start itself.
-      const weekRepresentatives = new Map<string, Date>();
-      for (const date of insertedWorkoutDates) {
-        weekRepresentatives.set(isoWeekKey(date), date);
-      }
-
-      for (const weekDate of weekRepresentatives.values()) {
-        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
-          console.error("TCX import: muscle group volume recalc failed:", err),
-        );
+      // Enqueue durable recalculations. enqueueRecalcs dedups dates by ISO week
+      // and only queues progressive overload when there are exercise ids.
+      // Awaited but wrapped so a failed enqueue never fails the import.
+      try {
+        await enqueueRecalcs(userId, {
+          exerciseIds: Array.from(importedExerciseIds),
+          weekDates: insertedWorkoutDates,
+        });
+      } catch (err) {
+        console.error("TCX import: failed to enqueue recalcs:", err);
       }
 
       return {

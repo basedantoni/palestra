@@ -8,9 +8,7 @@ import { protectedProcedure, router } from "../index";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 import { parseWorkoutMarkdown } from "../lib/workout-import-parser";
 import { computeSimilarity, resolveExerciseNames } from "../lib/fuzzy-match";
-import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
-import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
-import { isoWeekKey } from "../lib/date-utils";
+import { enqueueRecalcs } from "../lib/recalc-queue";
 import { createWorkoutWithLogs } from "../lib/workout-create";
 
 export const importRouter = router({
@@ -326,26 +324,17 @@ export const importRouter = router({
         throw new Error(`Import failed: ${message}`);
       }
 
-      // --- Phase E: Fire-and-forget recalculations ---
-      const exerciseIds = Array.from(allExerciseIds);
-      if (exerciseIds.length > 0) {
-        recalculateProgressiveOverload(userId, exerciseIds).catch((err) =>
-          console.error("Import: progressive overload recalc failed:", err),
-        );
-      }
-
-      // Recalculate muscle group volume once per unique ISO week. Dedup by week
-      // key, keeping one raw date per week; the callee normalizes to the week start.
-      const weekRepresentatives = new Map<string, Date>();
-      for (const w of workoutsToImport) {
-        const d = new Date(w.date);
-        weekRepresentatives.set(isoWeekKey(d), d);
-      }
-
-      for (const weekDate of weekRepresentatives.values()) {
-        recalculateMuscleGroupVolumeForWeek(userId, weekDate).catch((err) =>
-          console.error("Import: muscle group volume recalc failed:", err),
-        );
+      // --- Phase E: Enqueue durable recalculations ---
+      // enqueueRecalcs dedups dates by ISO week and only queues progressive
+      // overload when there are exercise ids. Awaited but wrapped so a failed
+      // enqueue never fails the import.
+      try {
+        await enqueueRecalcs(userId, {
+          exerciseIds: Array.from(allExerciseIds),
+          weekDates: workoutsToImport.map((w) => new Date(w.date)),
+        });
+      } catch (err) {
+        console.error("Import: failed to enqueue recalcs:", err);
       }
 
       return {

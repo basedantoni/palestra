@@ -26,8 +26,7 @@ const {
   mockTx,
   makeChain,
   mockGetValidToken,
-  mockRecalcPO,
-  mockRecalcMG,
+  mockEnqueue,
 } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
@@ -67,16 +66,14 @@ const {
   };
 
   const mockGetValidToken = vi.fn().mockResolvedValue("mock-access-token");
-  const mockRecalcPO = vi.fn().mockResolvedValue(undefined);
-  const mockRecalcMG = vi.fn().mockResolvedValue(undefined);
+  const mockEnqueue = vi.fn().mockResolvedValue(undefined);
 
   return {
     mockDb,
     mockTx,
     makeChain,
     mockGetValidToken,
-    mockRecalcPO,
-    mockRecalcMG,
+    mockEnqueue,
   };
 });
 
@@ -101,12 +98,8 @@ vi.mock("../lib/whoop-client", () => ({
   resolveWhoopExerciseId: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("../lib/progressive-overload-db", () => ({
-  recalculateProgressiveOverload: mockRecalcPO,
-}));
-
-vi.mock("../lib/muscle-group-volume-db", () => ({
-  recalculateMuscleGroupVolumeForWeek: mockRecalcMG,
+vi.mock("../lib/recalc-queue", () => ({
+  enqueueRecalcs: mockEnqueue,
 }));
 
 // Import after mocks
@@ -269,8 +262,7 @@ function mockDeleteWorkoutNotFound() {
 // ────────────────────────────────────────────────────────────────────────────
 /** Restore recalculation mocks to their default (resolved promise) implementations */
 function restoreRecalcMocks() {
-  mockRecalcPO.mockResolvedValue(undefined);
-  mockRecalcMG.mockResolvedValue(undefined);
+  mockEnqueue.mockResolvedValue(undefined);
 }
 
 describe("workoutProcessor — new import", () => {
@@ -556,9 +548,10 @@ describe("workoutDeleteProcessor", () => {
     // Delete was called
     expect(mockDb.delete).toHaveBeenCalledOnce();
 
-    // Recalculations were fired
-    expect(mockRecalcMG).toHaveBeenCalled();
-    expect(mockRecalcPO).toHaveBeenCalled();
+    // Recalculations were enqueued (week-volume only; no exercise ids)
+    expect(mockEnqueue).toHaveBeenCalledWith(USER_ID, {
+      weekDates: [expect.any(Date)],
+    });
 
     // Event marked processed
     const processedUpdate = capturedUpdateSets.find(
@@ -751,7 +744,7 @@ describe("workoutProcessor — recalculations", () => {
     mockDbUpdate();
   });
 
-  it("fires progressive overload + muscle group volume recalcs after new import", async () => {
+  it("enqueues week-volume recalc after new import", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
@@ -763,8 +756,9 @@ describe("workoutProcessor — recalculations", () => {
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
-    expect(mockRecalcMG).toHaveBeenCalled();
-    expect(mockRecalcPO).toHaveBeenCalled();
+    expect(mockEnqueue).toHaveBeenCalledWith(USER_ID, {
+      weekDates: [expect.any(Date)],
+    });
   });
 });
 

@@ -103,6 +103,7 @@ app.get("/", (c) => {
 
 import { serve } from "@hono/node-server";
 import { drainPendingWhoopEvents } from "@life-tracker/api/lib/whoop-webhook-drain";
+import { drainPendingRecalcJobs } from "@life-tracker/api/lib/recalc-queue";
 import {
   getInFlightCount,
   getInFlightPromises,
@@ -120,6 +121,9 @@ const server = serve(
     console.log(`Server is running on http://${info.address}:${info.port}`);
     drainPendingWhoopEvents().catch((err) =>
       console.error("[whoop-drain] Startup drain failed:", err),
+    );
+    drainPendingRecalcJobs().catch((err) =>
+      console.error("[recalc-drain] Startup drain failed:", err),
     );
   },
 );

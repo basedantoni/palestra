@@ -14,8 +14,7 @@ import {
 import { whoopActivityToExerciseLog } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { recalculateProgressiveOverload } from "../lib/progressive-overload-db";
-import { recalculateMuscleGroupVolumeForWeek } from "../lib/muscle-group-volume-db";
+import { enqueueRecalcs } from "../lib/recalc-queue";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import {
   createWorkoutWithLogs,
@@ -126,19 +125,20 @@ async function insertExerciseLogAndSets(
   return createdLog;
 }
 
-function fireAndForgetRecalcs(
+/**
+ * Enqueues durable recalc jobs after a workout write. Awaited for durability
+ * but wrapped so a failed enqueue never fails the workout mutation itself.
+ */
+async function queueRecalcs(
   userId: string,
   exerciseIds: string[],
   date: Date,
-): void {
-  if (exerciseIds.length > 0) {
-    recalculateProgressiveOverload(userId, exerciseIds).catch((err) =>
-      console.error("Progressive overload recalc failed:", err),
-    );
+): Promise<void> {
+  try {
+    await enqueueRecalcs(userId, { exerciseIds, weekDates: [date] });
+  } catch (err) {
+    console.error("Failed to enqueue recalcs:", err);
   }
-  recalculateMuscleGroupVolumeForWeek(userId, date).catch((err) =>
-    console.error("Muscle group volume recalc failed:", err),
-  );
 }
 
 export const workoutsRouter = router({
@@ -357,7 +357,7 @@ export const workoutsRouter = router({
         return created.workout;
       });
 
-      fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);
+      await queueRecalcs(ctx.session.user.id, exerciseIds, input.date);
 
       return createdWorkout;
     }),
@@ -445,7 +445,7 @@ export const workoutsRouter = router({
       });
 
       if (updatedWorkout) {
-        fireAndForgetRecalcs(ctx.session.user.id, exerciseIds, input.date);
+        await queueRecalcs(ctx.session.user.id, exerciseIds, input.date);
       }
 
       return updatedWorkout;

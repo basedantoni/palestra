@@ -47,8 +47,7 @@ import {
 } from "./whoop-activity-dto";
 import { upsertWhoopWorkout } from "./whoop-upsert";
 import { getValidWhoopAccessToken, WHOOP_API_BASE } from "./whoop-client";
-import { recalculateProgressiveOverload } from "./progressive-overload-db";
-import { recalculateMuscleGroupVolumeForWeek } from "./muscle-group-volume-db";
+import { enqueueRecalcs } from "./recalc-queue";
 
 export const whoopWebhookApp = new Hono();
 const WHOOP_REPLAY_WINDOW_MS = 5 * 60 * 1000;
@@ -103,18 +102,18 @@ async function markEventFailed(
 }
 
 /**
- * Fires fire-and-forget recalculations for the given workout date.
- * Call after any workout create/update/delete.
+ * Enqueues durable recalc jobs for the given workout date.
+ * Call after any workout create/update/delete. Awaited for durability but
+ * wrapped so a failed enqueue never fails the event processor.
  */
-function fireRecalculations(userId: string, workoutDate: Date): void {
-  // recalculateMuscleGroupVolumeForWeek normalizes to the ISO week internally.
-  recalculateMuscleGroupVolumeForWeek(userId, workoutDate).catch((err) =>
-    console.error("[whoop-webhook] Muscle group volume recalc failed:", err),
-  );
-
-  recalculateProgressiveOverload(userId, []).catch((err) =>
-    console.error("[whoop-webhook] Progressive overload recalc failed:", err),
-  );
+async function queueRecalcs(userId: string, workoutDate: Date): Promise<void> {
+  // enqueueRecalcs dedups the date to its ISO week; the recalc normalizes to
+  // the week start. No exerciseIds — matches the prior empty progressive-overload call.
+  try {
+    await enqueueRecalcs(userId, { weekDates: [workoutDate] });
+  } catch (err) {
+    console.error("[whoop-webhook] Failed to enqueue recalcs:", err);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,8 +216,8 @@ export async function workoutProcessor(
       });
     }
 
-    // 6. Fire-and-forget recalculations
-    fireRecalculations(userId, workoutDate);
+    // 6. Enqueue durable recalculations
+    await queueRecalcs(userId, workoutDate);
 
     // 7. Mark event processed
     await markEventProcessed(eventId);
@@ -266,8 +265,8 @@ export async function workoutDeleteProcessor(
     if (existingWorkout) {
       await db.delete(workout).where(eq(workout.id, existingWorkout.id));
 
-      // Fire-and-forget recalculations
-      fireRecalculations(userId, existingWorkout.date);
+      // Enqueue durable recalculations
+      await queueRecalcs(userId, existingWorkout.date);
 
       console.log(
         `[whoop-webhook] Deleted workout ${existingWorkout.id} for activity ${whoopActivityId}`,
