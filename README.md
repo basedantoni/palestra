@@ -24,17 +24,41 @@ First, install the dependencies:
 pnpm install
 ```
 
+## Environment Setup
+
+The server validates its environment at startup, so a fresh clone needs a
+`.env` before it will boot.
+
+1. Copy the example file and fill in the required vars:
+
+```bash
+cp apps/server/.env.example apps/server/.env
+```
+
+2. Set the four **required** vars in `apps/server/.env`:
+   - `DATABASE_URL` — Postgres connection string (the example default matches the local Docker DB below)
+   - `BETTER_AUTH_SECRET` — 32+ char secret (`openssl rand -base64 32`)
+   - `BETTER_AUTH_URL` — `http://localhost:3000`
+   - `CORS_ORIGIN` — `http://localhost:3001`
+
+   The Whoop integration vars (`WHOOP_*`, `TOKEN_ENCRYPTION_KEY`) are
+   **optional** — leave them blank to run without Whoop sync. Every var and its
+   constraint is documented inline in `apps/server/.env.example`.
+
 ## Database Setup
 
 This project uses PostgreSQL with Drizzle ORM.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
-
-3. Apply the schema to your database:
+1. Start a local Postgres container (uses `packages/db/docker-compose.yml`):
 
 ```bash
-pnpm run db:push
+pnpm db:start
+```
+
+2. Apply the schema to your database:
+
+```bash
+pnpm db:push
 ```
 
 Then, run the development server:
