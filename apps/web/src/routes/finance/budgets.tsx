@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
 import { BudgetGrid } from "@/components/finance/budget-grid";
+import { BudgetManager } from "@/components/finance/budget-manager";
 
 export const Route = createFileRoute("/finance/budgets")({
   component: BudgetsPage,
@@ -18,6 +19,10 @@ function BudgetsPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <h1 className="text-2xl font-bold">Budgets</h1>
       <BudgetGrid />
+      <section className="space-y-3 border-t border-border pt-6">
+        <h2 className="text-lg font-semibold">Set limits</h2>
+        <BudgetManager />
+      </section>
     </div>
   );
 }
