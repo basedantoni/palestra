@@ -10,14 +10,20 @@ const FLOW_LABEL: Record<string, string> = {
   transfer: "Transfer",
 };
 
-export function TransactionFeed({ limit = 50 }: { limit?: number }) {
+export function TransactionFeed({
+  limit = 50,
+  categoryId,
+}: {
+  limit?: number;
+  categoryId?: string;
+}) {
   const queryClient = useQueryClient();
   const { data: txns, isLoading } = useQuery(
-    trpc.transactions.list.queryOptions({ limit }),
+    trpc.transactions.list.queryOptions({ limit, categoryId }),
   );
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
 
-  // Matches all `limit` variants of the transactions list.
+  // Matches all input variants of the transactions list.
   const invalidate = () =>
     queryClient.invalidateQueries({
       queryKey: trpc.transactions.list.queryOptions({ limit }).queryKey.slice(0, 1),
