@@ -48,7 +48,9 @@ export const plaidRouter = router({
       const accessToken = exchange.data.access_token;
       const itemId = exchange.data.item_id;
 
-      const accountsRes = await plaid.accountsGet({ access_token: accessToken });
+      const accountsRes = await plaid.accountsGet({
+        access_token: accessToken,
+      });
 
       const plaidItemId = randomUUID();
       await db
@@ -81,7 +83,10 @@ export const plaidRouter = router({
       const resolvedItemId = itemRow?.id ?? plaidItemId;
 
       for (const acct of accountsRes.data.accounts) {
-        const row = plaidAccountToRow(acct, { userId, plaidItemId: resolvedItemId });
+        const row = plaidAccountToRow(acct, {
+          userId,
+          plaidItemId: resolvedItemId,
+        });
         await db
           .insert(financialAccount)
           .values({ id: randomUUID(), ...row })
@@ -100,7 +105,10 @@ export const plaidRouter = router({
           });
       }
 
-      return { itemId: resolvedItemId, accountCount: accountsRes.data.accounts.length };
+      return {
+        itemId: resolvedItemId,
+        accountCount: accountsRes.data.accounts.length,
+      };
     }),
 
   /** List the user's connected accounts. */
