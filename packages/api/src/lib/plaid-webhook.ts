@@ -18,6 +18,7 @@ import { db } from "@life-tracker/db";
 import { plaidItem, plaidWebhookEvent } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "./plaid-sync-db";
+import { verifyPlaidWebhook } from "./plaid-webhook-verify";
 
 const TRANSACTION_CODES = new Set([
   "SYNC_UPDATES_AVAILABLE",
@@ -49,7 +50,17 @@ async function processEvent(eventId: string, plaidItemId: string): Promise<void>
 export const plaidWebhookApp = new Hono();
 
 plaidWebhookApp.post("/webhook", async (c) => {
-  const body = await c.req.json().catch(() => null);
+  // Read the raw body for SHA-256 verification before parsing it.
+  const rawBody = await c.req.text();
+  const verified = await verifyPlaidWebhook(rawBody, c.req.header("plaid-verification"));
+  if (!verified) return c.json({ error: "invalid signature" }, 401);
+
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : null;
+  } catch {
+    body = null;
+  }
   const itemId = body?.item_id as string | undefined;
   const webhookType = (body?.webhook_type as string | undefined) ?? "";
   const webhookCode = (body?.webhook_code as string | undefined) ?? "";

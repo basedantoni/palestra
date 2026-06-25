@@ -11,16 +11,18 @@
  * - benign ITEM code (NEW_ACCOUNTS_AVAILABLE) → 200, status NOT changed
  * - non-sync TRANSACTIONS code → 200, event marked done, sync NOT triggered
  * - drainPendingPlaidEvents re-runs a pending event → sync triggered
+ * - invalid/missing Plaid-Verification signature → 401, nothing written
  *
- * NOTE: the handler does not yet verify the Plaid `plaid-verification` JWT
- * (tracked follow-up), so there is intentionally no 401 path to assert here.
+ * The Plaid-Verification JWT check itself (ES256, body hash, replay window) is
+ * unit-tested via its own module; here it is mocked so the handler's branching
+ * is exercised against verified/unverified outcomes.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockSync } = vi.hoisted(() => {
+const { mockDb, makeChain, mockSync, mockVerify } = vi.hoisted(() => {
   function makeChain(resolveWith: unknown = []) {
     const proxy: any = new Proxy(
       {},
@@ -43,11 +45,12 @@ const { mockDb, makeChain, mockSync } = vi.hoisted(() => {
     select: vi.fn(),
   };
 
-  return { mockDb, makeChain, mockSync: vi.fn() };
+  return { mockDb, makeChain, mockSync: vi.fn(), mockVerify: vi.fn() };
 });
 
 vi.mock("@life-tracker/db", () => ({ db: mockDb }));
 vi.mock("../lib/plaid-sync-db", () => ({ syncPlaidItem: mockSync }));
+vi.mock("../lib/plaid-webhook-verify", () => ({ verifyPlaidWebhook: mockVerify }));
 
 // Import after mocks are set up
 import { drainPendingPlaidEvents, plaidWebhookApp } from "../lib/plaid-webhook";
@@ -96,6 +99,7 @@ beforeEach(() => {
     },
   }));
   mockSync.mockResolvedValue({ added: 1, modified: 0, removed: 0 });
+  mockVerify.mockResolvedValue(true);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -115,6 +119,19 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     await flush();
     expect(mockSync).toHaveBeenCalledOnce();
     expect(mockSync).toHaveBeenCalledWith(ITEM_ROW_ID);
+  });
+
+  it("invalid signature → 401, nothing read or written", async () => {
+    mockVerify.mockResolvedValueOnce(false);
+    const res = await post({
+      webhook_type: "TRANSACTIONS",
+      webhook_code: "SYNC_UPDATES_AVAILABLE",
+      item_id: ITEM_ID,
+    });
+    expect(res.status).toBe(401);
+    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockSync).not.toHaveBeenCalled();
   });
 
   it("missing item_id → 400, nothing written", async () => {
