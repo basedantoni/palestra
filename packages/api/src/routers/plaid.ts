@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -13,6 +14,7 @@ import { plaidAccountToRow } from "../lib/plaid-account-map";
 import {
   PLAID_COUNTRY_CODES,
   PLAID_PRODUCTS,
+  describePlaidError,
   getPlaidClient,
   getTokenEncryptionKey,
 } from "../lib/plaid-client";
@@ -21,15 +23,23 @@ export const plaidRouter = router({
   /** Create a short-lived Plaid Link token for the web client. */
   createLinkToken: protectedProcedure.mutation(async ({ ctx }) => {
     const plaid = getPlaidClient();
-    const res = await plaid.linkTokenCreate({
-      user: { client_user_id: ctx.session.user.id },
-      client_name: "Palestra",
-      products: PLAID_PRODUCTS,
-      country_codes: PLAID_COUNTRY_CODES,
-      language: "en",
-      ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
-    });
-    return { linkToken: res.data.link_token };
+    try {
+      const res = await plaid.linkTokenCreate({
+        user: { client_user_id: ctx.session.user.id },
+        client_name: "Palestra",
+        products: PLAID_PRODUCTS,
+        country_codes: PLAID_COUNTRY_CODES,
+        language: "en",
+        ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
+      });
+      return { linkToken: res.data.link_token };
+    } catch (err) {
+      console.error(
+        "[plaid] linkTokenCreate failed:",
+        (err as { response?: { data?: unknown } })?.response?.data ?? err,
+      );
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: describePlaidError(err) });
+    }
   }),
 
   /**
