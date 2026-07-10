@@ -5,8 +5,9 @@
  * fast. The startup drain re-runs any `pending` rows. Idempotent because
  * `syncPlaidItem` is idempotent.
  *
- * NOTE: full Plaid webhook JWT verification (`plaid-verification` header) is a
- * tracked follow-up; for now an event is only acted on when its `item_id`
+ * Requests are authenticated via the `Plaid-Verification` JWT (ES256 signature,
+ * body-hash match, 5-min replay window) in `plaid-webhook-verify.ts`; anything
+ * unverified is rejected with 401. An event is only acted on when its `item_id`
  * resolves to a known `plaid_item`.
  */
 import { randomUUID } from "node:crypto";

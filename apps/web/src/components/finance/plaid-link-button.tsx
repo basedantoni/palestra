@@ -47,10 +47,7 @@ export function PlaidLinkButton() {
   const { open, ready } = usePlaidLink({ token: linkToken, onSuccess });
 
   return (
-    <Button
-      onClick={() => open()}
-      disabled={!ready || exchange.isPending}
-    >
+    <Button onClick={() => open()} disabled={!ready || exchange.isPending}>
       {exchange.isPending ? "Connecting…" : "Connect a bank"}
     </Button>
   );
