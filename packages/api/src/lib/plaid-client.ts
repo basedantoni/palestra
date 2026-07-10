@@ -46,6 +46,19 @@ export function getTokenEncryptionKey(): string {
 
 // Defaults applied defensively: when env validation is skipped (tests), zod
 // defaults are not materialized, so these can be undefined at import time.
+/**
+ * Extract Plaid's structured error (`error_code`/`error_message`) from a failed
+ * SDK call so callers surface the real reason instead of an opaque axios 400.
+ */
+export function describePlaidError(err: unknown): string {
+  const data = (err as { response?: { data?: { error_code?: string; error_message?: string } } })
+    ?.response?.data;
+  if (data?.error_code) {
+    return `Plaid ${data.error_code}: ${data.error_message ?? ""}`.trim();
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 export const PLAID_PRODUCTS: Products[] = (env.PLAID_PRODUCTS ?? "transactions")
   .split(",")
   .map((p) => p.trim())
