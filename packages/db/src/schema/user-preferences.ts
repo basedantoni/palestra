@@ -21,6 +21,9 @@ export const userPreferences = pgTable("user_preferences", {
   muscleGroupSystem: muscleGroupSystemEnum("muscle_group_system").notNull(),
   plateauThreshold: integer("plateau_threshold").default(3).notNull(),
   theme: themeEnum("theme").default("auto").notNull(),
+  // Finance
+  currency: text("currency").default("USD").notNull(),
+  timezone: text("timezone").default("America/Chicago").notNull(),
   // Onboarding fields
   fitnessGoal: fitnessGoalEnum("fitness_goal"),
   experienceLevel: experienceLevelEnum("experience_level"),

@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { whoopOAuthApp } from "./whoop-oauth";
+import { plaidWebhookApp } from "@life-tracker/api/lib/plaid-webhook";
 import { internalApp } from "./internal";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -86,6 +87,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/whoop", whoopOAuthApp);
 app.route("/api/internal", internalApp);
+app.route("/api/plaid", plaidWebhookApp);
 
 app.use(
   "/trpc/*",
@@ -104,6 +106,7 @@ app.get("/", (c) => {
 import { serve } from "@hono/node-server";
 import { drainPendingWhoopEvents } from "@life-tracker/api/lib/whoop-webhook-drain";
 import { drainPendingRecalcJobs } from "@life-tracker/api/lib/recalc-queue";
+import { drainPendingPlaidEvents } from "@life-tracker/api/lib/plaid-webhook";
 import {
   getInFlightCount,
   getInFlightPromises,
@@ -124,6 +127,9 @@ const server = serve(
     );
     drainPendingRecalcJobs().catch((err) =>
       console.error("[recalc-drain] Startup drain failed:", err),
+    );
+    drainPendingPlaidEvents().catch((err) =>
+      console.error("[plaid-drain] Startup drain failed:", err),
     );
   },
 );
