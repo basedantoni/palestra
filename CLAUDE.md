@@ -56,3 +56,17 @@ Vitest. Co-located `*.test.ts` in `packages/api/src/lib/` (and `src/__tests__/` 
 ## Deploy
 
 Server deploys to Fly.io (`fly.toml`, app `palestra`, region `dfw`, internal port 3000) from the root `Dockerfile`. Release runs `scripts/fly-release.sh` (DB migration step). `NODE_ENV=production` and `PORT=3000` set in `fly.toml`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in **Linear** (via the Claude Linear MCP plugin), matching the repo's `KOI-xx` ticket convention. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles using default label strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context monorepo layout (`CONTEXT-MAP.md` → per-package `CONTEXT.md`). See `docs/agents/domain.md`.
