@@ -30,15 +30,15 @@
     "@life-tracker/db": "workspace:*",
     "@life-tracker/env": "workspace:*",
     "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@life-tracker/config": "workspace:*",
-    "@types/node": "^22.13.14",
-    "oxlint": "^1.70.0",
-    "tsx": "^4.22.4",
-    "turbo": "^2.9.18",
+    "@types/node": "^22.20.4",
+    "oxlint": "^1.85.0",
+    "tsx": "^4.23.15",
+    "turbo": "^2.11.4",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@10.22.0",
