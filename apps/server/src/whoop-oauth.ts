@@ -2,18 +2,18 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { Hono } from "hono";
 
-import { auth } from "@life-tracker/auth";
-import { env } from "@life-tracker/env/server";
-import { handleWhoopCallback } from "@life-tracker/api/lib/whoop-oauth";
+import { auth } from "@src/auth";
+import { env } from "@src/env/server";
+import { handleWhoopCallback } from "@src/api/lib/whoop-oauth";
 import {
   getValidWhoopAccessToken,
   WHOOP_API_BASE,
-} from "@life-tracker/api/lib/whoop-client";
-import { whoopWebhookApp } from "@life-tracker/api/lib/whoop-webhook";
+} from "@src/api/lib/whoop-client";
+import { whoopWebhookApp } from "@src/api/lib/whoop-webhook";
 
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth";
 
-function getSettingsUrl(
+export function getSettingsUrl(
   baseUrl: string,
   params?: Record<string, string>,
 ): string {
