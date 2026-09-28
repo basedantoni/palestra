@@ -10,5 +10,18 @@
     "**/.turbo/**",
     "**/routeTree.gen.ts",
     "**/*.gen.ts"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/__tests__/**",
+        "apps/web/src/components/ui/**"
+      ],
+      "rules": {
+        "no-shadow": "off"
+      }
+    }
   ]
 }

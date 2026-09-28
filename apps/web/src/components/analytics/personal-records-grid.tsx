@@ -52,7 +52,7 @@ function ProgressionTimeline({
   distanceUnit: "mi" | "km";
 }) {
   // Render newest → oldest so the most recent PR reads first.
-  const ordered = [...progression].reverse();
+  const ordered = progression.toReversed();
 
   return (
     <ol className="mt-2 space-y-2 border-l border-border pl-3">

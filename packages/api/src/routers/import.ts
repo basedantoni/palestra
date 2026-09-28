@@ -321,7 +321,7 @@ export const importRouter = router({
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Unknown database error";
-        throw new Error(`Import failed: ${message}`);
+        throw new Error(`Import failed: ${message}`, { cause: err });
       }
 
       // --- Phase E: Enqueue durable recalculations ---

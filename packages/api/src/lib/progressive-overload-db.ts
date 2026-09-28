@@ -140,7 +140,7 @@ export async function recalculateProgressiveOverload(
     }
 
     const snapshots: ExerciseSessionSnapshot[] = [];
-    for (const logEntry of [...recentWorkoutLogs].reverse()) {
+    for (const logEntry of recentWorkoutLogs.toReversed()) {
       const sets = setsByLogId.get(logEntry.exerciseLogId) ?? [];
       snapshots.push(buildSessionSnapshot(logEntry.workoutDate, sets));
     }

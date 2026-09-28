@@ -51,7 +51,7 @@ export const templatesRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       return db.query.workoutTemplate.findFirst({
-        where: (table, { and, eq, or }) =>
+        where: (table) =>
           and(
             eq(table.id, input.id),
             or(

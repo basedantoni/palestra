@@ -347,12 +347,12 @@ export const adminRouter = router({
 
         if (input.exercises.length && createdTemplate) {
           await tx.insert(workoutTemplateExercise).values(
-            input.exercises.map((exerciseInput) => ({
+            input.exercises.map((templateExercise) => ({
               id: crypto.randomUUID(),
               workoutTemplateId: createdTemplate.id,
-              exerciseId: exerciseInput.exerciseId,
-              order: exerciseInput.order,
-              defaultSets: exerciseInput.defaultSets,
+              exerciseId: templateExercise.exerciseId,
+              order: templateExercise.order,
+              defaultSets: templateExercise.defaultSets,
             })),
           );
         }
@@ -391,12 +391,12 @@ export const adminRouter = router({
 
         if (input.exercises.length) {
           await tx.insert(workoutTemplateExercise).values(
-            input.exercises.map((exerciseInput) => ({
+            input.exercises.map((templateExercise) => ({
               id: crypto.randomUUID(),
               workoutTemplateId: updatedTemplate.id,
-              exerciseId: exerciseInput.exerciseId,
-              order: exerciseInput.order,
-              defaultSets: exerciseInput.defaultSets,
+              exerciseId: templateExercise.exerciseId,
+              order: templateExercise.order,
+              defaultSets: templateExercise.defaultSets,
             })),
           );
         }

@@ -71,6 +71,7 @@ function buildCalendarGrid(
 
   const cursor = new Date(start);
   let col = 0;
+  // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- cursor advanced via setDate()
   while (cursor <= end) {
     const week: Array<{
       date: string;

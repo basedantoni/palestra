@@ -45,8 +45,8 @@ export function UploadStep({ onComplete }: UploadStepProps) {
     setParseResult(null);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const markdown = e.target?.result as string;
+    reader.addEventListener("load", () => {
+      const markdown = reader.result as string;
       parseMutation.mutate(
         { markdown },
         {
@@ -55,7 +55,7 @@ export function UploadStep({ onComplete }: UploadStepProps) {
           },
         },
       );
-    };
+    });
     reader.readAsText(file);
   };
 

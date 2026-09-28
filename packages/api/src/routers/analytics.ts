@@ -525,7 +525,7 @@ export const analyticsRouter = router({
 
       const [prefs, rows] = await Promise.all([
         db.query.userPreferences.findFirst({
-          where: (table, { eq }) => eq(table.userId, userId),
+          where: (table) => eq(table.userId, userId),
         }),
         db
           .select({

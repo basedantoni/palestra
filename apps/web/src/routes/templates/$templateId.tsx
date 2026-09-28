@@ -49,15 +49,17 @@ function RouteComponent() {
   const { data: template, isLoading } = useQuery(
     trpc.templates.get.queryOptions({ id: templateId }),
   );
-  const { data: exercises } = useQuery(trpc.exercises.list.queryOptions());
+  const { data: exerciseCatalog } = useQuery(
+    trpc.exercises.list.queryOptions(),
+  );
 
   const exerciseNameById = useMemo(() => {
-    const entries = (exercises ?? []).map((exercise) => [
+    const entries = (exerciseCatalog ?? []).map((exercise) => [
       exercise.id,
       exercise.name,
     ]);
     return Object.fromEntries(entries);
-  }, [exercises]);
+  }, [exerciseCatalog]);
 
   useEffect(() => {
     if (template && initializedTemplateId !== template.id) {

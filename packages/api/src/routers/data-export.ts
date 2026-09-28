@@ -20,13 +20,13 @@ export const dataExportRouter = router({
       muscleGroupVolumes,
     ] = await Promise.all([
       db.query.user.findFirst({
-        where: (table, { eq }) => eq(table.id, userId),
+        where: (table) => eq(table.id, userId),
       }),
       db.query.userPreferences.findFirst({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
       }),
       db.query.workout.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
         with: {
           logs: {
             with: {
@@ -36,19 +36,19 @@ export const dataExportRouter = router({
         },
       }),
       db.query.workoutTemplate.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
         with: {
           exercises: true,
         },
       }),
       db.query.personalRecord.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
       }),
       db.query.progressiveOverloadState.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
       }),
       db.query.muscleGroupVolume.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
       }),
     ]);
 
@@ -93,7 +93,7 @@ export const dataExportRouter = router({
 
       if (input.dataset === "workouts") {
         const workouts = await db.query.workout.findMany({
-          where: (table, { eq }) => eq(table.userId, userId),
+          where: (table) => eq(table.userId, userId),
           with: {
             logs: {
               with: {
@@ -180,7 +180,7 @@ export const dataExportRouter = router({
       }
 
       const templates = await db.query.workoutTemplate.findMany({
-        where: (table, { eq }) => eq(table.userId, userId),
+        where: (table) => eq(table.userId, userId),
         with: {
           exercises: true,
         },

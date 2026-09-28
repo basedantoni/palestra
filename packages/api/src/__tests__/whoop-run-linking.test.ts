@@ -37,7 +37,7 @@ const { mockDb, mockTx, makeChain, makeTxUpdate } = vi.hoisted(() => {
           }
           // All other props (from, where, limit, set, values, etc.) return a
           // function that returns the same proxy, continuing the chain.
-          return (_: any) => proxy;
+          return () => proxy;
         },
       },
     );

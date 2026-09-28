@@ -42,9 +42,9 @@ function parseArgs(): ImportArgs {
     }
 
     const arg = args[i]!;
-    const eq = arg.indexOf("=");
-    if (eq >= 0) {
-      return arg.slice(eq + 1);
+    const eqIndex = arg.indexOf("=");
+    if (eqIndex >= 0) {
+      return arg.slice(eqIndex + 1);
     }
 
     const value = args[i + 1];
