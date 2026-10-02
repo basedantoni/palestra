@@ -9,7 +9,7 @@ import { CurrencyTooltip, signedUsd } from "./currency-tooltip";
 export type CashFlow = RouterOutputs["finance"]["cashFlow"];
 type CashFlowMonth = CashFlow["months"][number];
 
-function monthLabel(monthKey: string, pattern = "MMM"): string {
+export function monthLabel(monthKey: string, pattern = "MMM"): string {
   const [y, m] = monthKey.split("-").map(Number) as [number, number];
   return format(new Date(y, m - 1, 1), pattern);
 }
