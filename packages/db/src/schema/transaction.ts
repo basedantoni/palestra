@@ -45,6 +45,8 @@ export const transaction = pgTable(
     merchantName: text("merchant_name"),
     pending: boolean("pending").default(false).notNull(),
     flow: transactionFlowEnum("flow"),
+    /** User corrected `flow`; Plaid sync leaves it alone (ADR 0001). */
+    flowOverridden: boolean("flow_overridden").default(false).notNull(),
     plaidCategoryPrimary: text("plaid_category_primary"),
     plaidCategoryDetailed: text("plaid_category_detailed"),
     categoryId: uuid("category_id").references(() => category.id, {
