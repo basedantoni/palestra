@@ -9,6 +9,7 @@ import { AccountsList } from "@/components/finance/accounts-list";
 import { BudgetGrid } from "@/components/finance/budget-grid";
 import { type CashFlow, CashFlowChart, CashFlowTiles } from "@/components/finance/cash-flow";
 import { GoalsList } from "@/components/finance/goals-list";
+import { NetWorthChart, NetWorthTile } from "@/components/finance/net-worth";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
 import { SyncNowButton } from "@/components/finance/sync-now-button";
@@ -55,6 +56,7 @@ function FinanceOverview() {
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const cashFlow = useQuery({ ...trpc.finance.cashFlow.queryOptions({ months: 6 }), enabled: hasAccounts });
   const [selectedMonth, setSelectedMonth] = useSelectedMonth(cashFlow.data);
+  const netWorth = useQuery({ ...trpc.finance.netWorthHistory.queryOptions(), enabled: hasAccounts });
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6">
@@ -73,12 +75,18 @@ function FinanceOverview() {
       {hasAccounts && cashFlow.data && (
         <>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {netWorth.data && <NetWorthTile data={netWorth.data} />}
             <CashFlowTiles data={cashFlow.data} />
           </div>
           <Section title="Income vs spend">
             <CashFlowChart data={cashFlow.data} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
           </Section>
         </>
+      )}
+      {hasAccounts && netWorth.data && (
+        <Section title="Net worth">
+          <NetWorthChart data={netWorth.data} />
+        </Section>
       )}
       <Section title="Accounts" to="/finance/accounts">
         <AccountsList />
