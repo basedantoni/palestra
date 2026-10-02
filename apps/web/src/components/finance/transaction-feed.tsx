@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { TransactionPeriod } from "@life-tracker/shared";
 import { trpc } from "@/utils/trpc";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -10,24 +11,28 @@ const FLOW_LABEL: Record<string, string> = {
   transfer: "Transfer",
 };
 
+export type TransactionFilters = {
+  period?: TransactionPeriod;
+  accountIds?: string[];
+  categoryId?: string;
+};
+
 export function TransactionFeed({
   limit = 50,
-  categoryId,
+  filters = {},
 }: {
   limit?: number;
-  categoryId?: string;
+  filters?: TransactionFilters;
 }) {
   const queryClient = useQueryClient();
   const { data: txns, isLoading } = useQuery(
-    trpc.transactions.list.queryOptions({ limit, categoryId }),
+    trpc.transactions.list.queryOptions({ limit, ...filters }),
   );
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
 
-  // Matches all input variants of the transactions list.
+  // Category/exclusion edits change every list variant and the spend summary.
   const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: trpc.transactions.list.queryOptions({ limit }).queryKey.slice(0, 1),
-    });
+    queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() });
 
   const setCategory = useMutation(
     trpc.transactions.setCategory.mutationOptions({ onSuccess: invalidate }),
@@ -38,7 +43,7 @@ export function TransactionFeed({
 
   if (isLoading) return <div className="text-muted-foreground">Loading transactions…</div>;
   if (!txns || txns.length === 0) {
-    return <div className="text-muted-foreground">No transactions yet.</div>;
+    return <div className="text-muted-foreground">No matching transactions.</div>;
   }
 
   return (

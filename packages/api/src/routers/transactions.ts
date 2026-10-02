@@ -1,30 +1,62 @@
-import { and, desc, eq, gte, lte, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, financialAccount, transaction } from "@life-tracker/db/schema/index";
 
+import {
+  TRANSACTION_PERIOD_PRESETS,
+  resolvePeriodBounds,
+  todayInTimeZone,
+} from "@life-tracker/shared";
+
 import { protectedProcedure, router } from "../index";
+import { getUserTimezone } from "../lib/user-timezone";
+
+const periodSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("month"), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
+  z.object({ kind: z.literal("preset"), preset: z.enum(TRANSACTION_PERIOD_PRESETS) }),
+  z.object({ kind: z.literal("all") }),
+]);
+
+const filtersSchema = z.object({
+  period: periodSchema.default({ kind: "all" }),
+  accountIds: z.array(z.string().uuid()).max(50).default([]),
+  categoryId: z.string().uuid().optional(),
+});
+
+/**
+ * WHERE conditions for the caller's filtered transactions. Plaid dates are
+ * stored as UTC midnight of the bank's calendar date, so bounds compare whole
+ * UTC days; "today" (for shortcut periods) is the user's local date.
+ */
+async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {
+  const today = todayInTimeZone(new Date(), await getUserTimezone(userId));
+  const { from, to } = resolvePeriodBounds(filters.period, today);
+
+  const conds: SQL[] = [eq(transaction.userId, userId)];
+  if (from) conds.push(gte(transaction.date, new Date(`${from}T00:00:00.000Z`)));
+  if (to) {
+    const dayAfter = new Date(`${to}T00:00:00.000Z`);
+    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
+    conds.push(lt(transaction.date, dayAfter));
+  }
+  if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
+  if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
+  return conds;
+}
 
 export const transactionsRouter = router({
-  /** Paginated transaction feed with optional date / account / category filters. */
+  /** Paginated transaction feed with optional period / account / category filters. */
   list: protectedProcedure
     .input(
-      z.object({
-        from: z.coerce.date().optional(),
-        to: z.coerce.date().optional(),
-        accountId: z.string().uuid().optional(),
-        categoryId: z.string().uuid().optional(),
+      filtersSchema.extend({
         limit: z.number().int().min(1).max(200).default(50),
         offset: z.number().int().min(0).default(0),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const conds: SQL[] = [eq(transaction.userId, ctx.session.user.id)];
-      if (input.from) conds.push(gte(transaction.date, input.from));
-      if (input.to) conds.push(lte(transaction.date, input.to));
-      if (input.accountId) conds.push(eq(transaction.accountId, input.accountId));
-      if (input.categoryId) conds.push(eq(transaction.categoryId, input.categoryId));
+      const conds = await filterConditions(ctx.session.user.id, input);
 
       return db
         .select({
@@ -52,6 +84,22 @@ export const transactionsRouter = router({
         .limit(input.limit)
         .offset(input.offset);
     }),
+
+  /**
+   * Totals for the filtered feed: how many transactions match, and expense
+   * spend (non-excluded, flow = expense — the same rule budgets use).
+   */
+  summary: protectedProcedure.input(filtersSchema).query(async ({ ctx, input }) => {
+    const conds = await filterConditions(ctx.session.user.id, input);
+    const [row] = await db
+      .select({
+        count: sql<number>`count(*)::int`,
+        spent: sql<number | null>`sum(${transaction.amount}) filter (where ${transaction.flow} = 'expense' and not ${transaction.excluded})`,
+      })
+      .from(transaction)
+      .where(and(...conds));
+    return { count: row?.count ?? 0, spent: Number(row?.spent ?? 0) };
+  }),
 
   setCategory: protectedProcedure
     .input(z.object({ id: z.string().uuid(), categoryId: z.string().uuid().nullable() }))
