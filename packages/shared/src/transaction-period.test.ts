@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   canStepForward,
+  periodToSearch,
   resolvePeriodBounds,
+  searchToPeriod,
   stepPeriod,
   todayInTimeZone,
 } from "./transaction-period";
@@ -109,5 +111,33 @@ describe("canStepForward", () => {
 
   it("is true on a past month", () => {
     expect(canStepForward({ kind: "month", month: "2026-09" }, today)).toBe(true);
+  });
+});
+
+describe("period search params", () => {
+  const today = "2026-10-02";
+  const periods = [
+    { kind: "month", month: "2026-08" },
+    { kind: "preset", preset: "90d" },
+    { kind: "all" },
+  ] as const;
+
+  it("round-trips every kind of period through the URL", () => {
+    for (const period of periods) {
+      expect(searchToPeriod(periodToSearch(period, today), today)).toEqual(period);
+    }
+  });
+
+  it("leaves the current month (the default) out of the URL", () => {
+    expect(periodToSearch({ kind: "month", month: "2026-10" }, today)).toEqual({
+      month: undefined,
+      preset: undefined,
+      all: undefined,
+    });
+    expect(searchToPeriod({}, today)).toEqual({ kind: "month", month: "2026-10" });
+  });
+
+  it("falls back to the current month for a future month", () => {
+    expect(searchToPeriod({ month: "2026-11" }, today)).toEqual({ kind: "month", month: "2026-10" });
   });
 });

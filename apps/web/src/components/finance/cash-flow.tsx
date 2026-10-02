@@ -1,6 +1,8 @@
 import { Bar, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { CASH_FLOW_RANGES, type CashFlowRange } from "@life-tracker/api/lib/cash-flow";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type RouterOutputs } from "@/utils/trpc";
 
 import { CurrencyTooltip, isNegativeUsd, signedUsd } from "./currency-tooltip";
@@ -53,10 +55,14 @@ function barOpacity(m: CashFlowMonth, selected: string | null): number {
  */
 export function CashFlowChart({
   data,
+  range,
+  onRangeChange,
   selectedMonth,
   onSelectMonth,
 }: {
   data: CashFlow;
+  range: CashFlowRange;
+  onRangeChange: (range: CashFlowRange) => void;
   selectedMonth: string | null;
   onSelectMonth: (monthKey: string) => void;
 }) {
@@ -68,7 +74,13 @@ export function CashFlowChart({
     );
   }
 
-  const rows = data.months.map((m) => ({ ...m, label: monthLabel(m.monthKey, "MMM"), spendDown: -Math.max(m.spend, 0) }));
+  // Past a year a month name repeats, so add the year.
+  const labelPattern = data.months.length > 12 ? "MMM yy" : "MMM";
+  const rows = data.months.map((m) => ({
+    ...m,
+    label: monthLabel(m.monthKey, labelPattern),
+    spendDown: -Math.max(m.spend, 0),
+  }));
   const cells = (color: string) =>
     rows.map((m) => (
       <Cell
@@ -81,10 +93,21 @@ export function CashFlowChart({
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <Legend color="var(--chart-income)" label="Income" />
-        <Legend color="var(--chart-spend)" label="Spend" />
-        <Legend color="var(--foreground)" label="Net" line />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-4 text-xs text-muted-foreground">
+          <Legend color="var(--chart-income)" label="Income" />
+          <Legend color="var(--chart-spend)" label="Spend" />
+          <Legend color="var(--foreground)" label="Net" line />
+        </div>
+        <Tabs value={range} onValueChange={(next) => onRangeChange(next as CashFlowRange)}>
+          <TabsList>
+            {Object.keys(CASH_FLOW_RANGES).map((r) => (
+              <TabsTrigger key={r} value={r}>
+                {r}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <ComposedChart
@@ -96,7 +119,13 @@ export function CashFlowChart({
             if (row) onSelectMonth(row.monthKey);
           }}
         >
-          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+          <XAxis
+            dataKey="label"
+            tickLine={false}
+            axisLine={false}
+            minTickGap={8}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+          />
           <YAxis hide />
           <ReferenceLine y={0} stroke="var(--border)" />
           <Tooltip

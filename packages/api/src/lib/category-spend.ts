@@ -1,9 +1,8 @@
 /**
- * Pure Spend per category for one Month (KOI-292). Unlike budget-spend's
+ * Pure Spend per category for a period (KOI-292, KOI-294). Unlike budget-spend's
  * `spendByCategory` (Budgeted Spend), Uncategorized is kept as its own row, so
- * the rows add up to the Month's Spend in `cashFlow`.
+ * the rows add up to Spend in `cashFlow` for the same range.
  */
-import { calendarMonthOf } from "./budget-spend";
 import { type CashFlowTransaction, cents, isSpend } from "./cash-flow";
 
 export interface CategorySpendTransaction extends CashFlowTransaction {
@@ -23,11 +22,20 @@ export interface CategorySpendRow {
 
 export const UNCATEGORIZED = "Uncategorized";
 
-/** Spend per category for `monthKey` ("YYYY-MM"), largest first; categories netting to zero are left out. */
-export function categorySpend(transactions: CategorySpendTransaction[], monthKey: string): CategorySpendRow[] {
+/**
+ * Spend per category between inclusive calendar-day bounds ("YYYY-MM-DD",
+ * from `resolvePeriodBounds`; a missing bound is open), largest first;
+ * categories netting to zero are left out.
+ */
+export function categorySpend(
+  transactions: CategorySpendTransaction[],
+  { from, to }: { from?: string; to?: string },
+): CategorySpendRow[] {
   const byCategory = new Map<string | null, { name: string; spend: number }>();
   for (const t of transactions) {
-    if (!isSpend(t) || calendarMonthOf(t.date) !== monthKey) continue;
+    // Plaid dates are UTC midnight of the bank's calendar date (see calendarMonthOf).
+    const day = t.date.toISOString().slice(0, 10);
+    if (!isSpend(t) || (from && day < from) || (to && day > to)) continue;
     const row = byCategory.get(t.categoryId) ?? { name: t.categoryName ?? UNCATEGORIZED, spend: 0 };
     row.spend += t.amount;
     byCategory.set(t.categoryId, row);

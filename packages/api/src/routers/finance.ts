@@ -1,29 +1,36 @@
-import { and, eq, gte, lt, min } from "drizzle-orm";
+import { and, eq, min } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { balanceSnapshot, category, financialAccount, transaction } from "@life-tracker/db/schema/index";
-import { addMonths, todayInTimeZone } from "@life-tracker/shared";
+import { addMonths, resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { calendarMonthOf } from "../lib/budget-spend";
-import { cashFlow } from "../lib/cash-flow";
+import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
 import { categorySpend } from "../lib/category-spend";
 import { netWorthHistory } from "../lib/net-worth";
 import { getUserTimezone } from "../lib/user-timezone";
+import { dateBoundConditions, periodSchema } from "./transactions";
+
+const cashFlowRanges = Object.keys(CASH_FLOW_RANGES) as [CashFlowRange, ...CashFlowRange[]];
 
 export const financeRouter = router({
   /**
-   * Income, Spend and Net per Month for the last `months` months (current
-   * month partial), plus Avg Net and Savings Rate over the last 5 complete
-   * months. Spend uses the same rule as `transactions.summary`.
+   * Income, Spend and Net per Month over `range` (current month partial; All
+   * starts at the first transaction), plus Avg Net and Savings Rate over the
+   * last 5 complete months whatever the range. Spend uses the same rule as
+   * `transactions.summary`.
    */
   cashFlow: protectedProcedure
-    .input(z.object({ months: z.number().int().min(1).max(24).default(6) }).default({ months: 6 }))
+    .input(z.object({ range: z.enum(cashFlowRanges).default("6M") }).default({ range: "6M" }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const currentMonth = todayInTimeZone(new Date(), await getUserTimezone(userId)).slice(0, 7);
-      const windowStart = new Date(`${addMonths(currentMonth, 1 - input.months)}-01T00:00:00.000Z`);
+      const months = CASH_FLOW_RANGES[input.range];
+      const inWindow = dateBoundConditions({
+        from: months === null ? undefined : `${addMonths(currentMonth, 1 - months)}-01`,
+      });
 
       const [[first], txns] = await Promise.all([
         db.select({ date: min(transaction.date) }).from(transaction).where(eq(transaction.userId, userId)),
@@ -35,26 +42,26 @@ export const financeRouter = router({
             date: transaction.date,
           })
           .from(transaction)
-          .where(and(eq(transaction.userId, userId), gte(transaction.date, windowStart))),
+          .where(and(eq(transaction.userId, userId), ...inWindow)),
       ]);
 
       return cashFlow(txns, {
         currentMonth,
-        months: input.months,
+        months,
         firstMonth: first?.date ? calendarMonthOf(first.date) : null,
       });
     }),
 
   /**
-   * Spend per category for one Month, largest first, Uncategorized as its own
-   * row (categoryId null). Rows add up to that Month's spend in `cashFlow`.
+   * Spend per category for a period (same model as the transaction feed),
+   * largest first, Uncategorized as its own row (categoryId null). Rows add up
+   * to Spend for that range (`cashFlow`, `transactions.summary`).
    */
   spendByCategory: protectedProcedure
-    .input(z.object({ monthKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }))
+    .input(z.object({ period: periodSchema }))
     .query(async ({ ctx, input }) => {
-      // Plaid dates are UTC midnight of the bank's calendar date (see calendarMonthOf).
-      const from = new Date(`${input.monthKey}-01T00:00:00.000Z`);
-      const to = new Date(`${addMonths(input.monthKey, 1)}-01T00:00:00.000Z`);
+      const userId = ctx.session.user.id;
+      const bounds = resolvePeriodBounds(input.period, todayInTimeZone(new Date(), await getUserTimezone(userId)));
       const txns = await db
         .select({
           amount: transaction.amount,
@@ -66,10 +73,8 @@ export const financeRouter = router({
         })
         .from(transaction)
         .leftJoin(category, eq(category.id, transaction.categoryId))
-        .where(
-          and(eq(transaction.userId, ctx.session.user.id), gte(transaction.date, from), lt(transaction.date, to)),
-        );
-      return categorySpend(txns, input.monthKey);
+        .where(and(eq(transaction.userId, userId), ...dateBoundConditions(bounds)));
+      return categorySpend(txns, bounds);
     }),
 
   /**

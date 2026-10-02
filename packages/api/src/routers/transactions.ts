@@ -15,7 +15,7 @@ import { protectedProcedure, router } from "../index";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
-const periodSchema = z.discriminatedUnion("kind", [
+export const periodSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("month"), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
   z.object({ kind: z.literal("preset"), preset: z.enum(TRANSACTION_PERIOD_PRESETS) }),
   z.object({ kind: z.literal("all") }),
@@ -29,21 +29,25 @@ const filtersSchema = z.object({
 });
 
 /**
- * WHERE conditions for the caller's filtered transactions. Plaid dates are
- * stored as UTC midnight of the bank's calendar date, so bounds compare whole
- * UTC days; "today" (for shortcut periods) is the user's local date.
+ * WHERE conditions for transaction dates within inclusive calendar-day bounds
+ * (from `resolvePeriodBounds`). Plaid dates are stored as UTC midnight of the
+ * bank's calendar date, so bounds compare whole UTC days.
  */
-async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {
-  const today = todayInTimeZone(new Date(), await getUserTimezone(userId));
-  const { from, to } = resolvePeriodBounds(filters.period, today);
-
-  const conds: SQL[] = [eq(transaction.userId, userId)];
+export function dateBoundConditions({ from, to }: { from?: string; to?: string }): SQL[] {
+  const conds: SQL[] = [];
   if (from) conds.push(gte(transaction.date, new Date(`${from}T00:00:00.000Z`)));
   if (to) {
     const dayAfter = new Date(`${to}T00:00:00.000Z`);
     dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
     conds.push(lt(transaction.date, dayAfter));
   }
+  return conds;
+}
+
+/** WHERE conditions for the caller's filtered transactions; "today" (for shortcut periods) is the user's local date. */
+async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {
+  const today = todayInTimeZone(new Date(), await getUserTimezone(userId));
+  const conds: SQL[] = [eq(transaction.userId, userId), ...dateBoundConditions(resolvePeriodBounds(filters.period, today))];
   if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
   if (filters.categoryId === null) conds.push(isNull(transaction.categoryId));
   else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));

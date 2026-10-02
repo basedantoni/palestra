@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { TRANSACTION_PERIOD_PRESETS, type TransactionPeriod } from "@life-tracker/shared";
+import { TRANSACTION_PERIOD_PRESETS, periodToSearch, searchToPeriod } from "@life-tracker/shared";
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc } from "@/utils/trpc";
@@ -33,21 +33,6 @@ export const Route = createFileRoute("/finance/transactions")({
     }
   },
 });
-
-function searchToPeriod(search: TransactionsSearch, today: string): TransactionPeriod {
-  if (search.all) return { kind: "all" };
-  if (search.preset) return { kind: "preset", preset: search.preset };
-  const month = search.month && search.month <= today.slice(0, 7) ? search.month : today.slice(0, 7);
-  return { kind: "month", month };
-}
-
-function periodToSearch(period: TransactionPeriod, today: string): Partial<TransactionsSearch> {
-  const cleared = { month: undefined, preset: undefined, all: undefined };
-  if (period.kind === "all") return { ...cleared, all: true };
-  if (period.kind === "preset") return { ...cleared, preset: period.preset };
-  // The current month is the default, so keep it out of the URL.
-  return { ...cleared, month: period.month === today.slice(0, 7) ? undefined : period.month };
-}
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 

@@ -40,21 +40,27 @@ export function isSpend(t: Pick<CashFlowTransaction, "flow" | "excluded">): bool
   return t.flow === "expense" && !t.excluded;
 }
 
+/** Income vs spend range switch (KOI-294): months shown, null = all history. */
+export const CASH_FLOW_RANGES = { "6M": 6, "1Y": 12, All: null } as const;
+export type CashFlowRange = keyof typeof CASH_FLOW_RANGES;
+
 /**
  * Income, Spend and Net for the `months` calendar months ending at
- * `currentMonth` (oldest first), starting no earlier than `firstMonth` (the
- * month of the user's earliest transaction; null = none). The current month
- * is partial.
+ * `currentMonth` (oldest first; null = all history), starting no earlier than
+ * `firstMonth` (the month of the user's earliest transaction; null = none).
+ * The current month is partial. The summary covers the last SUMMARY_MONTHS
+ * complete months, so it is the same for every CASH_FLOW_RANGES window.
  */
 export function cashFlow(
   transactions: CashFlowTransaction[],
-  opts: { currentMonth: string; months: number; firstMonth: string | null },
+  opts: { currentMonth: string; months: number | null; firstMonth: string | null },
 ): { months: CashFlowMonth[]; summary: CashFlowSummary } {
   const totals = new Map<string, { income: number; spend: number }>();
-  for (let i = opts.months - 1; i >= 0; i--) {
-    const monthKey = addMonths(opts.currentMonth, -i);
+  if (opts.firstMonth !== null) {
+    const windowStart = opts.months === null ? opts.firstMonth : addMonths(opts.currentMonth, 1 - opts.months);
     // No padding before the user's history begins ("YYYY-MM" compares lexically).
-    if (opts.firstMonth !== null && monthKey >= opts.firstMonth) {
+    const start = windowStart > opts.firstMonth ? windowStart : opts.firstMonth;
+    for (let monthKey = start; monthKey <= opts.currentMonth; monthKey = addMonths(monthKey, 1)) {
       totals.set(monthKey, { income: 0, spend: 0 });
     }
   }
