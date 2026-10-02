@@ -59,10 +59,11 @@ describe("categorySpend", () => {
       ["Groceries", 200],
       ["Shopping", -50],
     ]);
-    expect(rows.map((r) => r.share)).toEqual([200 / 150, -50 / 150]);
+    // Shares are of the positive categories' spend, so they never exceed 100%.
+    expect(rows.map((r) => r.share)).toEqual([1, -0.25]);
   });
 
-  it("has no share when the month's spend is not positive", () => {
+  it("has no share when no category has positive spend", () => {
     expect(categorySpend([tx("2026-06-09", -90, shopping)], "2026-06")).toEqual([
       { categoryId: "c-shop", name: "Shopping", spend: -90, share: null },
     ]);
