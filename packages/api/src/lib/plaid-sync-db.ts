@@ -25,6 +25,7 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { decryptToken } from "./token-encryption";
+import { todayUtc } from "./date-utils";
 import { persistAccountBalances } from "./plaid-balance-db";
 import { getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
 import {
@@ -104,7 +105,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const userId = item.userId;
   const accessToken = decryptToken(item.accessTokenEnc, getTokenEncryptionKey());
   const { delta, nextCursor } = await fetchSyncDelta(accessToken, item.transactionCursor);
-  const asOfDate = new Date().toISOString().slice(0, 10);
+  const asOfDate = todayUtc();
   const mutations = applyTransactionSyncDelta({ ...delta, asOfDate });
 
   // Resolve Plaid account ids → our financial_account ids for FK wiring.

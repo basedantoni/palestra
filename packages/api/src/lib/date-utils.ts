@@ -33,3 +33,9 @@ export function toDateString(date: Date | string): string {
 export function toLocalDateKey(date: Date): string {
   return toDateString(date);
 }
+
+// Today's UTC calendar day, "yyyy-MM-dd". The balance_snapshot day key — the
+// Plaid sync and the daily snapshot job must agree on it (ADR 0003).
+export function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}

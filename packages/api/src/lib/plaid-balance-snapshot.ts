@@ -14,6 +14,7 @@ import { eq, ne } from "drizzle-orm";
 import { db } from "@life-tracker/db";
 import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
 
+import { todayUtc } from "./date-utils";
 import { persistAccountBalances } from "./plaid-balance-db";
 import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
 import { accountBalanceMutations } from "./plaid-sync-transform";
@@ -49,7 +50,7 @@ async function snapshotItem(
  * aborts the rest.
  */
 export async function snapshotAllPlaidBalances(
-  asOfDate: string = new Date().toISOString().slice(0, 10),
+  asOfDate: string = todayUtc(),
 ): Promise<SnapshotBalancesResult> {
   const items = await db
     .select({
