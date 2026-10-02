@@ -11,6 +11,7 @@ import { env } from "@life-tracker/env/server";
 import { protectedProcedure, router } from "../index";
 import { encryptToken } from "../lib/token-encryption";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
+import { removeFinancialAccount } from "../lib/plaid-account-remove";
 import {
   PLAID_COUNTRY_CODES,
   PLAID_PRODUCTS,
@@ -128,6 +129,20 @@ export const plaidRouter = router({
       .from(financialAccount)
       .where(eq(financialAccount.userId, ctx.session.user.id));
   }),
+
+  /**
+   * Remove a connected account (and its transactions). Revokes the Plaid Item
+   * when it was the institution's last account.
+   */
+  removeAccount: protectedProcedure
+    .input(z.object({ accountId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await removeFinancialAccount(ctx.session.user.id, input.accountId);
+      if (!result.removed) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+      }
+      return { itemRemoved: result.itemRemoved };
+    }),
 
   /** List linked institutions + their connection health (for the reconnect banner). */
   listItems: protectedProcedure.query(async ({ ctx }) => {
