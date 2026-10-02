@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -11,6 +11,7 @@ import { env } from "@life-tracker/env/server";
 import { protectedProcedure, router } from "../index";
 import { encryptToken } from "../lib/token-encryption";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
+import { canRepairInUpdateMode, getOwnedPlaidItem } from "../lib/plaid-item-access";
 import { removeFinancialAccount } from "../lib/plaid-account-remove";
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { syncPlaidItemsForUser } from "../lib/plaid-sync-now";
@@ -22,28 +23,69 @@ import {
   getTokenEncryptionKey,
 } from "../lib/plaid-client";
 
+/**
+ * Display name for a Plaid institution (the institution_id is not one). Best
+ * effort: a failed lookup only costs the label, never the link.
+ */
+async function lookupInstitutionName(
+  plaid: ReturnType<typeof getPlaidClient>,
+  institutionId: string,
+): Promise<string | null> {
+  try {
+    const res = await plaid.institutionsGetById({
+      institution_id: institutionId,
+      country_codes: PLAID_COUNTRY_CODES,
+    });
+    return res.data.institution.name;
+  } catch (err) {
+    console.error(`[plaid] institutionsGetById failed for ${institutionId}:`, describePlaidError(err));
+    return null;
+  }
+}
+
 export const plaidRouter = router({
-  /** Create a short-lived Plaid Link token for the web client. */
-  createLinkToken: protectedProcedure.mutation(async ({ ctx }) => {
-    const plaid = getPlaidClient();
-    try {
-      const res = await plaid.linkTokenCreate({
-        user: { client_user_id: ctx.session.user.id },
-        client_name: "Palestra",
-        products: PLAID_PRODUCTS,
-        country_codes: PLAID_COUNTRY_CODES,
-        language: "en",
-        ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
-      });
-      return { linkToken: res.data.link_token };
-    } catch (err) {
-      console.error(
-        "[plaid] linkTokenCreate failed:",
-        (err as { response?: { data?: unknown } })?.response?.data ?? err,
-      );
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: describePlaidError(err) });
-    }
-  }),
+  /**
+   * Create a short-lived Plaid Link token for the web client. With
+   * `plaidItemId`, the token opens Link in update mode to repair that existing
+   * connection (re-auth) instead of linking a new bank.
+   */
+  createLinkToken: protectedProcedure
+    .input(z.object({ plaidItemId: z.string().uuid().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      let accessToken: string | null = null;
+      if (input?.plaidItemId) {
+        const item = await getOwnedPlaidItem(userId, input.plaidItemId);
+        if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Plaid item not found" });
+        if (item.status === "revoked") {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Access was revoked at the bank — remove it and connect the bank again",
+          });
+        }
+        accessToken = item.accessToken;
+      }
+
+      const plaid = getPlaidClient();
+      try {
+        const res = await plaid.linkTokenCreate({
+          user: { client_user_id: userId },
+          client_name: "Palestra",
+          // Update mode re-auths the item's existing products; passing products errors.
+          ...(accessToken ? { access_token: accessToken } : { products: PLAID_PRODUCTS }),
+          country_codes: PLAID_COUNTRY_CODES,
+          language: "en",
+          ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
+        });
+        return { linkToken: res.data.link_token };
+      } catch (err) {
+        console.error(
+          "[plaid] linkTokenCreate failed:",
+          (err as { response?: { data?: unknown } })?.response?.data ?? err,
+        );
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: describePlaidError(err) });
+      }
+    }),
 
   /**
    * Exchange a Link `public_token` for an access token, persist the Plaid Item
@@ -65,6 +107,11 @@ export const plaidRouter = router({
         access_token: accessToken,
       });
 
+      const institutionId = accountsRes.data.item.institution_id ?? null;
+      const institutionName = institutionId
+        ? await lookupInstitutionName(plaid, institutionId)
+        : null;
+
       const plaidItemId = randomUUID();
       await db
         .insert(plaidItem)
@@ -72,10 +119,8 @@ export const plaidRouter = router({
           id: plaidItemId,
           userId,
           itemId,
-          institutionId: accountsRes.data.item.institution_id ?? null,
-          // institutionName is resolved separately (institutionsGetById); the
-          // institution_id is NOT a display name, so leave the name unset here.
-          institutionName: null,
+          institutionId,
+          institutionName,
           accessTokenEnc: encryptToken(accessToken, getTokenEncryptionKey()),
           status: "active",
         })
@@ -84,6 +129,7 @@ export const plaidRouter = router({
           set: {
             accessTokenEnc: encryptToken(accessToken, getTokenEncryptionKey()),
             status: "active",
+            ...(institutionName ? { institutionName } : {}),
           },
         });
 
@@ -154,6 +200,40 @@ export const plaidRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
       }
       return { itemRemoved: result.itemRemoved };
+    }),
+
+  /**
+   * Called after Plaid Link update mode succeeds for a broken item. Update mode
+   * returns no public token to exchange, so prove the repair by syncing: only a
+   * successful sync marks the item active. Awaited so the client refreshes
+   * after the catch-up data has landed.
+   */
+  markItemRepaired: protectedProcedure
+    .input(z.object({ plaidItemId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [item] = await db
+        .select({ id: plaidItem.id, status: plaidItem.status })
+        .from(plaidItem)
+        .where(and(eq(plaidItem.id, input.plaidItemId), eq(plaidItem.userId, ctx.session.user.id)))
+        .limit(1);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Plaid item not found" });
+      if (!canRepairInUpdateMode(item.status)) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Item can't be repaired from status "${item.status}"`,
+        });
+      }
+
+      let counts;
+      try {
+        counts = await syncPlaidItem(item.id);
+      } catch (err) {
+        const message = describePlaidError(err);
+        console.error(`[plaid] post-repair sync failed for plaid_item ${item.id}:`, message);
+        throw new TRPCError({ code: "BAD_GATEWAY", message });
+      }
+      await db.update(plaidItem).set({ status: "active" }).where(eq(plaidItem.id, item.id));
+      return counts;
     }),
 
   /** Sync the caller's Plaid items now instead of waiting on a webhook. */
