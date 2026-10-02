@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { resolvePeriodBounds } from "@life-tracker/shared";
+
 import { cashFlow } from "./cash-flow";
 import { categorySpend, type CategorySpendRow, type CategorySpendTransaction, donutSlices } from "./category-spend";
 
@@ -22,6 +24,9 @@ const groceries: [string, string] = ["c-groc", "Groceries"];
 const dining: [string, string] = ["c-dine", "Dining"];
 const shopping: [string, string] = ["c-shop", "Shopping"];
 
+const today = "2026-06-20";
+const june = resolvePeriodBounds({ kind: "month", month: "2026-06" }, today);
+
 describe("categorySpend", () => {
   it("totals a month's spend per category, largest first, uncategorized as its own row", () => {
     const rows = categorySpend(
@@ -35,7 +40,7 @@ describe("categorySpend", () => {
         tx("2026-06-06", 999, dining, "transfer"),
         tx("2026-06-01", -3000, null, "income"),
       ],
-      "2026-06",
+      june,
     );
     expect(rows).toEqual([
       { categoryId: "c-groc", name: "Groceries", spend: 150, share: 0.5 },
@@ -53,7 +58,7 @@ describe("categorySpend", () => {
         tx("2026-06-10", 25, dining),
         tx("2026-06-11", -25, dining), // fully refunded: nothing to show
       ],
-      "2026-06",
+      june,
     );
     expect(rows.map((r) => [r.name, r.spend])).toEqual([
       ["Groceries", 200],
@@ -64,13 +69,13 @@ describe("categorySpend", () => {
   });
 
   it("has no share when no category has positive spend", () => {
-    expect(categorySpend([tx("2026-06-09", -90, shopping)], "2026-06")).toEqual([
+    expect(categorySpend([tx("2026-06-09", -90, shopping)], june)).toEqual([
       { categoryId: "c-shop", name: "Shopping", spend: -90, share: null },
     ]);
   });
 
   it("returns no rows for a month without spend", () => {
-    expect(categorySpend([tx("2026-05-09", 90, shopping)], "2026-06")).toEqual([]);
+    expect(categorySpend([tx("2026-05-09", 90, shopping)], june)).toEqual([]);
   });
 
   it("adds up to the month's spend in cashFlow", () => {
@@ -84,10 +89,49 @@ describe("categorySpend", () => {
       tx("2026-06-07", 500, null, "transfer"),
       tx("2026-06-08", 41.99, null, null),
     ];
-    const total = categorySpend(txns, "2026-06").reduce((s, r) => s + r.spend, 0);
+    const total = categorySpend(txns, june).reduce((s, r) => s + r.spend, 0);
     const { months } = cashFlow(txns, { currentMonth: "2026-06", months: 1, firstMonth: "2026-06" });
     expect(Math.round(total * 100) / 100).toBe(months[0]?.spend);
     expect(months[0]?.spend).toBe(51.86);
+  });
+});
+
+describe("categorySpend over a period", () => {
+  const txns = [
+    tx("2025-12-31", 1000, groceries), // before this year
+    tx("2026-01-01", 10, groceries),
+    tx("2026-03-22", 5, dining), // the day before the last 90 days
+    tx("2026-03-23", 20, dining), // first of the last 90 days
+    tx("2026-05-15", 40, null),
+    tx("2026-06-20", 2, groceries), // today
+  ];
+
+  it("includes both ends of a preset's range", () => {
+    expect(categorySpend(txns, resolvePeriodBounds({ kind: "preset", preset: "90d" }, today))).toMatchObject([
+      { name: "Uncategorized", spend: 40 },
+      { name: "Dining", spend: 20 },
+      { name: "Groceries", spend: 2 },
+    ]);
+  });
+
+  it("starts year to date on January 1st", () => {
+    const rows = categorySpend(txns, resolvePeriodBounds({ kind: "preset", preset: "ytd" }, today));
+    expect(rows.map((r) => [r.name, r.spend])).toEqual([
+      ["Uncategorized", 40],
+      ["Dining", 25],
+      ["Groceries", 12],
+    ]);
+  });
+
+  it("covers every transaction for all time, adding up to all-time spend in cashFlow", () => {
+    const rows = categorySpend(txns, resolvePeriodBounds({ kind: "all" }, today));
+    expect(rows.map((r) => [r.name, r.spend])).toEqual([
+      ["Groceries", 1012],
+      ["Uncategorized", 40],
+      ["Dining", 25],
+    ]);
+    const { months } = cashFlow(txns, { currentMonth: "2026-06", months: null, firstMonth: "2025-12" });
+    expect(months.reduce((s, m) => s + m.spend, 0)).toBe(1077);
   });
 });
 

@@ -109,6 +109,29 @@ export function stepPeriod(period: TransactionPeriod, delta: number, today: stri
   return { kind: "month", month: target > current ? current : target };
 }
 
+/** A period as `/finance/transactions` search params. No period params = the current month. */
+export interface TransactionPeriodSearch {
+  month?: string;
+  preset?: TransactionPeriodPreset;
+  all?: boolean;
+}
+
+export function searchToPeriod(search: TransactionPeriodSearch, today: string): TransactionPeriod {
+  if (search.all) return { kind: "all" };
+  if (search.preset) return { kind: "preset", preset: search.preset };
+  const month = search.month && search.month <= today.slice(0, 7) ? search.month : today.slice(0, 7);
+  return { kind: "month", month };
+}
+
+/** Every key is set (possibly undefined) so merging over existing params clears the old period. */
+export function periodToSearch(period: TransactionPeriod, today: string): TransactionPeriodSearch {
+  const cleared = { month: undefined, preset: undefined, all: undefined };
+  if (period.kind === "all") return { ...cleared, all: true };
+  if (period.kind === "preset") return { ...cleared, preset: period.preset };
+  // The current month is the default, so keep it out of the URL.
+  return { ...cleared, month: period.month === today.slice(0, 7) ? undefined : period.month };
+}
+
 /** Whether › can move to a later month. */
 export function canStepForward(period: TransactionPeriod, today: string): boolean {
   return period.kind === "month" && period.month < today.slice(0, 7);
