@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -46,19 +46,40 @@ async function filterConditions(userId: string, filters: z.infer<typeof filtersS
   return conds;
 }
 
+/** "<ISO date>|<uuid>" — the last row of the previous page. */
+const cursorSchema = z.string().transform((value, ctx) => {
+  const [iso, id] = value.split("|");
+  const date = new Date(iso ?? "");
+  if (!id || Number.isNaN(date.getTime()) || !z.string().uuid().safeParse(id).success) {
+    ctx.addIssue({ code: "custom", message: "Invalid cursor" });
+    return z.NEVER;
+  }
+  return { date, id };
+});
+
 export const transactionsRouter = router({
   /** Paginated transaction feed with optional period / account / category filters. */
   list: protectedProcedure
     .input(
       filtersSchema.extend({
         limit: z.number().int().min(1).max(200).default(50),
-        offset: z.number().int().min(0).default(0),
+        /** Opaque keyset cursor from the previous page's `nextCursor`. */
+        cursor: cursorSchema.nullish(),
       }),
     )
     .query(async ({ ctx, input }) => {
       const conds = await filterConditions(ctx.session.user.id, input);
+      if (input.cursor) {
+        // Keyset on (date, id) desc: stable while syncs insert newer rows.
+        conds.push(
+          or(
+            lt(transaction.date, input.cursor.date),
+            and(eq(transaction.date, input.cursor.date), lt(transaction.id, input.cursor.id)),
+          )!,
+        );
+      }
 
-      return db
+      const rows = await db
         .select({
           id: transaction.id,
           date: transaction.date,
@@ -80,9 +101,14 @@ export const transactionsRouter = router({
         .leftJoin(category, eq(category.id, transaction.categoryId))
         .innerJoin(financialAccount, eq(financialAccount.id, transaction.accountId))
         .where(and(...conds))
-        .orderBy(desc(transaction.date))
-        .limit(input.limit)
-        .offset(input.offset);
+        .orderBy(desc(transaction.date), desc(transaction.id))
+        .limit(input.limit + 1); // one extra row tells us whether a next page exists
+
+      const items = rows.slice(0, input.limit);
+      const last = items.at(-1);
+      const nextCursor =
+        rows.length > input.limit && last ? `${last.date.toISOString()}|${last.id}` : null;
+      return { items, nextCursor };
     }),
 
   /**

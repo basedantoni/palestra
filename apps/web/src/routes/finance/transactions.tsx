@@ -115,7 +115,7 @@ function TransactionsPage() {
           ))}
         </select>
       </div>
-      <TransactionFeed limit={100} filters={filters} />
+      <TransactionFeed filters={filters} />
     </div>
   );
 }

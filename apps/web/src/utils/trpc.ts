@@ -3,6 +3,7 @@ import type { AppRouter } from "@life-tracker/api/routers/index";
 import { env } from "@life-tracker/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import type { inferRouterOutputs } from "@trpc/server";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { toast } from "sonner";
 
@@ -37,3 +38,6 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
   client: trpcClient,
   queryClient,
 });
+
+/** Procedure output types, as the client receives them (no transformer: Dates arrive as ISO strings). */
+export type RouterOutputs = inferRouterOutputs<AppRouter>;

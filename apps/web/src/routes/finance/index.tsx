@@ -52,7 +52,7 @@ function FinanceOverview() {
         <GoalsList />
       </Section>
       <Section title="Recent transactions" to="/finance/transactions">
-        <TransactionFeed limit={10} />
+        <TransactionFeed pageSize={10} loadMore={false} />
       </Section>
     </div>
   );
