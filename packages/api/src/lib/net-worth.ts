@@ -4,6 +4,7 @@
  */
 import { addDays, addWeeks } from "date-fns";
 
+import { cents } from "./cash-flow";
 import { isoWeekKey, toDateString } from "./date-utils";
 
 export type AccountType = "depository" | "credit" | "investment" | "loan";
@@ -28,14 +29,11 @@ export interface NetWorthPoint {
   assets: number;
   /** Total owed, positive. */
   liabilities: number;
-  /** Some linked account has no snapshot yet at this point (missing, not $0). */
+  /** Some linked account's first snapshot comes after this point (missing, not $0). */
   partial: boolean;
 }
 
 const LIABILITY: ReadonlySet<AccountType> = new Set(["credit", "loan"]);
-
-/** Float sums drift (0.1 + 0.2); money is shown to the cent. */
-const cents = (n: number) => Math.round(n * 100) / 100;
 
 const parseDay = (day: string) => {
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
@@ -56,12 +54,15 @@ export function netWorthHistory(
   const last = days.at(-1);
   if (!first || !last) return { points: [], current: null, change30d: null };
 
+  // Accounts never snapshotted (e.g. Plaid null balance) neither count nor mark partial.
+  const tracked = accounts.filter((a) => history.get(a.id)!.length > 0);
+
   /** Net Worth on `day`, carrying each account's last snapshot on or before it forward. */
   const at = (day: string) => {
     let assets = 0;
     let liabilities = 0;
     let partial = false;
-    for (const a of accounts) {
+    for (const a of tracked) {
       const snap = history.get(a.id)!.findLast((s) => s.asOfDate <= day);
       if (!snap) partial = true;
       else if (LIABILITY.has(a.type)) liabilities += snap.balance;

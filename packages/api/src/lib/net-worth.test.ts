@@ -134,6 +134,17 @@ describe("netWorthHistory: missing before first snapshot", () => {
     expect(r.change30d).toBeNull();
   });
 
+  it("ignores an account that has never been snapshotted, so it doesn't mark every point partial", () => {
+    // Plaid returned a null balance for the card, so it has no snapshots at all.
+    const r = netWorthHistory(
+      [checking, card],
+      [snap("chk", "2026-06-01", 2000), snap("chk", "2026-07-05", 2500)],
+    );
+    expect(r.points.every((p) => !p.partial)).toBe(true);
+    expect(r.current).toBe(2500);
+    expect(r.change30d).toBe(500);
+  });
+
   it("ignores snapshots of accounts that are no longer linked", () => {
     const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 2000), snap("gone", "2026-06-01", 9999)]);
     expect(netWorths(r)).toEqual([["2026-06-01", 2000, false]]);
