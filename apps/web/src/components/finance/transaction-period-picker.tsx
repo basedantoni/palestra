@@ -12,8 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const pad = (n: number) => String(n).padStart(2, "0");
+import { MonthGrid } from "./month-grid";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
@@ -42,7 +41,6 @@ export function TransactionPeriodPicker({
 }) {
   const currentMonth = today.slice(0, 7);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerYear, setPickerYear] = useState(Number(today.slice(0, 4)));
 
   const all = period.kind === "all";
   const onCurrentMonth = period.kind === "month" && period.month === currentMonth;
@@ -65,15 +63,7 @@ export function TransactionPeriodPicker({
         >
           <ChevronLeft />
         </Button>
-        <Popover
-          open={pickerOpen}
-          onOpenChange={(open) => {
-            setPickerOpen(open);
-            if (open) {
-              setPickerYear(Number((period.kind === "month" ? period.month : currentMonth).slice(0, 4)));
-            }
-          }}
-        >
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger
             render={
               <Button variant="ghost" disabled={all} className="min-w-40 text-lg font-semibold">
@@ -98,43 +88,12 @@ export function TransactionPeriodPicker({
               ))}
             </div>
             <div className="border-t border-border pt-2">
-              <div className="mb-2 flex items-center justify-between">
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() => setPickerYear((y) => y - 1)}
-                  aria-label="Previous year"
-                >
-                  <ChevronLeft />
-                </Button>
-                <span className="text-sm font-semibold">{pickerYear}</span>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  disabled={pickerYear >= Number(today.slice(0, 4))}
-                  onClick={() => setPickerYear((y) => y + 1)}
-                  aria-label="Next year"
-                >
-                  <ChevronRight />
-                </Button>
-              </div>
-              <div className="grid grid-cols-3 gap-1">
-                {MONTHS_SHORT.map((label, i) => {
-                  const month = `${pickerYear}-${pad(i + 1)}`;
-                  const selected = period.kind === "month" && period.month === month;
-                  return (
-                    <Button
-                      key={label}
-                      size="sm"
-                      variant={selected ? "default" : month === currentMonth ? "outline" : "ghost"}
-                      disabled={month > currentMonth}
-                      onClick={() => choose({ kind: "month", month })}
-                    >
-                      {label}
-                    </Button>
-                  );
-                })}
-              </div>
+              <MonthGrid
+                selectedMonth={period.kind === "month" ? period.month : null}
+                currentMonth={currentMonth}
+                maxMonth={currentMonth}
+                onSelect={(month) => choose({ kind: "month", month })}
+              />
             </div>
           </PopoverContent>
         </Popover>

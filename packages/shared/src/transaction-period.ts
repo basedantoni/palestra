@@ -90,7 +90,8 @@ function endMonth(period: TransactionPeriod, today: string): string | null {
   return today.slice(0, 7); // every preset ends today
 }
 
-function addMonths(month: string, n: number): string {
+/** Shift a YYYY-MM month key by `n` months. */
+export function addMonths(month: string, n: number): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
   const total = y * 12 + (m - 1) + n;
   return `${Math.floor(total / 12)}-${pad((total % 12) + 1)}`;
