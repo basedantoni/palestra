@@ -4,21 +4,12 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { budget, category, transaction, userPreferences } from "@life-tracker/db/schema/index";
+import { budget, category, transaction } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import { computeBudgetSpend } from "../lib/budget-spend";
 
 const monthKeySchema = z.string().regex(/^\d{4}-\d{2}$/, "monthKey must be YYYY-MM");
-
-async function userTimezone(userId: string): Promise<string> {
-  const [prefs] = await db
-    .select({ timezone: userPreferences.timezone })
-    .from(userPreferences)
-    .where(eq(userPreferences.userId, userId))
-    .limit(1);
-  return prefs?.timezone ?? "America/Chicago";
-}
 
 export const budgetsRouter = router({
   /** Budgets for a month joined with computed spend. */
@@ -26,7 +17,6 @@ export const budgetsRouter = router({
     .input(z.object({ monthKey: monthKeySchema }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const timeZone = await userTimezone(userId);
 
       const budgetRows = await db
         .select({
@@ -53,7 +43,6 @@ export const budgetsRouter = router({
         transactions: txns,
         budgets: budgetRows.map((b) => ({ categoryId: b.categoryId, limit: b.limitAmount })),
         monthKey: input.monthKey,
-        timeZone,
       });
 
       const nameById = new Map(budgetRows.map((b) => [b.categoryId, b.categoryName]));

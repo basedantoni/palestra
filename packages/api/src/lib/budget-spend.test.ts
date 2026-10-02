@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { computeBudgetSpend, monthKeyOf } from "./budget-spend";
-
-describe("monthKeyOf", () => {
-  it("derives YYYY-MM in the given timezone", () => {
-    // 2026-07-01T02:00Z is still June 30 in America/Chicago.
-    expect(monthKeyOf(new Date("2026-07-01T02:00:00Z"), "America/Chicago")).toBe("2026-06");
-    expect(monthKeyOf(new Date("2026-07-01T12:00:00Z"), "America/Chicago")).toBe("2026-07");
-  });
-});
+import { computeBudgetSpend } from "./budget-spend";
 
 describe("computeBudgetSpend", () => {
-  const tz = "America/Chicago";
   const txns = [
     // expenses in June
     { categoryId: "food", amount: 30, flow: "expense", excluded: false, date: new Date("2026-06-05T15:00:00Z") },
@@ -33,7 +24,7 @@ describe("computeBudgetSpend", () => {
   ];
 
   it("sums expense, non-excluded, in-month transactions per budget", () => {
-    const rows = computeBudgetSpend({ transactions: txns, budgets, monthKey: "2026-06", timeZone: tz });
+    const rows = computeBudgetSpend({ transactions: txns, budgets, monthKey: "2026-06" });
     const food = rows.find((r) => r.categoryId === "food")!;
     const transport = rows.find((r) => r.categoryId === "transport")!;
 
@@ -52,9 +43,20 @@ describe("computeBudgetSpend", () => {
       transactions: [],
       budgets: [{ categoryId: "food", limit: 100 }],
       monthKey: "2026-06",
-      timeZone: tz,
     });
     expect(rows[0].spent).toBe(0);
     expect(rows[0].overspent).toBe(false);
+  });
+
+  it("buckets by the bank's calendar date, not the user's timezone", () => {
+    // Plaid dates are stored as UTC midnight of the posted date. Jul 1 must
+    // count in July even though that instant is Jun 30 evening in Chicago.
+    const firstOfMonth = [
+      { categoryId: "food", amount: 50, flow: "expense", excluded: false, date: new Date("2026-07-01T00:00:00Z") },
+    ] as const;
+    const args = { transactions: [...firstOfMonth], budgets: [{ categoryId: "food", limit: 100 }] };
+
+    expect(computeBudgetSpend({ ...args, monthKey: "2026-07" })[0]!.spent).toBe(50);
+    expect(computeBudgetSpend({ ...args, monthKey: "2026-06" })[0]!.spent).toBe(0);
   });
 });

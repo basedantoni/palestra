@@ -2,7 +2,7 @@
  * Pure compute-on-read budget spend (KOI-109, Seam 3).
  *
  * "Spent this month" = sum of expense, non-excluded transactions in a category
- * for the given month (evaluated in the user's timezone). No materialized
+ * for the given calendar month. No materialized
  * spend table — this runs over already-fetched rows.
  */
 
@@ -30,35 +30,26 @@ export interface BudgetSpendRow {
   overspent: boolean;
 }
 
-const monthKeyFormatters = new Map<string, Intl.DateTimeFormat>();
-
-/** YYYY-MM for a date as seen in `timeZone`. */
-export function monthKeyOf(date: Date, timeZone: string): string {
-  let fmt = monthKeyFormatters.get(timeZone);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-    });
-    monthKeyFormatters.set(timeZone, fmt);
-  }
-  // en-CA renders as "2026-06"
-  return fmt.format(date);
+/**
+ * YYYY-MM of a transaction's calendar date. Plaid dates are stored as UTC
+ * midnight of the bank's posted date, so read them in UTC — converting to the
+ * user's timezone would push the 1st of a month into the previous one.
+ */
+function calendarMonthOf(date: Date): string {
+  return date.toISOString().slice(0, 7);
 }
 
 export function computeBudgetSpend(args: {
   transactions: SpendTransaction[];
   budgets: BudgetLimit[];
   monthKey: string;
-  timeZone: string;
 }): BudgetSpendRow[] {
-  const { transactions, budgets, monthKey, timeZone } = args;
+  const { transactions, budgets, monthKey } = args;
 
   const spentByCategory = new Map<string, number>();
   for (const t of transactions) {
     if (t.flow !== "expense" || t.excluded || t.categoryId === null) continue;
-    if (monthKeyOf(t.date, timeZone) !== monthKey) continue;
+    if (calendarMonthOf(t.date) !== monthKey) continue;
     spentByCategory.set(t.categoryId, (spentByCategory.get(t.categoryId) ?? 0) + t.amount);
   }
 
