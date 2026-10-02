@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
@@ -13,6 +14,9 @@ import {
 
 import { protectedProcedure, router } from "../index";
 import { type BalancePoint, projectGoal } from "../lib/goal-projection";
+
+/** How many days of balance history the goal chart shows. */
+const HISTORY_DAYS = 180;
 
 /** Sum each account's daily snapshot into one balance series for the goal. */
 function snapshotsToSeries(
@@ -63,6 +67,8 @@ export const goalsRouter = router({
         targetDate: goal.targetDate,
         accountIds,
         ...projection,
+        /** Daily balance series for the trend chart (latest HISTORY_DAYS). */
+        history: series.slice(-HISTORY_DAYS),
       });
     }
     return result;
@@ -108,6 +114,64 @@ export const goalsRouter = router({
         .insert(savingsGoalAccount)
         .values(ownedIds.map((accountId) => ({ goalId, accountId })));
       return { id: goalId };
+    }),
+
+  /**
+   * Edit a goal (KOI-286). Only the given fields change. `accountIds`, when
+   * given, replaces the linked accounts — every one must be the caller's.
+   */
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(80).optional(),
+        targetAmount: z.number().positive().optional(),
+        targetDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .optional(),
+        accountIds: z.array(z.string().uuid()).min(1).max(50).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const [goal] = await db
+        .select({ id: savingsGoal.id })
+        .from(savingsGoal)
+        .where(and(eq(savingsGoal.id, input.id), eq(savingsGoal.userId, userId)))
+        .limit(1);
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND", message: "Goal not found" });
+
+      const accountIds = input.accountIds ? [...new Set(input.accountIds)] : undefined;
+      if (accountIds) {
+        const owned = await db
+          .select({ id: financialAccount.id })
+          .from(financialAccount)
+          .where(and(eq(financialAccount.userId, userId), inArray(financialAccount.id, accountIds)));
+        if (owned.length !== accountIds.length) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
+        }
+      }
+
+      const fields = {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.targetAmount !== undefined && { targetAmount: input.targetAmount }),
+        ...(input.targetDate !== undefined && { targetDate: input.targetDate }),
+      };
+      await db.transaction(async (tx) => {
+        if (Object.keys(fields).length > 0) {
+          await tx
+            .update(savingsGoal)
+            .set(fields)
+            .where(and(eq(savingsGoal.id, goal.id), eq(savingsGoal.userId, userId)));
+        }
+        if (accountIds) {
+          await tx.delete(savingsGoalAccount).where(eq(savingsGoalAccount.goalId, goal.id));
+          await tx.insert(savingsGoalAccount).values(accountIds.map((accountId) => ({ goalId: goal.id, accountId })));
+        }
+      });
+      return { ok: true };
     }),
 
   remove: protectedProcedure
