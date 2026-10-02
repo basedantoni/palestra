@@ -182,12 +182,13 @@ function FeedItem({
   );
 }
 
-/** Edits change list rows, the spend summary, and budget spend. */
+/** Edits change list rows, the spend summary, budget spend, and cash flow. */
 function useInvalidateFinance() {
   const queryClient = useQueryClient();
   return () => {
     queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() });
     queryClient.invalidateQueries({ queryKey: trpc.budgets.pathKey() });
+    queryClient.invalidateQueries({ queryKey: trpc.finance.pathKey() });
   };
 }
 
