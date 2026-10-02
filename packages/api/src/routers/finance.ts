@@ -2,12 +2,13 @@ import { and, eq, gte, min } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { transaction } from "@life-tracker/db/schema/index";
+import { balanceSnapshot, financialAccount, transaction } from "@life-tracker/db/schema/index";
 import { addMonths, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { calendarMonthOf } from "../lib/budget-spend";
 import { cashFlow } from "../lib/cash-flow";
+import { netWorthHistory } from "../lib/net-worth";
 import { getUserTimezone } from "../lib/user-timezone";
 
 export const financeRouter = router({
@@ -42,4 +43,27 @@ export const financeRouter = router({
         firstMonth: first?.date ? calendarMonthOf(first.date) : null,
       });
     }),
+
+  /**
+   * Weekly Net Worth over all Balance Snapshot history (linked accounts only),
+   * plus `current` and `change30d`. See lib/net-worth.ts and ADR 0003.
+   */
+  netWorthHistory: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const [accounts, snapshots] = await Promise.all([
+      db
+        .select({ id: financialAccount.id, type: financialAccount.type })
+        .from(financialAccount)
+        .where(eq(financialAccount.userId, userId)),
+      db
+        .select({
+          accountId: balanceSnapshot.accountId,
+          asOfDate: balanceSnapshot.asOfDate,
+          balance: balanceSnapshot.balance,
+        })
+        .from(balanceSnapshot)
+        .where(eq(balanceSnapshot.userId, userId)),
+    ]);
+    return netWorthHistory(accounts, snapshots);
+  }),
 });
