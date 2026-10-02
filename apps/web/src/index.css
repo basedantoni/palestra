@@ -28,6 +28,8 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
+  --chart-income: oklch(0.6 0.15 150);
+  --chart-spend: oklch(0.6 0.21 27);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -63,6 +65,8 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
+  --chart-income: oklch(0.72 0.16 150);
+  --chart-spend: oklch(0.7 0.18 25);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -88,6 +92,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-income: var(--chart-income);
+  --color-chart-spend: var(--chart-spend);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
