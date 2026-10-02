@@ -22,7 +22,7 @@ export interface SpendTransaction {
  * midnight of the bank's posted date, so read them in UTC — converting to the
  * user's timezone would push the 1st of a month into the previous one.
  */
-function calendarMonthOf(date: Date): string {
+export function calendarMonthOf(date: Date): string {
   return date.toISOString().slice(0, 7);
 }
 

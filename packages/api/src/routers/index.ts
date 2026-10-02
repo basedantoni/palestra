@@ -6,6 +6,7 @@ import { categoriesRouter } from "./categories";
 import { goalsRouter } from "./goals";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
+import { financeRouter } from "./finance";
 import { importRouter } from "./import";
 import { notificationsRouter } from "./notifications";
 import { plaidRouter } from "./plaid";
@@ -46,5 +47,6 @@ export const appRouter = router({
   budgets: budgetsRouter,
   transactions: transactionsRouter,
   goals: goalsRouter,
+  finance: financeRouter,
 });
 export type AppRouter = typeof appRouter;
