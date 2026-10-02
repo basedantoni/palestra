@@ -30,7 +30,15 @@ export interface CashFlowSummary {
 }
 
 /** Float sums drift (0.1 + 0.2); money is shown to the cent. */
-const cents = (n: number) => Math.round(n * 100) / 100;
+export const cents = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Counts toward Spend (GLOSSARY.md, ADR 0002): a non-excluded expense, with or
+ * without a category. Refunds are negative amounts and net in.
+ */
+export function isSpend(t: Pick<CashFlowTransaction, "flow" | "excluded">): boolean {
+  return t.flow === "expense" && !t.excluded;
+}
 
 /**
  * Income, Spend and Net for the `months` calendar months ending at
@@ -54,7 +62,7 @@ export function cashFlow(
   for (const t of transactions) {
     const month = totals.get(calendarMonthOf(t.date));
     if (!month || t.excluded) continue;
-    if (t.flow === "expense") month.spend += t.amount;
+    if (isSpend(t)) month.spend += t.amount;
     else if (t.flow === "income") month.income -= t.amount;
   }
 

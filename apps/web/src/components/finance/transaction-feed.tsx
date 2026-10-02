@@ -24,7 +24,8 @@ function formatDay(day: string): string {
 export type TransactionFilters = {
   period?: TransactionPeriod;
   accountIds?: string[];
-  categoryId?: string;
+  /** null = Uncategorized. */
+  categoryId?: string | null;
 };
 
 type Txn = RouterOutputs["transactions"]["list"]["items"][number];

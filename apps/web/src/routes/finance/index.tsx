@@ -10,6 +10,7 @@ import { BudgetGrid } from "@/components/finance/budget-grid";
 import { type CashFlow, CashFlowChart, CashFlowTiles } from "@/components/finance/cash-flow";
 import { GoalsList } from "@/components/finance/goals-list";
 import { NetWorthChart, NetWorthTile } from "@/components/finance/net-worth";
+import { SpendByCategory } from "@/components/finance/spend-by-category";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
 import { SyncNowButton } from "@/components/finance/sync-now-button";
@@ -81,6 +82,11 @@ function FinanceOverview() {
           <Section title="Income vs spend">
             <CashFlowChart data={cashFlow.data} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
           </Section>
+          {selectedMonth && (
+            <Section title="Spend by category">
+              <SpendByCategory monthKey={selectedMonth} />
+            </Section>
+          )}
         </>
       )}
       {hasAccounts && netWorth.data && (

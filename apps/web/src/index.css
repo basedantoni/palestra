@@ -30,6 +30,14 @@
   --chart-5: oklch(0.424 0.199 265.638);
   --chart-income: oklch(0.6 0.15 150);
   --chart-spend: oklch(0.6 0.21 27);
+  /* Spend-by-category slots: green and red left out so they don't read as income/spend. */
+  --chart-cat-1: #2a78d6;
+  --chart-cat-2: #eb6834;
+  --chart-cat-3: #1baf7a;
+  --chart-cat-4: #eda100;
+  --chart-cat-5: #e87ba4;
+  --chart-cat-6: #4a3aa7;
+  --chart-cat-other: oklch(0.75 0 0);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -67,6 +75,13 @@
   --chart-5: oklch(0.424 0.199 265.638);
   --chart-income: oklch(0.72 0.16 150);
   --chart-spend: oklch(0.7 0.18 25);
+  --chart-cat-1: #3987e5;
+  --chart-cat-2: #d95926;
+  --chart-cat-3: #199e70;
+  --chart-cat-4: #c98500;
+  --chart-cat-5: #d55181;
+  --chart-cat-6: #9085e9;
+  --chart-cat-other: oklch(0.5 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

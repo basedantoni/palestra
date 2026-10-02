@@ -9,6 +9,9 @@ import { trpc } from "@/utils/trpc";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { TransactionPeriodPicker } from "@/components/finance/transaction-period-picker";
 
+/** `category` value for transactions with no category (sent to the API as null). */
+const UNCATEGORIZED = "uncategorized";
+
 // Filters live in the URL so a filtered view survives reloads and can be shared.
 // No period params = the current month.
 const transactionsSearchSchema = z.object({
@@ -16,7 +19,7 @@ const transactionsSearchSchema = z.object({
   preset: z.enum(TRANSACTION_PERIOD_PRESETS).optional().catch(undefined),
   all: z.boolean().optional().catch(undefined),
   accounts: z.array(z.string().uuid()).optional().catch(undefined),
-  category: z.string().uuid().optional().catch(undefined),
+  category: z.union([z.string().uuid(), z.literal(UNCATEGORIZED)]).optional().catch(undefined),
 });
 type TransactionsSearch = z.infer<typeof transactionsSearchSchema>;
 
@@ -61,7 +64,11 @@ function TransactionsPage() {
   const accountIds = (search.accounts ?? []).filter(
     (id) => !accounts || accounts.some((a) => a.id === id),
   );
-  const filters = { period, accountIds, categoryId: search.category };
+  const filters = {
+    period,
+    accountIds,
+    categoryId: search.category === UNCATEGORIZED ? null : search.category,
+  };
   const { data: summary } = useQuery(trpc.transactions.summary.queryOptions(filters));
 
   const update = (next: Partial<TransactionsSearch>) =>
@@ -108,6 +115,7 @@ function TransactionsPage() {
           className="ml-auto rounded-md border border-border bg-background px-2 py-1 text-xs"
         >
           <option value="">All categories</option>
+          <option value={UNCATEGORIZED}>Uncategorized</option>
           {(categories ?? []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
