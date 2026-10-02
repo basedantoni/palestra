@@ -1,25 +1,16 @@
-import { and, desc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, financialAccount, transaction } from "@life-tracker/db/schema/index";
 
-import {
-  TRANSACTION_PERIOD_PRESETS,
-  resolvePeriodBounds,
-  todayInTimeZone,
-} from "@life-tracker/shared";
+import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
-
-export const periodSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("month"), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
-  z.object({ kind: z.literal("preset"), preset: z.enum(TRANSACTION_PERIOD_PRESETS) }),
-  z.object({ kind: z.literal("all") }),
-]);
 
 const filtersSchema = z.object({
   period: periodSchema.default({ kind: "all" }),
@@ -27,22 +18,6 @@ const filtersSchema = z.object({
   /** A category, or null for Uncategorized; omitted = every category. */
   categoryId: z.string().uuid().nullable().optional(),
 });
-
-/**
- * WHERE conditions for transaction dates within inclusive calendar-day bounds
- * (from `resolvePeriodBounds`). Plaid dates are stored as UTC midnight of the
- * bank's calendar date, so bounds compare whole UTC days.
- */
-export function dateBoundConditions({ from, to }: { from?: string; to?: string }): SQL[] {
-  const conds: SQL[] = [];
-  if (from) conds.push(gte(transaction.date, new Date(`${from}T00:00:00.000Z`)));
-  if (to) {
-    const dayAfter = new Date(`${to}T00:00:00.000Z`);
-    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-    conds.push(lt(transaction.date, dayAfter));
-  }
-  return conds;
-}
 
 /** WHERE conditions for the caller's filtered transactions; "today" (for shortcut periods) is the user's local date. */
 async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {

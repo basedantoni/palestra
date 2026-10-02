@@ -10,8 +10,8 @@ import { calendarMonthOf } from "../lib/budget-spend";
 import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
 import { categorySpend } from "../lib/category-spend";
 import { netWorthHistory } from "../lib/net-worth";
+import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { getUserTimezone } from "../lib/user-timezone";
-import { dateBoundConditions, periodSchema } from "./transactions";
 
 const cashFlowRanges = Object.keys(CASH_FLOW_RANGES) as [CashFlowRange, ...CashFlowRange[]];
 
@@ -28,23 +28,25 @@ export const financeRouter = router({
       const userId = ctx.session.user.id;
       const currentMonth = todayInTimeZone(new Date(), await getUserTimezone(userId)).slice(0, 7);
       const months = CASH_FLOW_RANGES[input.range];
-      const inWindow = dateBoundConditions({
-        from: months === null ? undefined : `${addMonths(currentMonth, 1 - months)}-01`,
-      });
+      const ofUser = eq(transaction.userId, userId);
+      const columns = {
+        amount: transaction.amount,
+        flow: transaction.flow,
+        excluded: transaction.excluded,
+        date: transaction.date,
+      };
 
+      // All history loads every transaction, so the earliest of them starts the range.
+      if (months === null) {
+        const txns = await db.select(columns).from(transaction).where(ofUser);
+        return cashFlow(txns, { currentMonth, months });
+      }
+
+      const inWindow = dateBoundConditions({ from: `${addMonths(currentMonth, 1 - months)}-01` });
       const [[first], txns] = await Promise.all([
-        db.select({ date: min(transaction.date) }).from(transaction).where(eq(transaction.userId, userId)),
-        db
-          .select({
-            amount: transaction.amount,
-            flow: transaction.flow,
-            excluded: transaction.excluded,
-            date: transaction.date,
-          })
-          .from(transaction)
-          .where(and(eq(transaction.userId, userId), ...inWindow)),
+        db.select({ date: min(transaction.date) }).from(transaction).where(ofUser),
+        db.select(columns).from(transaction).where(and(ofUser, ...inWindow)),
       ]);
-
       return cashFlow(txns, {
         currentMonth,
         months,

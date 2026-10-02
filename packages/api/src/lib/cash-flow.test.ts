@@ -53,11 +53,10 @@ describe("cashFlow months", () => {
     expect(months.map((m) => m.monthKey)).toEqual(["2026-05", "2026-06"]);
   });
 
-  it("with no month limit, spans from the user's first transaction month to the current month", () => {
-    const { months } = cashFlow([tx("2025-11-20", 40, "expense")], {
+  it("with no month limit, spans from the earliest transaction's month to the current month", () => {
+    const { months } = cashFlow([tx("2026-01-05", 0, "transfer"), tx("2025-11-20", 40, "expense")], {
       currentMonth: "2026-02",
       months: null,
-      firstMonth: "2025-11",
     });
     expect(months.map((m) => [m.monthKey, m.spend])).toEqual([
       ["2025-11", 40],
@@ -77,7 +76,7 @@ describe("cashFlow months", () => {
 
   it("returns no months for a user with no transactions", () => {
     expect(cashFlow([], { currentMonth: "2026-06", months: 6, firstMonth: null }).months).toEqual([]);
-    expect(cashFlow([], { currentMonth: "2026-06", months: null, firstMonth: null }).months).toEqual([]);
+    expect(cashFlow([], { currentMonth: "2026-06", months: null }).months).toEqual([]);
   });
 });
 
@@ -122,7 +121,7 @@ describe("cashFlow summary", () => {
     ];
     const opts = { currentMonth: "2026-06", firstMonth: "2025-03" };
     const summaries = Object.values(CASH_FLOW_RANGES).map((months) => cashFlow(txns, { ...opts, months }).summary);
-    expect(summaries).toEqual([0, 1, 2].map(() => ({ avgNet: 500, savingsRate: 0.25 })));
+    expect(summaries).toEqual(Object.keys(CASH_FLOW_RANGES).map(() => ({ avgNet: 500, savingsRate: 0.25 })));
   });
 
   it("has no savings rate when income is zero", () => {

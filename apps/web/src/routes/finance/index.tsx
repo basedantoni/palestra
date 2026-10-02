@@ -2,8 +2,8 @@ import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
-import { CASH_FLOW_RANGES, type CashFlowRange } from "@life-tracker/api/lib/cash-flow";
-import { addMonths, type TransactionPeriod } from "@life-tracker/shared";
+import type { CashFlowRange } from "@life-tracker/api/lib/cash-flow";
+import type { TransactionPeriod } from "@life-tracker/shared";
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc } from "@/utils/trpc";
@@ -45,42 +45,35 @@ function Section({ title, to, children }: { title: string; to?: string; children
 }
 
 /**
- * The cash flow range, the Month the overview focuses on ("YYYY-MM": the
- * month tapped on the chart, else the current month; null while cash flow
- * loads or with no transactions), and the category donut's period (that
- * month unless picked in the donut).
+ * The cash flow range and the overview's period: the category donut's
+ * TransactionPeriod (the current month until picked in the donut or by tapping
+ * a bar; null while cash flow loads or with no transactions). The chart
+ * highlights the period's month when it is a month the chart shows, else no bar.
  */
-function useOverviewFilters(today: string, hasAccounts: boolean) {
-  const [range, setRangeState] = useState<CashFlowRange>("6M");
-  const [picked, setPicked] = useState<string | null>(null);
-  const [donutPeriod, setDonutPeriod] = useState<TransactionPeriod | null>(null);
+function useOverviewFilters(hasAccounts: boolean) {
+  const [range, setRange] = useState<CashFlowRange>("6M");
+  const [picked, setPicked] = useState<TransactionPeriod | null>(null);
   // Keep the old bars (and tiles) on screen while another range loads.
   const cashFlow = useQuery({
     ...trpc.finance.cashFlow.queryOptions({ range }),
     enabled: hasAccounts,
     placeholderData: keepPreviousData,
   });
-  const selectedMonth = picked ?? cashFlow.data?.months.at(-1)?.monthKey ?? null;
-
-  const setRange = (next: CashFlowRange) => {
-    const months = CASH_FLOW_RANGES[next];
-    // A selected month the new range no longer shows falls back to the current month.
-    if (picked && months !== null && picked < addMonths(today.slice(0, 7), 1 - months)) setPicked(null);
-    setRangeState(next);
-  };
-  const selectMonth = (monthKey: string) => {
-    setPicked(monthKey);
-    setDonutPeriod(null); // tapping a bar moves the donut to that month
-  };
+  const months = cashFlow.data?.months ?? [];
+  // The server's current month, so the default matches the chart's partial month.
+  const currentMonth = months.at(-1)?.monthKey;
+  const period: TransactionPeriod | null = picked ?? (currentMonth ? { kind: "month", month: currentMonth } : null);
+  const selectedMonth =
+    period?.kind === "month" && months.some((m) => m.monthKey === period.month) ? period.month : null;
 
   return {
     cashFlow,
     range,
     setRange,
     selectedMonth,
-    selectMonth,
-    donutPeriod: donutPeriod ?? (selectedMonth ? { kind: "month", month: selectedMonth } : null),
-    setDonutPeriod,
+    selectMonth: (month: string) => setPicked({ kind: "month", month }),
+    period,
+    setPeriod: setPicked,
   } as const;
 }
 
@@ -88,8 +81,7 @@ function FinanceOverview() {
   const today = useFinanceToday();
   const accounts = useQuery(trpc.plaid.listAccounts.queryOptions());
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
-  const { cashFlow, range, setRange, selectedMonth, selectMonth, donutPeriod, setDonutPeriod } =
-    useOverviewFilters(today, hasAccounts);
+  const { cashFlow, range, setRange, selectedMonth, selectMonth, period, setPeriod } = useOverviewFilters(hasAccounts);
   const netWorth = useQuery({ ...trpc.finance.netWorthHistory.queryOptions(), enabled: hasAccounts });
 
   return (
@@ -123,9 +115,9 @@ function FinanceOverview() {
               onSelectMonth={selectMonth}
             />
           </Section>
-          {donutPeriod && (
+          {period && (
             <Section title="Spend by category">
-              <SpendByCategory period={donutPeriod} today={today} onPeriodChange={setDonutPeriod} />
+              <SpendByCategory period={period} today={today} onPeriodChange={setPeriod} />
             </Section>
           )}
         </>

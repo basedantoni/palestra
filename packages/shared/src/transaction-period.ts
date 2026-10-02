@@ -4,6 +4,7 @@
  * All dates are calendar dates ("YYYY-MM-DD"): Plaid reports transactions by
  * the bank's calendar date, so only "today" depends on the user's timezone.
  */
+import z from "zod";
 
 export const TRANSACTION_PERIOD_PRESETS = ["90d", "6m", "ytd"] as const;
 export type TransactionPeriodPreset = (typeof TRANSACTION_PERIOD_PRESETS)[number];
@@ -109,12 +110,19 @@ export function stepPeriod(period: TransactionPeriod, delta: number, today: stri
   return { kind: "month", month: target > current ? current : target };
 }
 
-/** A period as `/finance/transactions` search params. No period params = the current month. */
-export interface TransactionPeriodSearch {
-  month?: string;
-  preset?: TransactionPeriodPreset;
-  all?: boolean;
-}
+/** A calendar month key, "YYYY-MM". */
+export const MONTH_KEY_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * A period as `/finance/transactions` search params. No period params = the
+ * current month. Invalid values are dropped rather than failing the route.
+ */
+export const transactionPeriodSearchSchema = z.object({
+  month: z.string().regex(MONTH_KEY_REGEX).optional().catch(undefined),
+  preset: z.enum(TRANSACTION_PERIOD_PRESETS).optional().catch(undefined),
+  all: z.boolean().optional().catch(undefined),
+});
+export type TransactionPeriodSearch = z.infer<typeof transactionPeriodSearchSchema>;
 
 export function searchToPeriod(search: TransactionPeriodSearch, today: string): TransactionPeriod {
   if (search.all) return { kind: "all" };

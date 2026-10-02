@@ -43,9 +43,12 @@ export function CashFlowTiles({ data }: { data: CashFlow }) {
   );
 }
 
-/** Selected month full strength, others dimmed; the partial month is faded further. */
+/**
+ * Selected month full strength, others dimmed; with none selected every bar is
+ * full strength. The partial month is faded further.
+ */
 function barOpacity(m: CashFlowMonth, selected: string | null): number {
-  if (m.monthKey === selected) return m.isPartial ? 0.7 : 1;
+  if (selected === null || m.monthKey === selected) return m.isPartial ? 0.7 : 1;
   return m.isPartial ? 0.25 : 0.5;
 }
 
