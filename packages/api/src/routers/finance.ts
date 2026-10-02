@@ -1,13 +1,14 @@
-import { and, eq, gte, min } from "drizzle-orm";
+import { and, eq, gte, lt, min } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { transaction } from "@life-tracker/db/schema/index";
+import { category, transaction } from "@life-tracker/db/schema/index";
 import { addMonths, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { calendarMonthOf } from "../lib/budget-spend";
 import { cashFlow } from "../lib/cash-flow";
+import { categorySpend } from "../lib/category-spend";
 import { getUserTimezone } from "../lib/user-timezone";
 
 export const financeRouter = router({
@@ -41,5 +42,32 @@ export const financeRouter = router({
         months: input.months,
         firstMonth: first?.date ? calendarMonthOf(first.date) : null,
       });
+    }),
+
+  /**
+   * Spend per category for one Month, largest first, Uncategorized as its own
+   * row (categoryId null). Rows add up to that Month's spend in `cashFlow`.
+   */
+  spendByCategory: protectedProcedure
+    .input(z.object({ monthKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }))
+    .query(async ({ ctx, input }) => {
+      // Plaid dates are UTC midnight of the bank's calendar date (see calendarMonthOf).
+      const from = new Date(`${input.monthKey}-01T00:00:00.000Z`);
+      const to = new Date(`${addMonths(input.monthKey, 1)}-01T00:00:00.000Z`);
+      const txns = await db
+        .select({
+          amount: transaction.amount,
+          flow: transaction.flow,
+          excluded: transaction.excluded,
+          date: transaction.date,
+          categoryId: transaction.categoryId,
+          categoryName: category.name,
+        })
+        .from(transaction)
+        .leftJoin(category, eq(category.id, transaction.categoryId))
+        .where(
+          and(eq(transaction.userId, ctx.session.user.id), gte(transaction.date, from), lt(transaction.date, to)),
+        );
+      return categorySpend(txns, input.monthKey);
     }),
 });

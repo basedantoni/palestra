@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -24,7 +24,8 @@ const periodSchema = z.discriminatedUnion("kind", [
 const filtersSchema = z.object({
   period: periodSchema.default({ kind: "all" }),
   accountIds: z.array(z.string().uuid()).max(50).default([]),
-  categoryId: z.string().uuid().optional(),
+  /** A category, or null for Uncategorized; omitted = every category. */
+  categoryId: z.string().uuid().nullable().optional(),
 });
 
 /**
@@ -44,7 +45,8 @@ async function filterConditions(userId: string, filters: z.infer<typeof filtersS
     conds.push(lt(transaction.date, dayAfter));
   }
   if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
-  if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
+  if (filters.categoryId === null) conds.push(isNull(transaction.categoryId));
+  else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
   return conds;
 }
 

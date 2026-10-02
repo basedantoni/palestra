@@ -88,6 +88,18 @@ describe("transactions.list filters", () => {
     ]);
   });
 
+  it("filters to uncategorized transactions when categoryId is null", async () => {
+    userTimezoneIs(null);
+    let where: SQL | undefined;
+    mockDb.select.mockReturnValueOnce(makeChain([], (clause) => (where = clause as SQL)));
+
+    await makeCaller().transactions.list({ period: { kind: "all" }, categoryId: null });
+
+    const query = new PgDialect().sqlToQuery(where!);
+    expect(query.sql).toMatch(/"category_id" is null/);
+    expect(query.params).toEqual([USER_ID]);
+  });
+
   it("applies no date bounds for all time and no account filter when none chosen", async () => {
     userTimezoneIs(null);
     const params = selectReturning([]);
