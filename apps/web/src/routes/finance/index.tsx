@@ -69,16 +69,18 @@ function FinanceOverview() {
         </div>
       </div>
       {/* No accounts linked: charts stay hidden; the Connect button above is the CTA. */}
+      {hasAccounts && (netWorth.data || cashFlow.data) && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {netWorth.data && <NetWorthTile data={netWorth.data} />}
+          {cashFlow.data && <CashFlowTiles data={cashFlow.data} />}
+        </div>
+      )}
       {hasAccounts && cashFlow.isError && (
         <p className="text-sm text-destructive">Couldn't load cash flow.</p>
       )}
       {hasAccounts && cashFlow.isPending && <Skeleton className="h-80 w-full" />}
       {hasAccounts && cashFlow.data && (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {netWorth.data && <NetWorthTile data={netWorth.data} />}
-            <CashFlowTiles data={cashFlow.data} />
-          </div>
           <Section title="Income vs spend">
             <CashFlowChart data={cashFlow.data} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
           </Section>

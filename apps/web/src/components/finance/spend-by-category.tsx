@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/utils/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { monthLabel } from "./cash-flow";
+import { monthLabel } from "./month-label";
 import { CurrencyTooltip, usd } from "./currency-tooltip";
 
 /** Donut slots in rank order; "Other" is neutral. */

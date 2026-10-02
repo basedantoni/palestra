@@ -17,7 +17,7 @@ export interface CategorySpendRow {
   name: string;
   /** Net of refunds, so it can be negative. */
   spend: number;
-  /** Fraction of the Month's total Spend; null when that total is not positive. */
+  /** Fraction of the positive categories' total Spend (negative for a net-refund row); null when there is none. */
   share: number | null;
 }
 
@@ -36,7 +36,8 @@ export function categorySpend(transactions: CategorySpendTransaction[], monthKey
   const rows = [...byCategory]
     .map(([categoryId, { name, spend }]) => ({ categoryId, name, spend: cents(spend) }))
     .filter((r) => r.spend !== 0);
-  const total = rows.reduce((s, r) => s + r.spend, 0);
+  // Against positive categories only, so positive shares sum to 100% even in a refund-heavy month.
+  const total = rows.reduce((s, r) => s + Math.max(r.spend, 0), 0);
   return rows
     .toSorted((a, b) => b.spend - a.spend)
     .map((r) => ({ ...r, share: total > 0 ? r.spend / total : null }));

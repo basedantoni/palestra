@@ -1,19 +1,15 @@
 import { useState } from "react";
-import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
+import { monthLabel } from "./month-label";
+
 type BudgetRow = RouterOutputs["budgets"]["forMonth"][number];
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-
-function monthLabel(month: string, pattern = "MMMM"): string {
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  return format(new Date(y, m - 1, 1), pattern);
-}
 
 function SpendBar({ spent, limit }: { spent: number; limit: number }) {
   const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : spent > 0 ? 100 : 0;
@@ -97,7 +93,7 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
             disabled={carryOver.isPending}
             onClick={() => carryOver.mutate({ monthKey: month })}
           >
-            Copy {monthLabel(preview.fromMonth)}'s limits ({preview.count})
+            Copy {monthLabel(preview.fromMonth, "MMMM")}'s limits ({preview.count})
           </Button>
         </div>
       )}
@@ -210,7 +206,7 @@ function BudgetSheetBody({ row, month, onDone }: { row: BudgetRow; month: string
               disabled={remove.isPending}
               onClick={() => remove.mutate({ categoryId: row.categoryId, monthKey: month })}
             >
-              Remove for {monthLabel(month)}
+              Remove for {monthLabel(month, "MMMM")}
             </Button>
           )}
         </div>

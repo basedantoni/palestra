@@ -12,7 +12,7 @@ import {
 } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { classifyFlow } from "../lib/transaction-flow";
+import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
 const periodSchema = z.discriminatedUnion("kind", [
@@ -155,36 +155,35 @@ export const transactionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const owned = and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id));
-      const [row] = await db
-        .select({
-          pending: transaction.pending,
-          plaidCategoryPrimary: transaction.plaidCategoryPrimary,
-          transferPairId: transaction.transferPairId,
-        })
-        .from(transaction)
-        .where(owned)
-        .limit(1);
-      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
-      // Posting issues a new Plaid id, so an override on a pending row would be lost.
-      if (row.pending) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Pending transactions can't be changed until they post",
-        });
-      }
-
-      const { transferPairId } = row;
       await db.transaction(async (tx) => {
+        // Locked so a concurrent sync/match can't change pending or the pair between read and write.
+        const [row] = await tx
+          .select({
+            pending: transaction.pending,
+            plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+            transferPairId: transaction.transferPairId,
+          })
+          .from(transaction)
+          .where(owned)
+          .limit(1)
+          .for("update");
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+        // Posting issues a new Plaid id, so an override on a pending row would be lost.
+        if (row.pending) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Pending transactions can't be changed until they post",
+          });
+        }
+
+        const flow = effectiveFlow(input.flow, row.plaidCategoryPrimary);
         await tx
           .update(transaction)
-          .set(
-            input.flow
-              ? { flow: input.flow, flowOverridden: true }
-              : { flow: classifyFlow(row.plaidCategoryPrimary), flowOverridden: false },
-          )
+          .set({ flow, flowOverridden: input.flow !== null })
           .where(owned);
-        // Changing either leg breaks the Transfer Pair; the other leg stays an unpaired transfer.
-        if (transferPairId) {
+        // A leg that is no longer a transfer breaks the Transfer Pair; the other leg stays an unpaired transfer.
+        const { transferPairId } = row;
+        if (transferPairId && flow !== "transfer") {
           await tx
             .update(transaction)
             .set({ transferPairId: null })

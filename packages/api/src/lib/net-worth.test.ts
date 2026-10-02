@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { netWorthHistory, type NetWorthAccount, type NetWorthSnapshot } from "./net-worth";
+import { carryForwardSeries, netWorthHistory, type NetWorthAccount, type NetWorthSnapshot } from "./net-worth";
 
 const checking: NetWorthAccount = { id: "chk", type: "depository" };
 const brokerage: NetWorthAccount = { id: "inv", type: "investment" };
@@ -106,6 +106,23 @@ describe("netWorthHistory: change30d", () => {
   });
 });
 
+describe("carryForwardSeries (goal balance history)", () => {
+  it("carries each account's last balance forward on days only the other account was snapshotted", () => {
+    const series = carryForwardSeries([
+      snap("chk", "2026-06-01", 1000),
+      snap("inv", "2026-06-02", 5000),
+      snap("chk", "2026-06-03", 1200),
+      snap("inv", "2026-06-05", 5500),
+    ]);
+    expect(series).toEqual([
+      { asOfDate: "2026-06-01", balance: 1000 },
+      { asOfDate: "2026-06-02", balance: 6000 },
+      { asOfDate: "2026-06-03", balance: 6200 },
+      { asOfDate: "2026-06-05", balance: 6700 },
+    ]);
+  });
+});
+
 describe("netWorthHistory: missing before first snapshot", () => {
   it("marks points before a newly linked account's first snapshot partial instead of counting it as $0", () => {
     const r = netWorthHistory(
@@ -132,6 +149,17 @@ describe("netWorthHistory: missing before first snapshot", () => {
     );
     expect(r.current).toBe(52500);
     expect(r.change30d).toBeNull();
+  });
+
+  it("ignores an account that has never been snapshotted, so it doesn't mark every point partial", () => {
+    // Plaid returned a null balance for the card, so it has no snapshots at all.
+    const r = netWorthHistory(
+      [checking, card],
+      [snap("chk", "2026-06-01", 2000), snap("chk", "2026-07-05", 2500)],
+    );
+    expect(r.points.every((p) => !p.partial)).toBe(true);
+    expect(r.current).toBe(2500);
+    expect(r.change30d).toBe(500);
   });
 
   it("ignores snapshots of accounts that are no longer linked", () => {

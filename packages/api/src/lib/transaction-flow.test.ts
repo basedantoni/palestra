@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
+import { classifyFlow, effectiveFlow, matchInternalTransfers } from "./transaction-flow";
 
 describe("classifyFlow", () => {
   it("maps INCOME primary to income", () => {
@@ -17,6 +17,18 @@ describe("classifyFlow", () => {
     expect(classifyFlow("GENERAL_MERCHANDISE")).toBe("expense");
     expect(classifyFlow(null)).toBe("expense");
     expect(classifyFlow(undefined)).toBe("expense");
+  });
+});
+
+describe("effectiveFlow (setFlow keeps a Transfer Pair only while this is 'transfer')", () => {
+  it("uses an explicit override as-is", () => {
+    expect(effectiveFlow("transfer", "FOOD_AND_DRINK")).toBe("transfer");
+    expect(effectiveFlow("expense", "TRANSFER_OUT")).toBe("expense");
+  });
+
+  it("falls back to the Plaid classification on reset to automatic", () => {
+    expect(effectiveFlow(null, "TRANSFER_IN")).toBe("transfer");
+    expect(effectiveFlow(null, "INCOME")).toBe("income");
   });
 });
 

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
+import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -181,16 +182,6 @@ function FeedItem({
       )}
     </li>
   );
-}
-
-/** Edits change list rows, the spend summary, budget spend, and cash flow. */
-function useInvalidateFinance() {
-  const queryClient = useQueryClient();
-  return () => {
-    queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.budgets.pathKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.finance.pathKey() });
-  };
 }
 
 const FLOW_LABELS = { income: "Income", expense: "Expense", transfer: "Transfer" } as const;
