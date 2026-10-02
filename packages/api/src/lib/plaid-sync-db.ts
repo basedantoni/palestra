@@ -14,7 +14,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { and, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import {
@@ -200,9 +200,15 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
 
   await linkTransferPairs(userId);
 
+  // A successful sync proves an errored login works again. Other statuses
+  // (e.g. pending_expiration) still need user action — leave them to ITEM
+  // webhooks so the reconnect banner isn't silently cleared.
   await db
     .update(plaidItem)
-    .set({ transactionCursor: nextCursor, status: "active" })
+    .set({
+      transactionCursor: nextCursor,
+      status: sql`case when ${plaidItem.status} = 'error' then 'active' else ${plaidItem.status} end`,
+    })
     .where(eq(plaidItem.id, plaidItemId));
 
   return {

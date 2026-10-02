@@ -6,6 +6,7 @@ import { BudgetGrid } from "@/components/finance/budget-grid";
 import { GoalsList } from "@/components/finance/goals-list";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
+import { SyncNowButton } from "@/components/finance/sync-now-button";
 import { ReconnectBanner } from "@/components/finance/reconnect-banner";
 
 export const Route = createFileRoute("/finance/")({
@@ -37,7 +38,10 @@ function FinanceOverview() {
     <div className="mx-auto max-w-3xl space-y-8 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Finance</h1>
-        <PlaidLinkButton />
+        <div className="flex items-start gap-2">
+          <SyncNowButton />
+          <PlaidLinkButton />
+        </div>
       </div>
       <ReconnectBanner />
       <Section title="Accounts" to="/finance/accounts">

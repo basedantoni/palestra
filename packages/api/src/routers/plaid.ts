@@ -12,6 +12,8 @@ import { protectedProcedure, router } from "../index";
 import { encryptToken } from "../lib/token-encryption";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
 import { removeFinancialAccount } from "../lib/plaid-account-remove";
+import { syncPlaidItem } from "../lib/plaid-sync-db";
+import { syncPlaidItemsForUser } from "../lib/plaid-sync-now";
 import {
   PLAID_COUNTRY_CODES,
   PLAID_PRODUCTS,
@@ -116,6 +118,16 @@ export const plaidRouter = router({
           });
       }
 
+      // Don't wait on Plaid's webhook (may be unset/unreachable in dev). Fire-
+      // and-forget: right after link Plaid can answer PRODUCT_NOT_READY, in which
+      // case the INITIAL_UPDATE webhook or a manual syncNow picks it up.
+      syncPlaidItem(resolvedItemId).catch((err) =>
+        console.error(
+          `[plaid] initial sync failed for plaid_item ${resolvedItemId}:`,
+          describePlaidError(err),
+        ),
+      );
+
       return {
         itemId: resolvedItemId,
         accountCount: accountsRes.data.accounts.length,
@@ -142,6 +154,15 @@ export const plaidRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
       }
       return { itemRemoved: result.itemRemoved };
+    }),
+
+  /** Sync the caller's Plaid items now instead of waiting on a webhook. */
+  syncNow: protectedProcedure
+    .input(z.object({ plaidItemId: z.string().uuid().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const results = await syncPlaidItemsForUser(ctx.session.user.id, input.plaidItemId);
+      if (!results) throw new TRPCError({ code: "NOT_FOUND", message: "Plaid item not found" });
+      return results;
     }),
 
   /** List linked institutions + their connection health (for the reconnect banner). */

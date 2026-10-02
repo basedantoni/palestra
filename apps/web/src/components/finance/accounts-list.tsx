@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
+import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,22 +38,14 @@ export function netWorth(accounts: Account[]): number {
 
 export function AccountsList() {
   const { data: accounts, isLoading } = useQuery(trpc.plaid.listAccounts.queryOptions());
-  const queryClient = useQueryClient();
+  const invalidateFinance = useInvalidateFinance();
   const [pendingRemoval, setPendingRemoval] = useState<Account | null>(null);
 
   const removeAccount = useMutation(
     trpc.plaid.removeAccount.mutationOptions({
       onSuccess: () => {
-        // Removal cascades to transactions/goal links and can drop the Plaid
-        // item, so refresh everything finance-derived.
-        for (const queryKey of [
-          trpc.plaid.pathKey(),
-          trpc.transactions.pathKey(),
-          trpc.budgets.pathKey(),
-          trpc.goals.pathKey(),
-        ]) {
-          queryClient.invalidateQueries({ queryKey });
-        }
+        // Removal cascades to transactions/goal links and can drop the Plaid item.
+        invalidateFinance();
         setPendingRemoval(null);
       },
     }),

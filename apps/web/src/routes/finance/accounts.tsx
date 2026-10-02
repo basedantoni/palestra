@@ -3,6 +3,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { AccountsList } from "@/components/finance/accounts-list";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
+import { SyncNowButton } from "@/components/finance/sync-now-button";
 
 export const Route = createFileRoute("/finance/accounts")({
   component: AccountsPage,
@@ -19,7 +20,10 @@ function AccountsPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Accounts</h1>
-        <PlaidLinkButton />
+        <div className="flex items-start gap-2">
+          <SyncNowButton />
+          <PlaidLinkButton />
+        </div>
       </div>
       <AccountsList />
     </div>
