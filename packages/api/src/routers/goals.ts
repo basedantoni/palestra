@@ -14,20 +14,10 @@ import {
 
 import { protectedProcedure, router } from "../index";
 import { type BalancePoint, projectGoal } from "../lib/goal-projection";
+import { carryForwardSeries } from "../lib/net-worth";
 
 /** How many days of balance history the goal chart shows. */
 const HISTORY_DAYS = 180;
-
-/** Sum each account's daily snapshot into one balance series for the goal. */
-function snapshotsToSeries(
-  rows: Array<{ asOfDate: string; balance: number }>,
-): BalancePoint[] {
-  const byDate = new Map<string, number>();
-  for (const r of rows) byDate.set(r.asOfDate, (byDate.get(r.asOfDate) ?? 0) + r.balance);
-  return [...byDate.entries()]
-    .map(([asOfDate, balance]) => ({ asOfDate, balance }))
-    .sort((a, b) => a.asOfDate.localeCompare(b.asOfDate));
-}
 
 export const goalsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -48,10 +38,14 @@ export const goalsRouter = router({
       let series: BalancePoint[] = [];
       if (accountIds.length > 0) {
         const snaps = await db
-          .select({ asOfDate: balanceSnapshot.asOfDate, balance: balanceSnapshot.balance })
+          .select({
+            accountId: balanceSnapshot.accountId,
+            asOfDate: balanceSnapshot.asOfDate,
+            balance: balanceSnapshot.balance,
+          })
           .from(balanceSnapshot)
           .where(inArray(balanceSnapshot.accountId, accountIds));
-        series = snapshotsToSeries(snaps);
+        series = carryForwardSeries(snaps);
       }
 
       const projection = projectGoal({

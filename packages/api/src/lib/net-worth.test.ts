@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { netWorthHistory, type NetWorthAccount, type NetWorthSnapshot } from "./net-worth";
+import { carryForwardSeries, netWorthHistory, type NetWorthAccount, type NetWorthSnapshot } from "./net-worth";
 
 const checking: NetWorthAccount = { id: "chk", type: "depository" };
 const brokerage: NetWorthAccount = { id: "inv", type: "investment" };
@@ -103,6 +103,23 @@ describe("netWorthHistory: change30d", () => {
   it("is null with under 30 days of history", () => {
     const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 1000), snap("chk", "2026-06-20", 1500)]);
     expect(r.change30d).toBeNull();
+  });
+});
+
+describe("carryForwardSeries (goal balance history)", () => {
+  it("carries each account's last balance forward on days only the other account was snapshotted", () => {
+    const series = carryForwardSeries([
+      snap("chk", "2026-06-01", 1000),
+      snap("inv", "2026-06-02", 5000),
+      snap("chk", "2026-06-03", 1200),
+      snap("inv", "2026-06-05", 5500),
+    ]);
+    expect(series).toEqual([
+      { asOfDate: "2026-06-01", balance: 1000 },
+      { asOfDate: "2026-06-02", balance: 6000 },
+      { asOfDate: "2026-06-03", balance: 6200 },
+      { asOfDate: "2026-06-05", balance: 6700 },
+    ]);
   });
 });
 

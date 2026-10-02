@@ -40,14 +40,38 @@ const parseDay = (day: string) => {
   return new Date(y, m - 1, d, 12);
 };
 
+/** Each of `accountIds`' snapshots, oldest first; snapshots of other accounts are dropped. */
+function snapshotsByAccount(snapshots: NetWorthSnapshot[], accountIds: Iterable<string>) {
+  const history = new Map([...accountIds].map((id) => [id, [] as NetWorthSnapshot[]]));
+  for (const s of snapshots) history.get(s.accountId)?.push(s);
+  for (const list of history.values()) list.sort((a, b) => a.asOfDate.localeCompare(b.asOfDate));
+  return history;
+}
+
+/** Carry-forward: an account's balance on `day` is its last snapshot on or before it. */
+const balanceAsOf = (history: NetWorthSnapshot[], day: string) => history.findLast((s) => s.asOfDate <= day);
+
+/**
+ * Total balance of the given snapshots' accounts on each snapshot day, carrying
+ * each account's last balance forward (an account counts from its first
+ * snapshot on). Used for Savings Goal progress.
+ */
+export function carryForwardSeries(snapshots: NetWorthSnapshot[]): Array<{ asOfDate: string; balance: number }> {
+  const history = snapshotsByAccount(snapshots, new Set(snapshots.map((s) => s.accountId)));
+  const days = [...new Set(snapshots.map((s) => s.asOfDate))].toSorted();
+  // ponytail: O(days x snapshots) like netWorthHistory; fine for a goal's few accounts.
+  return days.map((asOfDate) => {
+    let balance = 0;
+    for (const list of history.values()) balance += balanceAsOf(list, asOfDate)?.balance ?? 0;
+    return { asOfDate, balance: cents(balance) };
+  });
+}
+
 export function netWorthHistory(
   accounts: NetWorthAccount[],
   snapshots: NetWorthSnapshot[],
 ): { points: NetWorthPoint[]; current: number | null; change30d: number | null } {
-  // Each linked account's snapshots, oldest first. Snapshots of unlinked accounts are dropped.
-  const history = new Map(accounts.map((a) => [a.id, [] as NetWorthSnapshot[]]));
-  for (const s of snapshots) history.get(s.accountId)?.push(s);
-  for (const list of history.values()) list.sort((a, b) => a.asOfDate.localeCompare(b.asOfDate));
+  const history = snapshotsByAccount(snapshots, accounts.map((a) => a.id));
 
   const days = [...history.values()].flat().map((s) => s.asOfDate).toSorted();
   const first = days[0];
@@ -63,7 +87,7 @@ export function netWorthHistory(
     let liabilities = 0;
     let partial = false;
     for (const a of tracked) {
-      const snap = history.get(a.id)!.findLast((s) => s.asOfDate <= day);
+      const snap = balanceAsOf(history.get(a.id)!, day);
       if (!snap) partial = true;
       else if (LIABILITY.has(a.type)) liabilities += snap.balance;
       else assets += snap.balance;
