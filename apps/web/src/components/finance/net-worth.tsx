@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type RouterOutputs } from "@/utils/trpc";
 
 import { StatTile } from "./cash-flow";
-import { CurrencyTooltip, signedUsd, usd } from "./currency-tooltip";
+import { CurrencyTooltip, isNegativeUsd, signedUsd, usd } from "./currency-tooltip";
 
 export type NetWorthHistory = RouterOutputs["finance"]["netWorthHistory"];
 
@@ -30,7 +30,7 @@ export function NetWorthTile({ data }: { data: NetWorthHistory }) {
       title="Net worth"
       value={data.current === null ? "—" : usd.format(data.current)}
       hint={data.change30d === null ? undefined : `${signedUsd(data.change30d)} in 30 days`}
-      negative={(data.current ?? 0) < 0}
+      negative={isNegativeUsd(data.current ?? 0)}
     />
   );
 }

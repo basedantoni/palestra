@@ -1,18 +1,13 @@
-import { format } from "date-fns";
 import { Bar, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { cn } from "@/lib/utils";
 import { type RouterOutputs } from "@/utils/trpc";
 
-import { CurrencyTooltip, signedUsd } from "./currency-tooltip";
+import { CurrencyTooltip, isNegativeUsd, signedUsd } from "./currency-tooltip";
+import { monthLabel } from "./month-label";
 
 export type CashFlow = RouterOutputs["finance"]["cashFlow"];
 type CashFlowMonth = CashFlow["months"][number];
-
-export function monthLabel(monthKey: string, pattern = "MMM"): string {
-  const [y, m] = monthKey.split("-").map(Number) as [number, number];
-  return format(new Date(y, m - 1, 1), pattern);
-}
 
 export function StatTile({ title, value, hint, negative }: { title: string; value: string; hint?: string; negative?: boolean }) {
   return (
@@ -34,13 +29,13 @@ export function CashFlowTiles({ data }: { data: CashFlow }) {
         title="Net this month"
         value={thisMonth ? signedUsd(thisMonth.net) : "—"}
         hint={thisMonth?.isPartial ? "in progress" : undefined}
-        negative={(thisMonth?.net ?? 0) < 0}
+        negative={thisMonth ? isNegativeUsd(thisMonth.net) : false}
       />
       <StatTile
         title="Savings rate"
         value={rate === null ? "—" : `${Math.round(rate * 100)}%`}
         hint="avg of last 5 full months"
-        negative={rate !== null && rate < 0}
+        negative={rate !== null && Math.round(rate * 100) < 0}
       />
     </>
   );
@@ -73,7 +68,7 @@ export function CashFlowChart({
     );
   }
 
-  const rows = data.months.map((m) => ({ ...m, label: monthLabel(m.monthKey), spendDown: -m.spend }));
+  const rows = data.months.map((m) => ({ ...m, label: monthLabel(m.monthKey, "MMM"), spendDown: -Math.max(m.spend, 0) }));
   const cells = (color: string) =>
     rows.map((m) => (
       <Cell
