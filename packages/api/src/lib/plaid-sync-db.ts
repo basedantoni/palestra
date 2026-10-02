@@ -18,7 +18,6 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import {
-  balanceSnapshot,
   category,
   financialAccount,
   plaidItem,
@@ -26,6 +25,7 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { decryptToken } from "./token-encryption";
+import { persistAccountBalances } from "./plaid-balance-db";
 import { getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
 import {
   type PlaidSyncDelta,
@@ -117,35 +117,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const categoryByName = await ensureSeedCategories(userId);
 
   // Account balances + daily snapshots.
-  for (const bal of mutations.accountBalances) {
-    const accountId = accountIdByPlaid.get(bal.plaidAccountId);
-    if (!accountId) continue;
-    await db
-      .update(financialAccount)
-      .set({
-        currentBalance: bal.current,
-        availableBalance: bal.available,
-        isoCurrencyCode: bal.isoCurrencyCode,
-      })
-      .where(eq(financialAccount.id, accountId));
-  }
-  for (const snap of mutations.snapshots) {
-    const accountId = accountIdByPlaid.get(snap.plaidAccountId);
-    if (!accountId) continue;
-    await db
-      .insert(balanceSnapshot)
-      .values({
-        id: randomUUID(),
-        userId,
-        accountId,
-        asOfDate: snap.asOfDate,
-        balance: snap.balance,
-      })
-      .onConflictDoUpdate({
-        target: [balanceSnapshot.accountId, balanceSnapshot.asOfDate],
-        set: { balance: snap.balance },
-      });
-  }
+  await persistAccountBalances(userId, accountIdByPlaid, mutations);
 
   // Transaction upserts — fold in flow classification + category seeding.
   for (const up of mutations.upserts) {

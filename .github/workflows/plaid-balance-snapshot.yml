@@ -1,0 +1,21 @@
+name: Plaid Balance Snapshot
+
+# Daily net worth history capture (KOI-289, ADR 0003). 10:00 UTC is early
+# morning US time, so the UTC snapshot day matches the local day.
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Snapshot Plaid balances
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_API_SECRET }}" \
+            "${{ secrets.SERVER_BASE_URL }}/api/internal/plaid/snapshot-balances")
+          echo "HTTP $status: $(cat /tmp/response.json)"
+          [ "$status" = "200" ] || exit 1

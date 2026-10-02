@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyTransactionSyncDelta } from "./plaid-sync-transform";
+import { accountBalanceMutations, applyTransactionSyncDelta } from "./plaid-sync-transform";
 
 const txn = (over: Record<string, unknown> = {}) => ({
   transaction_id: "t1",
@@ -109,6 +109,53 @@ describe("applyTransactionSyncDelta", () => {
       plaidCategoryDetailed: null,
       isoCurrencyCode: null,
       pending: false,
+    });
+  });
+});
+
+const acct = (id: string, current: number | null, available: number | null = null) => ({
+  account_id: id,
+  balances: { current, available, iso_currency_code: "USD" },
+});
+
+describe("accountBalanceMutations", () => {
+  it("maps Plaid accounts to one balance update and one snapshot per account for the day", () => {
+    const out = accountBalanceMutations(
+      [acct("acc_1", 1200.5, 1100), acct("acc_2", -350.25)],
+      "2026-10-02",
+    );
+
+    expect(out.accountBalances).toEqual([
+      { plaidAccountId: "acc_1", current: 1200.5, available: 1100, isoCurrencyCode: "USD" },
+      { plaidAccountId: "acc_2", current: -350.25, available: null, isoCurrencyCode: "USD" },
+    ]);
+    expect(out.snapshots).toEqual([
+      { plaidAccountId: "acc_1", asOfDate: "2026-10-02", balance: 1200.5 },
+      { plaidAccountId: "acc_2", asOfDate: "2026-10-02", balance: -350.25 },
+    ]);
+  });
+
+  it("records a zero balance as a snapshot (zero is a balance, not missing)", () => {
+    const out = accountBalanceMutations([acct("acc_1", 0)], "2026-10-02");
+    expect(out.snapshots).toEqual([{ plaidAccountId: "acc_1", asOfDate: "2026-10-02", balance: 0 }]);
+  });
+
+  it("skips the snapshot when Plaid reports no current balance or no balances at all", () => {
+    const out = accountBalanceMutations(
+      [acct("acc_1", null, 50), { account_id: "acc_2" }],
+      "2026-10-02",
+    );
+    expect(out.snapshots).toEqual([]);
+    expect(out.accountBalances).toEqual([
+      { plaidAccountId: "acc_1", current: null, available: 50, isoCurrencyCode: "USD" },
+      { plaidAccountId: "acc_2", current: null, available: null, isoCurrencyCode: null },
+    ]);
+  });
+
+  it("returns nothing for an item with no accounts", () => {
+    expect(accountBalanceMutations([], "2026-10-02")).toEqual({
+      accountBalances: [],
+      snapshots: [],
     });
   });
 });

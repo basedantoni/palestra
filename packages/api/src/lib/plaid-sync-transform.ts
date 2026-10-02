@@ -69,11 +69,9 @@ export interface BalanceSnapshotRow {
   balance: number;
 }
 
-export interface SyncMutations {
+export interface SyncMutations extends AccountBalanceMutations {
   upserts: TransactionUpsert[];
   deletes: string[];
-  accountBalances: AccountBalanceUpdate[];
-  snapshots: BalanceSnapshotRow[];
 }
 
 function toUpsert(t: PlaidTransactionInput): TransactionUpsert {
@@ -92,14 +90,25 @@ function toUpsert(t: PlaidTransactionInput): TransactionUpsert {
   };
 }
 
-export function applyTransactionSyncDelta(delta: PlaidSyncDelta): SyncMutations {
-  const upserts = [...delta.added, ...delta.modified].map(toUpsert);
-  const deletes = delta.removed.map((r) => r.transaction_id);
+export interface AccountBalanceMutations {
+  accountBalances: AccountBalanceUpdate[];
+  snapshots: BalanceSnapshotRow[];
+}
 
+/**
+ * Plaid account balances → balance updates plus one snapshot per account for
+ * `asOfDate`. Shared by the transaction sync and the daily snapshot job
+ * (KOI-289) so the two capture paths can't drift. An account with no current
+ * balance gets no snapshot — missing, not zero.
+ */
+export function accountBalanceMutations(
+  accounts: PlaidAccountBalanceInput[],
+  asOfDate: string,
+): AccountBalanceMutations {
   const accountBalances: AccountBalanceUpdate[] = [];
   const snapshots: BalanceSnapshotRow[] = [];
 
-  for (const acct of delta.accounts) {
+  for (const acct of accounts) {
     const balances = acct.balances ?? {};
     const current = balances.current ?? null;
     accountBalances.push({
@@ -109,13 +118,15 @@ export function applyTransactionSyncDelta(delta: PlaidSyncDelta): SyncMutations 
       isoCurrencyCode: balances.iso_currency_code ?? null,
     });
     if (current !== null) {
-      snapshots.push({
-        plaidAccountId: acct.account_id,
-        asOfDate: delta.asOfDate,
-        balance: current,
-      });
+      snapshots.push({ plaidAccountId: acct.account_id, asOfDate, balance: current });
     }
   }
 
-  return { upserts, deletes, accountBalances, snapshots };
+  return { accountBalances, snapshots };
+}
+
+export function applyTransactionSyncDelta(delta: PlaidSyncDelta): SyncMutations {
+  const upserts = [...delta.added, ...delta.modified].map(toUpsert);
+  const deletes = delta.removed.map((r) => r.transaction_id);
+  return { upserts, deletes, ...accountBalanceMutations(delta.accounts, delta.asOfDate) };
 }
