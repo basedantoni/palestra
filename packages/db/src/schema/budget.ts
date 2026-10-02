@@ -5,8 +5,9 @@ import { user } from "./auth";
 import { category } from "./category";
 
 /**
- * Copilot-style monthly category budget. `monthKey` is "YYYY-MM" in the user's
- * timezone; calendar month, no rollover. Spend is computed on read
+ * Copilot-style monthly category budget. `monthKey` is "YYYY-MM" of the bank's
+ * calendar month (transaction dates read in UTC, see `calendarMonthOf`); no
+ * rollover. Spend is computed on read
  * (`budget-spend.ts`), so this table holds only the limit.
  */
 export const budget = pgTable(
