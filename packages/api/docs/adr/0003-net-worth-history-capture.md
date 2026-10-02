@@ -1,0 +1,3 @@
+# Net worth history is captured forward by a daily snapshot job
+
+Plaid only reports current balances, so net worth history cannot be backfilled — any day not captured is lost for good. A GitHub Actions daily cron POSTs to an internal route that calls Plaid `/accounts/get` (free, cached ~daily) and upserts one balance snapshot per account, mirroring the existing Whoop token-refresh cron. We rejected an in-process timer (Fly machines auto-stop), a Fly scheduled machine (new infra for one job), and `/accounts/balance/get` (billed per call; real-time precision is pointless for a weekly line). Between snapshots an account's balance is carried forward; before its first snapshot it is missing, not zero.

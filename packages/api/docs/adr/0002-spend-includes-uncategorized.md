@@ -1,0 +1,3 @@
+# Spend includes uncategorized; Budgeted Spend does not
+
+Finance charts measure Spend as every non-excluded expense-flow transaction, categorized or not, while budgets keep measuring Budgeted Spend (categorized only). A reader will notice the two totals differ for the same month; that is deliberate. Dropping uncategorized money from charts understates spend and inflates savings rate, whereas a budget can only be compared against spend that has a category. Uncategorized is shown as its own bucket so the gap is visible and fixable. Refunds are netted in the month they post rather than matched to the original purchase, because matching is guesswork.
