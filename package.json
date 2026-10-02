@@ -24,7 +24,8 @@
     "db:start": "turbo -F @life-tracker/db db:start",
     "db:watch": "turbo -F @life-tracker/db db:watch",
     "db:stop": "turbo -F @life-tracker/db db:stop",
-    "db:down": "turbo -F @life-tracker/db db:down"
+    "db:down": "turbo -F @life-tracker/db db:down",
+    "test": "turbo test"
   },
   "dependencies": {
     "@life-tracker/db": "workspace:*",
