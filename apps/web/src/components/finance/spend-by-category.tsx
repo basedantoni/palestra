@@ -33,20 +33,29 @@ export function SpendByCategory({
 }) {
   const query = useQuery({ ...trpc.finance.spendByCategory.queryOptions({ period }), placeholderData: keepPreviousData });
   const periodSearch = periodToSearch(period, today);
+  // The previous period's rows stay on screen while the new one loads: dim them
+  // and disable the links so they don't pass as (or drill into) the new period.
+  const loading = query.isPlaceholderData;
 
   return (
     <div className="space-y-3">
       <TransactionPeriodPicker period={period} today={today} onChange={onPeriodChange} />
-      <Link
-        to="/finance/transactions"
-        search={periodSearch}
-        className="block text-right text-sm text-muted-foreground hover:underline"
+      <div
+        aria-busy={loading}
+        className={cn("space-y-3 transition-opacity", loading && "opacity-50")}
+        inert={loading}
       >
-        View transactions →
-      </Link>
-      {query.isPending && <Skeleton className="h-64 w-full" />}
-      {query.isError && <p className="text-sm text-destructive">Couldn't load spend by category.</p>}
-      {query.data && <Breakdown rows={query.data} periodSearch={periodSearch} />}
+        <Link
+          to="/finance/transactions"
+          search={periodSearch}
+          className="block text-right text-sm text-muted-foreground hover:underline"
+        >
+          View transactions →
+        </Link>
+        {query.isPending && <Skeleton className="h-64 w-full" />}
+        {query.isError && <p className="text-sm text-destructive">Couldn't load spend by category.</p>}
+        {query.data && <Breakdown rows={query.data} periodSearch={periodSearch} />}
+      </div>
     </div>
   );
 }

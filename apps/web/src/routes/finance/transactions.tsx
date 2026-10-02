@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { TRANSACTION_PERIOD_PRESETS, periodToSearch, searchToPeriod } from "@life-tracker/shared";
+import { periodToSearch, searchToPeriod, transactionPeriodSearchSchema } from "@life-tracker/shared";
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc } from "@/utils/trpc";
@@ -14,10 +14,7 @@ const UNCATEGORIZED = "uncategorized";
 
 // Filters live in the URL so a filtered view survives reloads and can be shared.
 // No period params = the current month.
-const transactionsSearchSchema = z.object({
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().catch(undefined),
-  preset: z.enum(TRANSACTION_PERIOD_PRESETS).optional().catch(undefined),
-  all: z.boolean().optional().catch(undefined),
+const transactionsSearchSchema = transactionPeriodSearchSchema.extend({
   accounts: z.array(z.string().uuid()).optional().catch(undefined),
   category: z.union([z.string().uuid(), z.literal(UNCATEGORIZED)]).optional().catch(undefined),
 });
