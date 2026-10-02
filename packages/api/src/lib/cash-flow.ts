@@ -46,20 +46,23 @@ export type CashFlowRange = keyof typeof CASH_FLOW_RANGES;
 
 /**
  * Income, Spend and Net for the `months` calendar months ending at
- * `currentMonth` (oldest first; null = all history), starting no earlier than
- * `firstMonth` (the month of the user's earliest transaction; null = none).
- * The current month is partial. The summary covers the last SUMMARY_MONTHS
- * complete months, so it is the same for every CASH_FLOW_RANGES window.
+ * `currentMonth` (oldest first), starting no earlier than `firstMonth` (the
+ * month of the user's earliest transaction; null = none). With `months` null
+ * the transactions are all history, so the earliest of them starts the range
+ * and `firstMonth` is ignored. The current month is partial. The summary
+ * covers the last SUMMARY_MONTHS complete months, so it is the same for every
+ * CASH_FLOW_RANGES window.
  */
 export function cashFlow(
   transactions: CashFlowTransaction[],
-  opts: { currentMonth: string; months: number | null; firstMonth: string | null },
+  opts: { currentMonth: string; months: number | null; firstMonth?: string | null },
 ): { months: CashFlowMonth[]; summary: CashFlowSummary } {
+  const firstMonth = opts.months === null ? earliestMonth(transactions) : (opts.firstMonth ?? null);
   const totals = new Map<string, { income: number; spend: number }>();
-  if (opts.firstMonth !== null) {
-    const windowStart = opts.months === null ? opts.firstMonth : addMonths(opts.currentMonth, 1 - opts.months);
+  if (firstMonth !== null) {
+    const windowStart = opts.months === null ? firstMonth : addMonths(opts.currentMonth, 1 - opts.months);
     // No padding before the user's history begins ("YYYY-MM" compares lexically).
-    const start = windowStart > opts.firstMonth ? windowStart : opts.firstMonth;
+    const start = windowStart > firstMonth ? windowStart : firstMonth;
     for (let monthKey = start; monthKey <= opts.currentMonth; monthKey = addMonths(monthKey, 1)) {
       totals.set(monthKey, { income: 0, spend: 0 });
     }
@@ -80,6 +83,16 @@ export function cashFlow(
     isPartial: monthKey === opts.currentMonth,
   }));
   return { months, summary: summarize(months) };
+}
+
+/** The month of the earliest transaction, excluded ones too; null with none. */
+function earliestMonth(transactions: CashFlowTransaction[]): string | null {
+  let first: string | null = null;
+  for (const t of transactions) {
+    const month = calendarMonthOf(t.date);
+    if (first === null || month < first) first = month;
+  }
+  return first;
 }
 
 /** Complete months the summary tiles average over. */
