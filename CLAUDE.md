@@ -69,4 +69,4 @@ Five canonical triage roles using default label strings. See `docs/agents/triage
 
 ### Domain docs
 
-Multi-context monorepo layout (`CONTEXT-MAP.md` → per-package `CONTEXT.md`). See `docs/agents/domain.md`.
+Multi-context monorepo layout (`GLOSSARY-MAP.md` → per-package `GLOSSARY.md`). See `docs/agents/domain.md`.
