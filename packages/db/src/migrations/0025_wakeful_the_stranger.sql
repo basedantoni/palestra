@@ -1,0 +1,1 @@
+ALTER TABLE "transaction" ADD COLUMN "flow_overridden" boolean DEFAULT false NOT NULL;

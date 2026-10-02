@@ -152,7 +152,8 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
           name: up.name,
           merchantName: up.merchantName,
           pending: up.pending,
-          flow,
+          // A user override wins over Plaid's re-classification (ADR 0001).
+          flow: sql`case when ${transaction.flowOverridden} then ${transaction.flow} else excluded.flow end`,
           plaidCategoryPrimary: up.plaidCategoryPrimary,
           plaidCategoryDetailed: up.plaidCategoryDetailed,
           isoCurrencyCode: up.isoCurrencyCode,

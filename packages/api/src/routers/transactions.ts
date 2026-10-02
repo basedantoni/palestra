@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -11,6 +12,7 @@ import {
 } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { classifyFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
 const periodSchema = z.discriminatedUnion("kind", [
@@ -87,6 +89,7 @@ export const transactionsRouter = router({
           merchantName: transaction.merchantName,
           amount: transaction.amount,
           flow: transaction.flow,
+          flowOverridden: transaction.flowOverridden,
           pending: transaction.pending,
           excluded: transaction.excluded,
           note: transaction.note,
@@ -134,6 +137,63 @@ export const transactionsRouter = router({
         .update(transaction)
         .set({ categoryId: input.categoryId })
         .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
+      return { ok: true };
+    }),
+
+  /**
+   * Correct a transaction's flow; null resets to automatic (ADR 0001). The
+   * override flag makes the Plaid sync upsert leave `flow` alone.
+   */
+  setFlow: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        flow: z.enum(["income", "expense", "transfer"]).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owned = and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id));
+      const [row] = await db
+        .select({
+          pending: transaction.pending,
+          plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+          transferPairId: transaction.transferPairId,
+        })
+        .from(transaction)
+        .where(owned)
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      // Posting issues a new Plaid id, so an override on a pending row would be lost.
+      if (row.pending) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Pending transactions can't be changed until they post",
+        });
+      }
+
+      const { transferPairId } = row;
+      await db.transaction(async (tx) => {
+        await tx
+          .update(transaction)
+          .set(
+            input.flow
+              ? { flow: input.flow, flowOverridden: true }
+              : { flow: classifyFlow(row.plaidCategoryPrimary), flowOverridden: false },
+          )
+          .where(owned);
+        // Changing either leg breaks the Transfer Pair; the other leg stays an unpaired transfer.
+        if (transferPairId) {
+          await tx
+            .update(transaction)
+            .set({ transferPairId: null })
+            .where(
+              and(
+                eq(transaction.transferPairId, transferPairId),
+                eq(transaction.userId, ctx.session.user.id),
+              ),
+            );
+        }
+      });
       return { ok: true };
     }),
 
