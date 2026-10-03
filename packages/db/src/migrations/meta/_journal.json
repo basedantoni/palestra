@@ -176,6 +176,13 @@
       "when": 1781904637224,
       "tag": "0024_known_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790979423522,
+      "tag": "0025_wakeful_the_stranger",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,14 @@ export function classifyFlow(pfcPrimary: string | null | undefined): Transaction
   return "expense";
 }
 
+/** The flow a row ends up with: the override, or the automatic classification when reset (null). */
+export function effectiveFlow(
+  override: TransactionFlow | null,
+  pfcPrimary: string | null | undefined,
+): TransactionFlow {
+  return override ?? classifyFlow(pfcPrimary);
+}
+
 export interface TransferCandidate {
   id: string;
   accountId: string;

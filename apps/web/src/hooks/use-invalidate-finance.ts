@@ -15,6 +15,7 @@ export function useInvalidateFinance(): () => void {
       trpc.budgets.pathKey(),
       trpc.goals.pathKey(),
       trpc.categories.pathKey(),
+      trpc.finance.pathKey(),
     ]) {
       queryClient.invalidateQueries({ queryKey });
     }

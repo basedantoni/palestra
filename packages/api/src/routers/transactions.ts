@@ -1,48 +1,31 @@
-import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, financialAccount, transaction } from "@life-tracker/db/schema/index";
 
-import {
-  TRANSACTION_PERIOD_PRESETS,
-  resolvePeriodBounds,
-  todayInTimeZone,
-} from "@life-tracker/shared";
+import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
+import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
-
-const periodSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("month"), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
-  z.object({ kind: z.literal("preset"), preset: z.enum(TRANSACTION_PERIOD_PRESETS) }),
-  z.object({ kind: z.literal("all") }),
-]);
 
 const filtersSchema = z.object({
   period: periodSchema.default({ kind: "all" }),
   accountIds: z.array(z.string().uuid()).max(50).default([]),
-  categoryId: z.string().uuid().optional(),
+  /** A category, or null for Uncategorized; omitted = every category. */
+  categoryId: z.string().uuid().nullable().optional(),
 });
 
-/**
- * WHERE conditions for the caller's filtered transactions. Plaid dates are
- * stored as UTC midnight of the bank's calendar date, so bounds compare whole
- * UTC days; "today" (for shortcut periods) is the user's local date.
- */
+/** WHERE conditions for the caller's filtered transactions; "today" (for shortcut periods) is the user's local date. */
 async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {
   const today = todayInTimeZone(new Date(), await getUserTimezone(userId));
-  const { from, to } = resolvePeriodBounds(filters.period, today);
-
-  const conds: SQL[] = [eq(transaction.userId, userId)];
-  if (from) conds.push(gte(transaction.date, new Date(`${from}T00:00:00.000Z`)));
-  if (to) {
-    const dayAfter = new Date(`${to}T00:00:00.000Z`);
-    dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
-    conds.push(lt(transaction.date, dayAfter));
-  }
+  const conds: SQL[] = [eq(transaction.userId, userId), ...dateBoundConditions(resolvePeriodBounds(filters.period, today))];
   if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
-  if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
+  if (filters.categoryId === null) conds.push(isNull(transaction.categoryId));
+  else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
   return conds;
 }
 
@@ -87,6 +70,7 @@ export const transactionsRouter = router({
           merchantName: transaction.merchantName,
           amount: transaction.amount,
           flow: transaction.flow,
+          flowOverridden: transaction.flowOverridden,
           pending: transaction.pending,
           excluded: transaction.excluded,
           note: transaction.note,
@@ -134,6 +118,62 @@ export const transactionsRouter = router({
         .update(transaction)
         .set({ categoryId: input.categoryId })
         .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
+      return { ok: true };
+    }),
+
+  /**
+   * Correct a transaction's flow; null resets to automatic (ADR 0001). The
+   * override flag makes the Plaid sync upsert leave `flow` alone.
+   */
+  setFlow: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        flow: z.enum(["income", "expense", "transfer"]).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const owned = and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id));
+      await db.transaction(async (tx) => {
+        // Locked so a concurrent sync/match can't change pending or the pair between read and write.
+        const [row] = await tx
+          .select({
+            pending: transaction.pending,
+            plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+            transferPairId: transaction.transferPairId,
+          })
+          .from(transaction)
+          .where(owned)
+          .limit(1)
+          .for("update");
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+        // Posting issues a new Plaid id, so an override on a pending row would be lost.
+        if (row.pending) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Pending transactions can't be changed until they post",
+          });
+        }
+
+        const flow = effectiveFlow(input.flow, row.plaidCategoryPrimary);
+        await tx
+          .update(transaction)
+          .set({ flow, flowOverridden: input.flow !== null })
+          .where(owned);
+        // A leg that is no longer a transfer breaks the Transfer Pair; the other leg stays an unpaired transfer.
+        const { transferPairId } = row;
+        if (transferPairId && flow !== "transfer") {
+          await tx
+            .update(transaction)
+            .set({ transferPairId: null })
+            .where(
+              and(
+                eq(transaction.transferPairId, transferPairId),
+                eq(transaction.userId, ctx.session.user.id),
+              ),
+            );
+        }
+      });
       return { ok: true };
     }),
 

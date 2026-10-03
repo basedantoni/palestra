@@ -137,8 +137,8 @@ describe("goals.list history", () => {
     // 200 days × 2 accounts
     selectReturning(
       Array.from({ length: 200 }, (_, i) => [
-        { asOfDate: day(i), balance: 100 + i },
-        { asOfDate: day(i), balance: 1000 },
+        { accountId: ACCT_1, asOfDate: day(i), balance: 100 + i },
+        { accountId: ACCT_2, asOfDate: day(i), balance: 1000 },
       ]).flat(),
     );
 

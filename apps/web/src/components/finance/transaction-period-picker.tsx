@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { format } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import {
@@ -13,16 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { MonthGrid } from "./month-grid";
-
-function monthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  return format(new Date(y, m - 1, 1), "MMMM yyyy");
-}
+import { monthLabel } from "./month-label";
 
 function periodLabel(period: TransactionPeriod): string {
   if (period.kind === "all") return "All time";
   if (period.kind === "preset") return TRANSACTION_PERIOD_PRESET_LABELS[period.preset];
-  return monthLabel(period.month);
+  return monthLabel(period.month, "MMMM yyyy");
 }
 
 /**

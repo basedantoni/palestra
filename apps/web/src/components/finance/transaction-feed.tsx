@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
+import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -24,7 +25,8 @@ function formatDay(day: string): string {
 export type TransactionFilters = {
   period?: TransactionPeriod;
   accountIds?: string[];
-  categoryId?: string;
+  /** null = Uncategorized. */
+  categoryId?: string | null;
 };
 
 type Txn = RouterOutputs["transactions"]["list"]["items"][number];
@@ -129,11 +131,14 @@ function FeedItem({
         {open && (
           <ul className="space-y-1 bg-muted/30 px-10 py-2 text-xs text-muted-foreground">
             {[entry.out, entry.in].map((leg) => (
-              <li key={leg.id} className="flex justify-between gap-3">
+              <li key={leg.id} className="flex items-center justify-between gap-3">
                 <span className="truncate">
                   {leg.merchantName ?? leg.name} · {leg.accountName}
                 </span>
-                <span className="shrink-0 tabular-nums">{formatAmount(leg.amount)}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <FlowPicker txn={leg} />
+                  <span className="tabular-nums">{formatAmount(leg.amount)}</span>
+                </span>
               </li>
             ))}
             <li className="pt-1 text-[10px]">Matched transfer — not counted as spending.</li>
@@ -179,15 +184,45 @@ function FeedItem({
   );
 }
 
-/** Note, category and budget-exclusion editing for one transaction. */
+const FLOW_LABELS = { income: "Income", expense: "Expense", transfer: "Transfer" } as const;
+type Flow = keyof typeof FLOW_LABELS;
+
+/**
+ * Correct a transaction's flow, or return it to "Automatic" (Plaid-derived).
+ * Disabled while pending: posting issues a new Plaid id and would drop it.
+ */
+function FlowPicker({ txn }: { txn: Txn }) {
+  const setFlow = useMutation(
+    trpc.transactions.setFlow.mutationOptions({ onSuccess: useInvalidateFinance() }),
+  );
+  return (
+    <select
+      aria-label="Flow"
+      title={txn.pending ? "Flow can be changed once the transaction posts" : undefined}
+      disabled={txn.pending || setFlow.isPending}
+      value={txn.flowOverridden && txn.flow ? txn.flow : "auto"}
+      onChange={(e) => {
+        const v = e.target.value;
+        setFlow.mutate({ id: txn.id, flow: v === "auto" ? null : (v as Flow) });
+      }}
+      className="rounded-md border border-border bg-background px-1.5 py-0.5 text-xs disabled:opacity-50"
+    >
+      <option value="auto">
+        Automatic{!txn.flowOverridden && txn.flow ? ` (${FLOW_LABELS[txn.flow]})` : ""}
+      </option>
+      {(Object.keys(FLOW_LABELS) as Flow[]).map((f) => (
+        <option key={f} value={f}>
+          {FLOW_LABELS[f]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Note, flow, category and budget-exclusion editing for one transaction. */
 function TransactionEditor({ txn }: { txn: Txn }) {
-  const queryClient = useQueryClient();
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
-  // Edits change list rows, the spend summary, and budget spend.
-  const onSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: trpc.transactions.pathKey() });
-    queryClient.invalidateQueries({ queryKey: trpc.budgets.pathKey() });
-  };
+  const onSuccess = useInvalidateFinance();
   const setCategory = useMutation(trpc.transactions.setCategory.mutationOptions({ onSuccess }));
   const setExcluded = useMutation(trpc.transactions.setExcluded.mutationOptions({ onSuccess }));
   const setNote = useMutation(trpc.transactions.setNote.mutationOptions({ onSuccess }));
@@ -195,6 +230,7 @@ function TransactionEditor({ txn }: { txn: Txn }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
+        <FlowPicker txn={txn} />
         {txn.flow !== "transfer" && (
           <select
             aria-label="Category"
