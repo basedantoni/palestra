@@ -190,6 +190,13 @@
       "when": 1791088119927,
       "tag": "0026_last_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791089530362,
+      "tag": "0027_cloudy_shen",
+      "breakpoints": true
     }
   ]
 }

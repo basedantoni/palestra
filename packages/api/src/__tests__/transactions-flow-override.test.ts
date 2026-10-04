@@ -155,6 +155,7 @@ describe("syncPlaidItem upsert", () => {
     });
     selectReturns([{ id: "fa-chk", plaidAccountId: "p_chk" }]); // accounts
     selectReturns([]); // categories
+    selectReturns([]); // category rules
     selectReturns([]); // transfer candidates
 
     await syncPlaidItem(ITEM_ID);
