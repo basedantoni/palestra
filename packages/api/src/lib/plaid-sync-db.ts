@@ -5,7 +5,7 @@
  * seams for the actual logic:
  *  - `applyTransactionSyncDelta` maps the Plaid response to mutations
  *  - `classifyFlow` sets income/expense/transfer
- *  - `categoryNameForPfc` + seeded categories auto-assign a category
+ *  - `defaultCategoryId` + seeded categories auto-assign a category
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
  * Idempotent: transactions upsert on the unique Plaid id, snapshots upsert on
@@ -34,7 +34,8 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
-import { SEED_CATEGORIES, categoryNameForPfc } from "./category-seed";
+import { SEED_CATEGORIES } from "./category-seed";
+import { defaultCategoryId } from "./category-rules";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -125,7 +126,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     const accountId = accountIdByPlaid.get(up.plaidAccountId);
     if (!accountId) continue;
     const flow = classifyFlow(up.plaidCategoryPrimary);
-    const categoryId = categoryByName.get(categoryNameForPfc(up.plaidCategoryPrimary)) ?? null;
+    const categoryId = defaultCategoryId(up.plaidCategoryPrimary, categoryByName);
     await db
       .insert(transaction)
       .values({

@@ -1,0 +1,1 @@
+ALTER TABLE "transaction" ADD COLUMN "category_overridden" boolean DEFAULT false NOT NULL;

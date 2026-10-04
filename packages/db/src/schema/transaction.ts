@@ -52,6 +52,8 @@ export const transaction = pgTable(
     categoryId: uuid("category_id").references(() => category.id, {
       onDelete: "set null",
     }),
+    /** Manual Category: user picked it by hand; rules and sync leave it alone (ADR 0004). */
+    categoryOverridden: boolean("category_overridden").default(false).notNull(),
     excluded: boolean("excluded").default(false).notNull(),
     note: text("note"),
     transferPairId: uuid("transfer_pair_id"),

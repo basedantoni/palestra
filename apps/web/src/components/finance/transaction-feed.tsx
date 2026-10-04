@@ -224,6 +224,7 @@ function TransactionEditor({ txn }: { txn: Txn }) {
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
   const onSuccess = useInvalidateFinance();
   const setCategory = useMutation(trpc.transactions.setCategory.mutationOptions({ onSuccess }));
+  const resetCategory = useMutation(trpc.transactions.resetCategory.mutationOptions({ onSuccess }));
   const setExcluded = useMutation(trpc.transactions.setExcluded.mutationOptions({ onSuccess }));
   const setNote = useMutation(trpc.transactions.setNote.mutationOptions({ onSuccess }));
 
@@ -245,6 +246,19 @@ function TransactionEditor({ txn }: { txn: Txn }) {
               </option>
             ))}
           </select>
+        )}
+        {txn.flow !== "transfer" && txn.categoryOverridden && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            Manual ·
+            <button
+              type="button"
+              disabled={resetCategory.isPending}
+              onClick={() => resetCategory.mutate({ id: txn.id })}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+            >
+              Reset to automatic
+            </button>
+          </span>
         )}
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           <input
