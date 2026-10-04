@@ -4,11 +4,13 @@ import { TRPCError } from "@trpc/server";
 
 import { db } from "@life-tracker/db";
 import {
+  category,
   exercise,
   exerciseLog,
   exerciseSet,
   notification,
   personalRecord,
+  transaction,
   user,
   workout,
   workoutTemplate,
@@ -16,6 +18,7 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { adminProcedure, router } from "../index";
+import { isManualCategory } from "../lib/category-rules";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
@@ -55,6 +58,54 @@ const templateInput = z.object({
 
 export const adminRouter = router({
   isAdmin: adminProcedure.query(() => true),
+  // ---------------------------------------------------------------------------
+  // Backfill: flag existing transactions whose category was picked by hand
+  // (KOI-297, ADR 0004). Before the flag existed nothing recorded this, so it is
+  // inferred: a category that differs from the recomputed Default Category is
+  // manual. Run ONCE, right after the migration — once Category Rules exist, a
+  // rule-applied category also differs from the default and would be misread.
+  // ---------------------------------------------------------------------------
+  backfillManualCategories: adminProcedure.mutation(async () => {
+    return db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          id: transaction.id,
+          userId: transaction.userId,
+          categoryId: transaction.categoryId,
+          plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+        })
+        .from(transaction);
+      const categories = await tx
+        .select({ id: category.id, userId: category.userId, name: category.name })
+        .from(category);
+
+      const categoryByNameByUser = new Map<string, Map<string, string>>();
+      for (const c of categories) {
+        const byName = categoryByNameByUser.get(c.userId) ?? new Map<string, string>();
+        byName.set(c.name, c.id);
+        categoryByNameByUser.set(c.userId, byName);
+      }
+
+      const manualIds = rows
+        .filter((r) =>
+          isManualCategory(
+            r.categoryId,
+            r.plaidCategoryPrimary,
+            categoryByNameByUser.get(r.userId) ?? new Map(),
+          ),
+        )
+        .map((r) => r.id);
+      // Chunked to stay well under Postgres' bind-parameter limit.
+      const CHUNK = 1000;
+      for (let i = 0; i < manualIds.length; i += CHUNK) {
+        await tx
+          .update(transaction)
+          .set({ categoryOverridden: true })
+          .where(inArray(transaction.id, manualIds.slice(i, i + CHUNK)));
+      }
+      return { processed: rows.length, manual: manualIds.length };
+    });
+  }),
   // ---------------------------------------------------------------------------
   // Backfill: reprocess every existing workout to populate the personal_record
   // table from scratch (KOI-80). Reuses the SAME live functions used by the

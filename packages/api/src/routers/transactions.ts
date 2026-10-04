@@ -9,6 +9,7 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
+import { defaultCategoryId } from "../lib/category-rules";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
@@ -76,6 +77,7 @@ export const transactionsRouter = router({
           note: transaction.note,
           transferPairId: transaction.transferPairId,
           categoryId: transaction.categoryId,
+          categoryOverridden: transaction.categoryOverridden,
           categoryName: category.name,
           accountId: transaction.accountId,
           accountName: financialAccount.name,
@@ -111,13 +113,39 @@ export const transactionsRouter = router({
     return { count: row?.count ?? 0, spent: Number(row?.spent ?? 0) };
   }),
 
+  /** Pick a category by hand; it becomes a Manual Category, even when null (ADR 0004). */
   setCategory: protectedProcedure
     .input(z.object({ id: z.string().uuid(), categoryId: z.string().uuid().nullable() }))
     .mutation(async ({ ctx, input }) => {
       await db
         .update(transaction)
-        .set({ categoryId: input.categoryId })
+        .set({ categoryId: input.categoryId, categoryOverridden: true })
         .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
+      return { ok: true };
+    }),
+
+  /** Reset to automatic: clear the Manual Category and restore the Default Category. */
+  resetCategory: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const owned = and(eq(transaction.id, input.id), eq(transaction.userId, userId));
+      const [row] = await db
+        .select({ plaidCategoryPrimary: transaction.plaidCategoryPrimary })
+        .from(transaction)
+        .where(owned)
+        .limit(1);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+
+      const categories = await db
+        .select({ id: category.id, name: category.name })
+        .from(category)
+        .where(eq(category.userId, userId));
+      const categoryId = defaultCategoryId(
+        row.plaidCategoryPrimary,
+        new Map(categories.map((c) => [c.name, c.id])),
+      );
+      await db.update(transaction).set({ categoryId, categoryOverridden: false }).where(owned);
       return { ok: true };
     }),
 

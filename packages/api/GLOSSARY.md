@@ -49,6 +49,24 @@ Net as a fraction of income for a period; undefined when income is zero.
 **Month**:
 A calendar month of the bank's posting date. All finance figures bucket by this.
 
+### Finance — categorization
+
+**Category Rule**:
+A user-defined instruction that assigns a category to every transaction whose bank description contains a given pattern, ignoring case. When several rules match, the one with the longest pattern wins. Applies whatever the transaction's flow.
+_Avoid_: Filter, auto-category, mapping
+
+**Pattern**:
+The text a category rule looks for inside a transaction's bank description.
+_Avoid_: Keyword, query, match string
+
+**Manual Category**:
+A category the user chose by hand for one transaction, including choosing Uncategorized. No category rule or default category replaces it until the user resets the transaction to automatic.
+_Avoid_: Override (unqualified), custom category
+
+**Default Category**:
+The category derived from the bank's own classification when a transaction first arrives. A matching category rule takes precedence over it.
+_Avoid_: Plaid category, auto category
+
 ### Finance — position
 
 **Balance Snapshot**:
