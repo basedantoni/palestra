@@ -1,6 +1,7 @@
 /**
- * Category resolution for transactions (KOI-295). Pure: sync, the
- * transactions router and the Manual Category backfill all call this.
+ * Category resolution for transactions (KOI-295): Default and Manual Category
+ * today, Category Rules next. Pure: sync, the transactions router and the
+ * Manual Category backfill all call this.
  */
 import { categoryNameForPfc } from "./category-seed";
 

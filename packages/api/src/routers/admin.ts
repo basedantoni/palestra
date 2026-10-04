@@ -66,42 +66,45 @@ export const adminRouter = router({
   // rule-applied category also differs from the default and would be misread.
   // ---------------------------------------------------------------------------
   backfillManualCategories: adminProcedure.mutation(async () => {
-    const rows = await db
-      .select({
-        id: transaction.id,
-        userId: transaction.userId,
-        categoryId: transaction.categoryId,
-        plaidCategoryPrimary: transaction.plaidCategoryPrimary,
-      })
-      .from(transaction);
-    const categories = await db
-      .select({ id: category.id, userId: category.userId, name: category.name })
-      .from(category);
+    return db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          id: transaction.id,
+          userId: transaction.userId,
+          categoryId: transaction.categoryId,
+          plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+        })
+        .from(transaction);
+      const categories = await tx
+        .select({ id: category.id, userId: category.userId, name: category.name })
+        .from(category);
 
-    const categoryByNameByUser = new Map<string, Map<string, string>>();
-    for (const c of categories) {
-      const byName = categoryByNameByUser.get(c.userId) ?? new Map<string, string>();
-      byName.set(c.name, c.id);
-      categoryByNameByUser.set(c.userId, byName);
-    }
+      const categoryByNameByUser = new Map<string, Map<string, string>>();
+      for (const c of categories) {
+        const byName = categoryByNameByUser.get(c.userId) ?? new Map<string, string>();
+        byName.set(c.name, c.id);
+        categoryByNameByUser.set(c.userId, byName);
+      }
 
-    const manualIds = rows
-      .filter((r) =>
-        isManualCategory(
-          r.categoryId,
-          r.plaidCategoryPrimary,
-          categoryByNameByUser.get(r.userId) ?? new Map(),
-        ),
-      )
-      .map((r) => r.id);
-    // Chunked to stay well under Postgres' bind-parameter limit.
-    for (let i = 0; i < manualIds.length; i += 1000) {
-      await db
-        .update(transaction)
-        .set({ categoryOverridden: true })
-        .where(inArray(transaction.id, manualIds.slice(i, i + 1000)));
-    }
-    return { processed: rows.length, manual: manualIds.length };
+      const manualIds = rows
+        .filter((r) =>
+          isManualCategory(
+            r.categoryId,
+            r.plaidCategoryPrimary,
+            categoryByNameByUser.get(r.userId) ?? new Map(),
+          ),
+        )
+        .map((r) => r.id);
+      // Chunked to stay well under Postgres' bind-parameter limit.
+      const CHUNK = 1000;
+      for (let i = 0; i < manualIds.length; i += CHUNK) {
+        await tx
+          .update(transaction)
+          .set({ categoryOverridden: true })
+          .where(inArray(transaction.id, manualIds.slice(i, i + CHUNK)));
+      }
+      return { processed: rows.length, manual: manualIds.length };
+    });
   }),
   // ---------------------------------------------------------------------------
   // Backfill: reprocess every existing workout to populate the personal_record

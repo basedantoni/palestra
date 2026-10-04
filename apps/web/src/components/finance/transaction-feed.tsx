@@ -247,7 +247,7 @@ function TransactionEditor({ txn }: { txn: Txn }) {
             ))}
           </select>
         )}
-        {txn.flow !== "transfer" && txn.categoryOverridden && (
+        {txn.categoryOverridden && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             Manual ·
             <button

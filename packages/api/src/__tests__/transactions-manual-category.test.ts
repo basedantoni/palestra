@@ -171,6 +171,16 @@ describe("transactions.resetCategory", () => {
     expect(update!.where!.params).toEqual([TXN_ID, USER_ID]);
   });
 
+  it("leaves the transaction uncategorized when the user has no Default Category for it", async () => {
+    selectReturns([{ plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    selectReturns([]); // no seeded categories
+
+    await makeCaller().transactions.resetCategory({ id: TXN_ID });
+
+    const [update] = transactionUpdates();
+    expect(update!.set).toEqual({ categoryId: null, categoryOverridden: false });
+  });
+
   it("rejects a transaction the caller doesn't own with NOT_FOUND", async () => {
     selectReturns([]);
 
