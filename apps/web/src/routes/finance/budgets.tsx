@@ -6,13 +6,14 @@ import { useFinanceToday } from "@/hooks/use-finance-today";
 import { BudgetCards } from "@/components/finance/budget-cards";
 import { BudgetMonthStepper } from "@/components/finance/budget-month-stepper";
 import { CategoryList } from "@/components/finance/category-list";
+import { CategoryRuleList } from "@/components/finance/category-rule-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Month and tab live in the URL so reloads and shared links keep the view.
 // No month = the current month (in the user's timezone).
 const budgetsSearchSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().catch(undefined),
-  tab: z.enum(["budgets", "categories"]).optional().catch(undefined),
+  tab: z.enum(["budgets", "categories", "rules"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/finance/budgets")({
@@ -39,13 +40,14 @@ function BudgetsPage() {
       <Tabs
         value={tab}
         onValueChange={(next) =>
-          navigate({ search: (prev) => ({ ...prev, tab: next === "budgets" ? undefined : (next as "categories") }), replace: true })
+          navigate({ search: (prev) => ({ ...prev, tab: next === "budgets" ? undefined : (next as "categories" | "rules") }), replace: true })
         }
         className="space-y-4"
       >
         <TabsList>
           <TabsTrigger value="budgets">Budgets</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="rules">Rules</TabsTrigger>
         </TabsList>
         <TabsContent value="budgets" className="space-y-4">
           <BudgetMonthStepper
@@ -59,6 +61,9 @@ function BudgetsPage() {
         </TabsContent>
         <TabsContent value="categories">
           <CategoryList />
+        </TabsContent>
+        <TabsContent value="rules">
+          <CategoryRuleList />
         </TabsContent>
       </Tabs>
     </div>

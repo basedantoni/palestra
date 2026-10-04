@@ -27,9 +27,15 @@ export function CategoryList() {
   const [deleting, setDeleting] = useState<CategoryRow | null>(null);
   const [newName, setNewName] = useState("");
 
-  // Category edits change dropdowns, budget cards, and transaction rows.
+  // Category edits change dropdowns, budget cards, transaction rows, and rules
+  // (renames show in rules; deleting a category deletes its rules).
   const refresh = () => {
-    for (const queryKey of [trpc.categories.pathKey(), trpc.budgets.pathKey(), trpc.transactions.pathKey()]) {
+    for (const queryKey of [
+      trpc.categories.pathKey(),
+      trpc.budgets.pathKey(),
+      trpc.transactions.pathKey(),
+      trpc.categoryRules.pathKey(),
+    ]) {
       queryClient.invalidateQueries({ queryKey });
     }
   };

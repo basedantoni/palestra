@@ -219,6 +219,7 @@ describe("syncPlaidItem upsert", () => {
     });
     selectReturns([{ id: "fa-chk", plaidAccountId: "p_chk" }]); // accounts
     selectReturns([{ id: "cat-food", name: "Food & Drink" }]); // categories
+    selectReturns([]); // category rules
     selectReturns([]); // transfer candidates
 
     await syncPlaidItem(ITEM_ID);

@@ -5,7 +5,8 @@
  * seams for the actual logic:
  *  - `applyTransactionSyncDelta` maps the Plaid response to mutations
  *  - `classifyFlow` sets income/expense/transfer
- *  - `defaultCategoryId` + seeded categories auto-assign a category
+ *  - `resolveCategory` assigns a new transaction's category: the matching
+ *    Category Rule, else the Default Category from the seeded categories
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
  * Idempotent: transactions upsert on the unique Plaid id, snapshots upsert on
@@ -19,6 +20,7 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@life-tracker/db";
 import {
   category,
+  categoryRule,
   financialAccount,
   plaidItem,
   transaction,
@@ -35,7 +37,7 @@ import {
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
 import { SEED_CATEGORIES } from "./category-seed";
-import { defaultCategoryId } from "./category-rules";
+import { resolveCategory } from "./category-rules";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -117,16 +119,26 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const accountIdByPlaid = new Map(accounts.map((a) => [a.plaidAccountId, a.id]));
 
   const categoryByName = await ensureSeedCategories(userId);
+  const rules = await db
+    .select({
+      id: categoryRule.id,
+      pattern: categoryRule.pattern,
+      categoryId: categoryRule.categoryId,
+      createdAt: categoryRule.createdAt,
+    })
+    .from(categoryRule)
+    .where(eq(categoryRule.userId, userId));
 
   // Account balances + daily snapshots.
   await persistAccountBalances(userId, accountIdByPlaid, mutations);
 
-  // Transaction upserts — fold in flow classification + category seeding.
+  // Transaction upserts — fold in flow classification + category resolution.
+  // The category only applies on insert: a known transaction keeps its own.
   for (const up of mutations.upserts) {
     const accountId = accountIdByPlaid.get(up.plaidAccountId);
     if (!accountId) continue;
     const flow = classifyFlow(up.plaidCategoryPrimary);
-    const categoryId = defaultCategoryId(up.plaidCategoryPrimary, categoryByName);
+    const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, categoryByName);
     await db
       .insert(transaction)
       .values({

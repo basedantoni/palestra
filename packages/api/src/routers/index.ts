@@ -3,6 +3,7 @@ import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
 import { budgetsRouter } from "./budgets";
 import { categoriesRouter } from "./categories";
+import { categoryRulesRouter } from "./category-rules";
 import { goalsRouter } from "./goals";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
@@ -44,6 +45,7 @@ export const appRouter = router({
   whoopRecovery: whoopRecoveryRouter,
   plaid: plaidRouter,
   categories: categoriesRouter,
+  categoryRules: categoryRulesRouter,
   budgets: budgetsRouter,
   transactions: transactionsRouter,
   goals: goalsRouter,
