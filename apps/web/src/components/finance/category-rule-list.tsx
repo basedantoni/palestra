@@ -198,7 +198,7 @@ export function RuleForm({
         <span aria-live="polite">
           {matchCount === undefined
             ? "\u00a0"
-            : `Matches ${matchCount} existing ${matchCount === 1 ? "transaction" : "transactions"}`}
+            : `Will update ${matchCount} existing ${matchCount === 1 ? "transaction" : "transactions"}`}
         </span>
         <label className="flex items-center gap-1.5">
           <input type="checkbox" checked={applyToExisting} onChange={(e) => setApplyToExisting(e.target.checked)} />

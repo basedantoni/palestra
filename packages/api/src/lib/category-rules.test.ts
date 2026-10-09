@@ -166,6 +166,33 @@ const row = (id: string, name: string, categoryId: string | null) => ({
 });
 
 describe("ruleRecategorizations", () => {
+  it("fills a blank Manual Category when the rule matches it, clearing the manual flag", () => {
+    const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+    ).toEqual([{ id: "t1", categoryId: "cat-food" }]);
+  });
+
+  it("never touches a Manual Category with a real category", () => {
+    const rows = [{ ...row("t1", "KFC", "cat-shop"), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+    ).toEqual([]);
+  });
+
+  it("leaves a blank Manual Category blank when no rule matches it any more", () => {
+    // Editing "kfc" → "kfc express": the old pattern touched t1, but no rule matches it now.
+    const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(
+        rows,
+        [rule("r1", "kfc", "cat-food")],
+        { id: "r1", pattern: "kfc express", categoryId: "cat-food" },
+        categoryByName,
+      ),
+    ).toEqual([]);
+  });
+
   it("returns only matched rows whose category changes", () => {
     const rows = [
       row("t1", "STARBUCKS #1", "cat-food"), // changes

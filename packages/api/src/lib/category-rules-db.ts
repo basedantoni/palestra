@@ -3,7 +3,7 @@
  * in `category-rules.ts` needs and writes retroactive recategorizations. Sync,
  * reset and the rules router share these so they resolve identically.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import { category, categoryRule, transaction } from "@life-tracker/db/schema/index";
@@ -40,17 +40,21 @@ export async function loadCategoryByName(conn: Conn, userId: string): Promise<Ma
   return new Map(rows.map((r) => [r.name, r.id]));
 }
 
-/** The user's transactions without a Manual Category — the only ones rules may touch (ADR 0004). */
-export function loadAutomaticTransactions(conn: Conn, userId: string): Promise<CategorizableTransaction[]> {
+/** A rule may set these: automatic, or a blank (Uncategorized) Manual Category (ADR 0004). */
+const ruleMayCategorize = or(eq(transaction.categoryOverridden, false), isNull(transaction.categoryId));
+
+/** The user's transactions a rule may categorize; a hand-picked real category is never loaded. */
+export function loadRuleApplicableTransactions(conn: Conn, userId: string): Promise<CategorizableTransaction[]> {
   return conn
     .select({
       id: transaction.id,
       name: transaction.name,
       plaidCategoryPrimary: transaction.plaidCategoryPrimary,
       categoryId: transaction.categoryId,
+      categoryOverridden: transaction.categoryOverridden,
     })
     .from(transaction)
-    .where(and(eq(transaction.userId, userId), eq(transaction.categoryOverridden, false)));
+    .where(and(eq(transaction.userId, userId), ruleMayCategorize));
 }
 
 /** Non-manual transactions whose category changes once `candidate` is saved against `rules`. */
@@ -61,13 +65,14 @@ export async function planRuleApply(
   candidate: CandidateRule,
 ): Promise<Recategorization[]> {
   const categoryByName = await loadCategoryByName(conn, userId);
-  const rows = await loadAutomaticTransactions(conn, userId);
+  const rows = await loadRuleApplicableTransactions(conn, userId);
   return ruleRecategorizations(rows, rules, candidate, categoryByName);
 }
 
 /**
- * Write recategorizations: one UPDATE per target category, scoped to
- * the user and re-checking the manual flag so a concurrent hand-pick wins.
+ * Write recategorizations: one UPDATE per target category, scoped to the user
+ * and re-checking eligibility so a concurrent hand-pick wins. A filled blank
+ * Manual Category becomes automatic.
  * Returns how many transactions were actually updated.
  */
 export async function applyRecategorizations(
@@ -80,11 +85,11 @@ export async function applyRecategorizations(
   for (const [categoryId, group] of Map.groupBy(changes, (c) => c.categoryId)) {
     const result = await conn
       .update(transaction)
-      .set({ categoryId })
+      .set({ categoryId, categoryOverridden: false })
       .where(
         and(
           eq(transaction.userId, userId),
-          eq(transaction.categoryOverridden, false),
+          ruleMayCategorize,
           inArray(transaction.id, group.map((c) => c.id)),
         ),
       );

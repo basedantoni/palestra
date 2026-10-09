@@ -232,7 +232,7 @@ describe("categoryRules.preview", () => {
       makeCaller().categoryRules.preview({ pattern: "starbucks", categoryId: CAT_ID }),
     ).resolves.toEqual({ matchCount: 1 });
     expect(owned.params()).toEqual([CAT_ID, USER_ID]);
-    // Scoped to the caller, manual rows excluded.
+    // Scoped to the caller; hand-picked categories excluded (blank manual rows allowed).
     expect(ctx.txnParams()).toEqual([USER_ID, false]);
   });
 
@@ -302,7 +302,24 @@ describe("categoryRules.create with applyToExisting", () => {
     });
 
     expect(result.applied).toBe(1);
-    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID }, params: [USER_ID, false, "t1"] }]);
+    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID, categoryOverridden: false }, params: [USER_ID, false, "t1"] }]);
+  });
+
+  it("fills a blank Manual Category the rule matches", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]); // rules
+    applyContext([
+      { ...txn("t1", "KFC #1", null), categoryOverridden: true },
+      { ...txn("t2", "KFC #2", OTHER_CAT), categoryOverridden: true }, // hand-picked: never loaded, but guard anyway
+    ]);
+    insertReturns = [{ id: RULE_ID, pattern: "kfc", categoryId: CAT_ID }];
+
+    const result = await makeCaller().categoryRules.create({ pattern: "kfc", categoryId: CAT_ID, applyToExisting: true });
+
+    expect(result.applied).toBe(1);
+    expect(transactionUpdates()).toEqual([
+      { set: { categoryId: CAT_ID, categoryOverridden: false }, params: [USER_ID, false, "t1"] },
+    ]);
   });
 
   it("updates nothing without applyToExisting", async () => {
@@ -343,7 +360,7 @@ describe("categoryRules.update", () => {
     });
 
     expect(result.applied).toBe(1);
-    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID }, params: [USER_ID, false, "t1"] }]);
+    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID, categoryOverridden: false }, params: [USER_ID, false, "t1"] }]);
   });
 
   it("rejects a rule the caller doesn't own with NOT_FOUND", async () => {

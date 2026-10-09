@@ -60,7 +60,7 @@ The text a category rule looks for inside a transaction's bank description.
 _Avoid_: Keyword, query, match string
 
 **Manual Category**:
-A category the user chose by hand for one transaction, including choosing Uncategorized. No category rule or default category replaces it until the user resets the transaction to automatic.
+A category the user chose by hand for one transaction, including choosing Uncategorized. No category rule or default category replaces it until the user resets the transaction to automatic — except that applying a matching category rule fills one left Uncategorized.
 _Avoid_: Override (unqualified), custom category
 
 **Default Category**:

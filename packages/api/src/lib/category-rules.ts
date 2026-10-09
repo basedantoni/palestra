@@ -122,6 +122,8 @@ export interface CategorizableTransaction {
   name: string;
   plaidCategoryPrimary: string | null;
   categoryId: string | null;
+  /** Manual Category flag; only blank (Uncategorized) manual rows can be filled. */
+  categoryOverridden?: boolean;
 }
 
 /**
@@ -129,7 +131,9 @@ export interface CategorizableTransaction {
  * its previous Pattern matched) are re-resolved, against the full rule set as
  * if the rule were saved; returns those whose category changes. Rows a deleted
  * rule once categorized stay as they are — applying is one-shot, never a sweep
- * (ADR 0004). Callers pass non-manual rows only.
+ * (ADR 0004). A Manual Category is never changed, except that a matching rule
+ * fills a blank one (Uncategorized); falling back to the Default Category
+ * never does.
  */
 export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
@@ -145,6 +149,10 @@ export function ruleRecategorizations(
   });
   const saved = withCandidateRule(rules, candidate);
   return touched.flatMap((row) => {
+    if (row.categoryOverridden) {
+      const rule = row.categoryId === null ? matchRule(row.name, saved) : null;
+      return rule ? [{ id: row.id, categoryId: rule.categoryId }] : [];
+    }
     const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, categoryByName);
     return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
   });
