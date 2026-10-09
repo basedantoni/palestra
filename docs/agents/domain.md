@@ -36,6 +36,8 @@ This is a **multi-context** repo (Turborepo monorepo). Presence of `GLOSSARY-MAP
 
 (Contexts are created lazily — don't expect every package to have a `GLOSSARY.md` until `/domain-modeling` writes one.)
 
+**Today:** the only context with docs is `packages/api` — glossary `packages/api/GLOSSARY.md`, ADRs `packages/api/docs/adr/`. There is no root `docs/adr/` yet.
+
 ## Use the glossary's vocabulary
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in the relevant `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.

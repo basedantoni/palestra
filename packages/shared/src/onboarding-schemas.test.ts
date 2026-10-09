@@ -23,7 +23,7 @@ describe("stepWorkoutsSchema", () => {
       preferredWorkoutTypes: [],
     });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].message).toBe("Select at least one workout type");
+    expect(result.error?.issues[0]!.message).toBe("Select at least one workout type");
   });
 
   it("rejects an invalid workout type value", () => {
@@ -43,7 +43,7 @@ describe("stepMetricsSchema", () => {
   it("rejects a birthYear below 1920", () => {
     const result = stepMetricsSchema.safeParse({ birthYear: 1919 });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].message).toBe("Please enter a valid year");
+    expect(result.error?.issues[0]!.message).toBe("Please enter a valid year");
   });
 
   it("rejects a birthYear above 2020", () => {
@@ -54,13 +54,13 @@ describe("stepMetricsSchema", () => {
   it("rejects a heightCm out of range", () => {
     const result = stepMetricsSchema.safeParse({ heightCm: 400 });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].message).toBe("Please enter a valid height");
+    expect(result.error?.issues[0]!.message).toBe("Please enter a valid height");
   });
 
   it("rejects a weightKg out of range", () => {
     const result = stepMetricsSchema.safeParse({ weightKg: 10 });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].message).toBe("Please enter a valid weight");
+    expect(result.error?.issues[0]!.message).toBe("Please enter a valid weight");
   });
 
   it("accepts all fields with valid values", () => {

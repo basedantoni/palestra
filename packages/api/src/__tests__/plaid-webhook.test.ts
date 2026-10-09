@@ -63,7 +63,7 @@ const ITEM_ROW_ID = "00000000-0000-4000-8000-0000000000aa";
 
 let updateSets: Array<Record<string, unknown>>;
 
-function post(body: unknown): Promise<Response> {
+async function post(body: unknown): Promise<Response> {
   return plaidWebhookApp.fetch(
     new Request("http://localhost/webhook", {
       method: "POST",
