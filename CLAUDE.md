@@ -31,7 +31,11 @@ Run from repo root (Turborepo fans out to packages).
 - `pnpm test` — Vitest across packages (most tests live in `packages/api`).
 - `pnpm turbo "//#lint"` — oxlint (root task, not per-package). `pnpm lint:fix` to autofix.
 - `pnpm db:start` — local Postgres via Docker. `db:stop` / `db:down` to halt/remove.
-- `pnpm db:push` — push schema to DB (dev). `db:generate` + `db:migrate` for versioned migrations. `db:seed` seeds reference data. `db:studio` opens Drizzle Studio.
+- `pnpm db:push` — push schema to DB (dev). `db:generate` + `db:migrate` for versioned migrations. `db:seed` seeds reference data. `db:seed:finance` seeds the dev login and finance fixtures (dev only, idempotent). `db:studio` opens Drizzle Studio.
+
+## Verifying UI changes
+
+Before you write QA steps for the user, run the app and check the change yourself. The `run` skill (`.claude/skills/run/SKILL.md`) starts the stack with logs in `logs/`, logs in as the seeded dev user (`dev@palestra.local` / `palestra-dev-password`) and covers the finance fixture cases.
 
 ## Conventions
 

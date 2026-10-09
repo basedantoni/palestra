@@ -13,5 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 3001,
+    // CORS_ORIGIN and Better-Auth trust 3001 only; fail loudly instead of drifting to 3002.
+    strictPort: true,
   },
 });
