@@ -20,9 +20,6 @@ type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type Conn = Db | Tx;
 
-/** Ids per UPDATE, well under Postgres' bind-parameter limit. */
-const UPDATE_CHUNK = 1000;
-
 export function loadMatchableRules(conn: Conn, userId: string): Promise<MatchableRule[]> {
   return conn
     .select({
@@ -69,7 +66,7 @@ export async function planRuleApply(
 }
 
 /**
- * Write recategorizations: one UPDATE per target category (chunked), scoped to
+ * Write recategorizations: one UPDATE per target category, scoped to
  * the user and re-checking the manual flag so a concurrent hand-pick wins.
  * Returns how many transactions were actually updated.
  */
@@ -79,26 +76,19 @@ export async function applyRecategorizations(
   changes: readonly Recategorization[],
 ): Promise<number> {
   let updated = 0;
-  const idsByCategory = new Map<string | null, string[]>();
-  for (const c of changes) {
-    const ids = idsByCategory.get(c.categoryId) ?? [];
-    ids.push(c.id);
-    idsByCategory.set(c.categoryId, ids);
-  }
-  for (const [categoryId, ids] of idsByCategory) {
-    for (let i = 0; i < ids.length; i += UPDATE_CHUNK) {
-      const result = await conn
-        .update(transaction)
-        .set({ categoryId })
-        .where(
-          and(
-            eq(transaction.userId, userId),
-            eq(transaction.categoryOverridden, false),
-            inArray(transaction.id, ids.slice(i, i + UPDATE_CHUNK)),
-          ),
-        );
-      updated += result.rowCount ?? 0;
-    }
+  // ponytail: one UPDATE per category, unchunked; chunk the ids if a pattern ever matches >65k rows (bind-param limit).
+  for (const [categoryId, group] of Map.groupBy(changes, (c) => c.categoryId)) {
+    const result = await conn
+      .update(transaction)
+      .set({ categoryId })
+      .where(
+        and(
+          eq(transaction.userId, userId),
+          eq(transaction.categoryOverridden, false),
+          inArray(transaction.id, group.map((c) => c.id)),
+        ),
+      );
+    updated += result.rowCount ?? 0;
   }
   return updated;
 }

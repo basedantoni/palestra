@@ -108,7 +108,7 @@ export const categoryRulesRouter = router({
         const applied = input.applyToExisting
           ? await applyRecategorizations(tx, userId, await planRuleApply(tx, userId, rules, saved))
           : 0;
-        return { rule: { id: saved.id, pattern: saved.pattern, categoryId: saved.categoryId }, applied };
+        return { rule: saved, applied };
       });
     }),
 

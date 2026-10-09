@@ -110,14 +110,10 @@ export interface Recategorization {
  * with the same id (keeping its createdAt, as the DB does), a new rule joins
  * as the newest.
  */
-export function withCandidateRule(
-  rules: readonly MatchableRule[],
-  candidate: CandidateRule,
-  now: Date = new Date(),
-): MatchableRule[] {
+export function withCandidateRule(rules: readonly MatchableRule[], candidate: CandidateRule): MatchableRule[] {
   const { id, pattern, categoryId } = candidate;
   const edited = rules.find((r) => r.id === id);
-  if (!edited) return [...rules, { id, pattern, categoryId, createdAt: candidate.createdAt ?? now }];
+  if (!edited) return [...rules, { id, pattern, categoryId, createdAt: candidate.createdAt ?? new Date() }];
   return rules.map((r) => (r === edited ? { id, pattern, categoryId, createdAt: r.createdAt } : r));
 }
 
@@ -129,27 +125,11 @@ export interface CategorizableTransaction {
 }
 
 /**
- * Re-resolve each transaction against the full rule set and return only
- * those whose category changes. Callers pass non-manual rows only (ADR 0004).
- */
-export function recategorizations(
-  rows: readonly CategorizableTransaction[],
-  rules: readonly MatchableRule[],
-  categoryByName: ReadonlyMap<string, string>,
-): Recategorization[] {
-  const changes: Recategorization[] = [];
-  for (const row of rows) {
-    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, categoryByName);
-    if (categoryId !== row.categoryId) changes.push({ id: row.id, categoryId });
-  }
-  return changes;
-}
-
-/**
  * Retroactive apply of one rule: only rows its Pattern matches (or, on edit,
  * its previous Pattern matched) are re-resolved, against the full rule set as
- * if the rule were saved. Rows a deleted rule once categorized stay as they
- * are — applying is one-shot, never a sweep (ADR 0004).
+ * if the rule were saved; returns those whose category changes. Rows a deleted
+ * rule once categorized stay as they are — applying is one-shot, never a sweep
+ * (ADR 0004). Callers pass non-manual rows only.
  */
 export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
@@ -163,5 +143,9 @@ export function ruleRecategorizations(
     const name = row.name.toLowerCase();
     return patterns.some((p) => name.includes(p));
   });
-  return recategorizations(touched, withCandidateRule(rules, candidate), categoryByName);
+  const saved = withCandidateRule(rules, candidate);
+  return touched.flatMap((row) => {
+    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, categoryByName);
+    return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
+  });
 }

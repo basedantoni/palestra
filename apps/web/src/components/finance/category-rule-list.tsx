@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { MAX_PATTERN_LENGTH, validatePattern } from "@life-tracker/api/lib/category-rules";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
+import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { Button } from "@/components/ui/button";
 
 type RuleRow = RouterOutputs["categoryRules"]["list"][number];
@@ -88,6 +89,7 @@ function RuleForm({
   onDone?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const invalidateFinance = useInvalidateFinance();
   const [pattern, setPattern] = useState(editing?.pattern ?? "");
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "");
   const [applyToExisting, setApplyToExisting] = useState(true);
@@ -113,16 +115,9 @@ function RuleForm({
   );
 
   const onSuccess = ({ applied }: { applied: number }) => {
+    queryClient.invalidateQueries({ queryKey: trpc.categoryRules.pathKey() });
     // Applying recategorizes transactions, which ripples into budget and finance spend.
-    const recategorized = [
-      trpc.transactions.pathKey(),
-      trpc.budgets.pathKey(),
-      trpc.categories.pathKey(),
-      trpc.finance.pathKey(),
-    ];
-    for (const queryKey of [trpc.categoryRules.pathKey(), ...(applied > 0 ? recategorized : [])]) {
-      queryClient.invalidateQueries({ queryKey });
-    }
+    if (applied > 0) invalidateFinance();
     if (editing) return onDone?.();
     setPattern("");
     setTouched(false);
