@@ -149,3 +149,14 @@ export function ruleRecategorizations(
     return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
   });
 }
+
+/**
+ * Pattern offered after a recategorize: the merchant when the description
+ * contains it, else the description cut to a savable length (a prefix still
+ * matches the transaction it came from).
+ */
+export function suggestPattern(name: string, merchantName: string | null): string {
+  const merchant = merchantName?.trim();
+  if (merchant && name.toLowerCase().includes(merchant.toLowerCase())) return merchant;
+  return name.trim().slice(0, MAX_PATTERN_LENGTH);
+}

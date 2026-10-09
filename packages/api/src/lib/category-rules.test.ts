@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_PATTERN_LENGTH,
   defaultCategoryId,
   isManualCategory,
   matchRule,
   ruleRecategorizations,
+  suggestPattern,
   resolveCategory,
   validatePattern,
   withCandidateRule,
@@ -198,5 +200,28 @@ describe("ruleRecategorizations", () => {
     expect(
       ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, categoryByName),
     ).toEqual([{ id: "t2", categoryId: "cat-shop" }]);
+  });
+});
+
+describe("suggestPattern", () => {
+  it("suggests the merchant when the description contains it, ignoring case", () => {
+    expect(suggestPattern("SQ *STARBUCKS #123", "Starbucks")).toBe("Starbucks");
+  });
+
+  it("falls back to the description when the merchant isn't in it", () => {
+    expect(suggestPattern("SQ *SBUX 123", "Starbucks")).toBe("SQ *SBUX 123");
+  });
+
+  it("falls back to the description without a merchant", () => {
+    expect(suggestPattern("ACH TRANSFER 42", null)).toBe("ACH TRANSFER 42");
+  });
+
+  it("ignores whitespace around the merchant", () => {
+    expect(suggestPattern("SQ *STARBUCKS #123", " Starbucks ")).toBe("Starbucks");
+  });
+
+  it("cuts a long description to a savable prefix that still matches", () => {
+    const name = "X".repeat(150);
+    expect(suggestPattern(name, null)).toBe("X".repeat(MAX_PATTERN_LENGTH));
   });
 });
