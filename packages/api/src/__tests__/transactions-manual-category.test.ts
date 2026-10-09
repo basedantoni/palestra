@@ -156,7 +156,8 @@ describe("transactions.setCategory", () => {
 // ────────────────────────────────────────────────────────────────────────────
 describe("transactions.resetCategory", () => {
   it("restores the Default Category and clears the manual flag, scoped to the caller", async () => {
-    const lookup = selectCapturingWhere([{ plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    const lookup = selectCapturingWhere([{ name: "BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    const rules = selectCapturingWhere([]);
     const categories = selectCapturingWhere([
       { id: "cat-food", name: "Food & Drink" },
       { id: "cat-shop", name: "Shopping" },
@@ -165,6 +166,7 @@ describe("transactions.resetCategory", () => {
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 
     expect(lookup.params()).toEqual([TXN_ID, USER_ID]);
+    expect(rules.params()).toEqual([USER_ID]);
     expect(categories.params()).toEqual([USER_ID]);
     const [update] = transactionUpdates();
     expect(update!.set).toEqual({ categoryId: "cat-food", categoryOverridden: false });
@@ -172,13 +174,25 @@ describe("transactions.resetCategory", () => {
   });
 
   it("leaves the transaction uncategorized when the user has no Default Category for it", async () => {
-    selectReturns([{ plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    selectReturns([{ name: "BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    selectReturns([]); // no rules
     selectReturns([]); // no seeded categories
 
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 
     const [update] = transactionUpdates();
     expect(update!.set).toEqual({ categoryId: null, categoryOverridden: false });
+  });
+
+  it("applies the matching Category Rule before the Default Category", async () => {
+    selectReturns([{ name: "SQ *BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
+    selectReturns([{ id: "r1", pattern: "blue bottle", categoryId: "cat-coffee", createdAt: new Date() }]);
+    selectReturns([{ id: "cat-food", name: "Food & Drink" }]);
+
+    await makeCaller().transactions.resetCategory({ id: TXN_ID });
+
+    const [update] = transactionUpdates();
+    expect(update!.set).toEqual({ categoryId: "cat-coffee", categoryOverridden: false });
   });
 
   it("rejects a transaction the caller doesn't own with NOT_FOUND", async () => {
