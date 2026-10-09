@@ -48,7 +48,7 @@ describe("matchInternalTransfers", () => {
       { id: "recv", accountId: "card", amount: -1200, date: new Date("2026-06-01") },
     ]);
     expect(pairs).toHaveLength(1);
-    expect(pairs[0].transactionIds.sort()).toEqual(["pay", "recv"]);
+    expect(pairs[0]!.transactionIds.sort()).toEqual(["pay", "recv"]);
   });
 
   it("does NOT match same-account or same-sign pairs", () => {
@@ -91,6 +91,6 @@ describe("matchInternalTransfers", () => {
       { id: "in2", accountId: "brokerage", amount: -100, date: new Date("2026-06-10") },
     ]);
     expect(pairs).toHaveLength(1);
-    expect(pairs[0].transactionIds[0]).toBe("out");
+    expect(pairs[0]!.transactionIds[0]).toBe("out");
   });
 });

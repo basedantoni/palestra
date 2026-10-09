@@ -52,7 +52,7 @@ export function deterministicUUID(name: string): string {
   segment3 = '5' + segment3.slice(1);
 
   // Set variant bits (10xx): ensure first character of segment4 is 8, 9, a, or b
-  const firstChar = parseInt(segment4[0], 16);
+  const firstChar = parseInt(segment4[0]!, 16);
   const variantChar = (8 + (firstChar % 4)).toString(16); // Ensures 8, 9, a, or b
   segment4 = variantChar + segment4.slice(1);
 

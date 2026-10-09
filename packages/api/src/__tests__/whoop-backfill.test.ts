@@ -25,7 +25,7 @@
  * p. triggerBackfill clears state on error (never throws)
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)

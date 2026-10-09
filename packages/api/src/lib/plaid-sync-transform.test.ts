@@ -37,9 +37,9 @@ describe("applyTransactionSyncDelta", () => {
       plaidCategoryDetailed: "FOOD_AND_DRINK_COFFEE",
       isoCurrencyCode: "USD",
     });
-    expect(out.upserts[0].date).toBeInstanceOf(Date);
-    expect(out.upserts[0].date.toISOString().slice(0, 10)).toBe("2026-06-10");
-    expect(out.upserts[1].merchantName).toBeNull();
+    expect(out.upserts[0]!.date).toBeInstanceOf(Date);
+    expect(out.upserts[0]!.date.toISOString().slice(0, 10)).toBe("2026-06-10");
+    expect(out.upserts[1]!.merchantName).toBeNull();
   });
 
   it("collects removed transaction ids into deletes", () => {
