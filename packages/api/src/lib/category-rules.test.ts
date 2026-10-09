@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_PATTERN_LENGTH,
   defaultCategoryId,
   isManualCategory,
   matchRule,
   ruleRecategorizations,
+  suggestPattern,
   resolveCategory,
   validatePattern,
   withCandidateRule,
@@ -164,6 +166,33 @@ const row = (id: string, name: string, categoryId: string | null) => ({
 });
 
 describe("ruleRecategorizations", () => {
+  it("fills a blank Manual Category when the rule matches it, clearing the manual flag", () => {
+    const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+    ).toEqual([{ id: "t1", categoryId: "cat-food" }]);
+  });
+
+  it("never touches a Manual Category with a real category", () => {
+    const rows = [{ ...row("t1", "KFC", "cat-shop"), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+    ).toEqual([]);
+  });
+
+  it("leaves a blank Manual Category blank when no rule matches it any more", () => {
+    // Editing "kfc" → "kfc express": the old pattern touched t1, but no rule matches it now.
+    const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
+    expect(
+      ruleRecategorizations(
+        rows,
+        [rule("r1", "kfc", "cat-food")],
+        { id: "r1", pattern: "kfc express", categoryId: "cat-food" },
+        categoryByName,
+      ),
+    ).toEqual([]);
+  });
+
   it("returns only matched rows whose category changes", () => {
     const rows = [
       row("t1", "STARBUCKS #1", "cat-food"), // changes
@@ -198,5 +227,28 @@ describe("ruleRecategorizations", () => {
     expect(
       ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, categoryByName),
     ).toEqual([{ id: "t2", categoryId: "cat-shop" }]);
+  });
+});
+
+describe("suggestPattern", () => {
+  it("suggests the merchant when the description contains it, ignoring case", () => {
+    expect(suggestPattern("SQ *STARBUCKS #123", "Starbucks")).toBe("Starbucks");
+  });
+
+  it("falls back to the description when the merchant isn't in it", () => {
+    expect(suggestPattern("SQ *SBUX 123", "Starbucks")).toBe("SQ *SBUX 123");
+  });
+
+  it("falls back to the description without a merchant", () => {
+    expect(suggestPattern("ACH TRANSFER 42", null)).toBe("ACH TRANSFER 42");
+  });
+
+  it("ignores whitespace around the merchant", () => {
+    expect(suggestPattern("SQ *STARBUCKS #123", " Starbucks ")).toBe("Starbucks");
+  });
+
+  it("cuts a long description to a savable prefix that still matches", () => {
+    const name = "X".repeat(150);
+    expect(suggestPattern(name, null)).toBe("X".repeat(MAX_PATTERN_LENGTH));
   });
 });

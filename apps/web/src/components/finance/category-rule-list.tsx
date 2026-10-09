@@ -76,22 +76,29 @@ export function CategoryRuleList() {
   );
 }
 
-/** Create a rule, or edit `editing`: live Pattern validation, match count, and apply-to-existing. */
-function RuleForm({
+/**
+ * Create a rule (optionally prefilled with `suggested`), or edit `editing`:
+ * live Pattern validation, match count, and apply-to-existing. With `onDone`,
+ * the form closes on save or Cancel; without it, it resets for the next rule.
+ */
+export function RuleForm({
   rules,
   categories,
   editing,
+  suggested,
   onDone,
 }: {
   rules: RuleRow[];
   categories: CategoryRow[];
   editing?: RuleRow;
+  suggested?: { pattern: string; categoryId: string };
   onDone?: () => void;
 }) {
+  const initial = editing ?? suggested;
   const queryClient = useQueryClient();
   const invalidateFinance = useInvalidateFinance();
-  const [pattern, setPattern] = useState(editing?.pattern ?? "");
-  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? "");
+  const [pattern, setPattern] = useState(initial?.pattern ?? "");
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [applyToExisting, setApplyToExisting] = useState(true);
   const [touched, setTouched] = useState(false);
   const [debouncedPattern, setDebouncedPattern] = useState(pattern);
@@ -118,7 +125,7 @@ function RuleForm({
     queryClient.invalidateQueries({ queryKey: trpc.categoryRules.pathKey() });
     // Applying recategorizes transactions, which ripples into budget and finance spend.
     if (applied > 0) invalidateFinance();
-    if (editing) return onDone?.();
+    if (onDone) return onDone();
     setPattern("");
     setTouched(false);
   };
@@ -144,7 +151,7 @@ function RuleForm({
     >
       <div className="flex gap-2">
         <input
-          autoFocus={!!editing}
+          autoFocus={!!initial}
           value={pattern}
           onChange={(e) => {
             setPattern(e.target.value);
@@ -176,7 +183,7 @@ function RuleForm({
         <Button size="sm" type="submit" disabled={!pattern.trim() || !categoryId || save.isPending}>
           {editing ? "Save" : "Add"}
         </Button>
-        {editing && (
+        {onDone && (
           <Button size="sm" type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
             Cancel
           </Button>
@@ -191,7 +198,7 @@ function RuleForm({
         <span aria-live="polite">
           {matchCount === undefined
             ? "\u00a0"
-            : `Matches ${matchCount} existing ${matchCount === 1 ? "transaction" : "transactions"}`}
+            : `Will update ${matchCount} existing ${matchCount === 1 ? "transaction" : "transactions"}`}
         </span>
         <label className="flex items-center gap-1.5">
           <input type="checkbox" checked={applyToExisting} onChange={(e) => setApplyToExisting(e.target.checked)} />

@@ -7,3 +7,4 @@ Category rules must never overwrite a category the user picked by hand, so — f
 - To undo a rule's retroactive effect, the user recategorizes or resets the affected transactions; there is no bulk revert.
 - A manual category on a pending transaction is lost when it posts (new Plaid id, ADR 0001), but a matching rule re-applies to the posted row.
 - Retroactive apply (KOI-299) re-resolves only the rows the saved rule's Pattern matches — plus, on edit, the rows its previous Pattern matched — against the full rule set. It is not a sweep: rows a deleted rule once categorized keep that category until reset.
+- Applying a rule fills a Manual Category left Uncategorized when the rule matches it, and clears its flag (KOI-300). Rows the backfill inferred as manual because they were blank were indistinguishable from a deliberate "Uncategorized", and blank rows are what users want rules to fill. A hand-picked real category is still never touched.

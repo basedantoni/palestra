@@ -1,11 +1,15 @@
-import { useState } from "react";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { type ReactNode, useState } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
+import { suggestPattern, validatePattern } from "@life-tracker/api/lib/category-rules";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
+import { RuleForm } from "./category-rule-list";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -36,15 +40,33 @@ type Txn = RouterOutputs["transactions"]["list"]["items"][number];
  * edit the note, category and budget exclusion; matched transfer legs collapse
  * into one row; "Load more" pages back through history.
  */
-export function TransactionFeed({
-  pageSize = 50,
-  filters = {},
-  loadMore = true,
-}: {
+export function TransactionFeed(props: {
   pageSize?: number;
   filters?: TransactionFilters;
   /** Off for compact previews (e.g. the overview's recent transactions). */
   loadMore?: boolean;
+}) {
+  // The rule offer lives above the list: a recategorized row can leave a
+  // filtered feed (e.g. Uncategorized) before the user answers.
+  const [offerRule, ruleDialog] = useRuleOffer();
+  return (
+    <>
+      <FeedList {...props} onRecategorized={offerRule} />
+      {ruleDialog}
+    </>
+  );
+}
+
+function FeedList({
+  pageSize = 50,
+  filters = {},
+  loadMore = true,
+  onRecategorized,
+}: {
+  pageSize?: number;
+  filters?: TransactionFilters;
+  loadMore?: boolean;
+  onRecategorized: OnRecategorized;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const feed = useInfiniteQuery(
@@ -73,7 +95,13 @@ export function TransactionFeed({
           </header>
           <ul className="divide-y divide-border border border-border">
             {day.entries.map((entry) => (
-              <FeedItem key={entryKey(entry)} entry={entry} expanded={expanded} onToggle={toggle} />
+              <FeedItem
+                key={entryKey(entry)}
+                entry={entry}
+                expanded={expanded}
+                onToggle={toggle}
+                onRecategorized={onRecategorized}
+              />
             ))}
           </ul>
         </section>
@@ -103,10 +131,12 @@ function FeedItem({
   entry,
   expanded,
   onToggle,
+  onRecategorized,
 }: {
   entry: FeedEntry<Txn>;
   expanded: string | null;
   onToggle: (key: string) => void;
+  onRecategorized: OnRecategorized;
 }) {
   const key = entryKey(entry);
   const open = expanded === key;
@@ -177,7 +207,7 @@ function FeedItem({
       </button>
       {open && (
         <div className="border-t border-border bg-muted/30 px-4 py-3">
-          <TransactionEditor txn={t} />
+          <TransactionEditor txn={t} onRecategorized={onRecategorized} />
         </div>
       )}
     </li>
@@ -220,10 +250,18 @@ function FlowPicker({ txn }: { txn: Txn }) {
 }
 
 /** Note, flow, category and budget-exclusion editing for one transaction. */
-function TransactionEditor({ txn }: { txn: Txn }) {
+function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized: OnRecategorized }) {
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
   const onSuccess = useInvalidateFinance();
-  const setCategory = useMutation(trpc.transactions.setCategory.mutationOptions({ onSuccess }));
+  const setCategory = useMutation(
+    trpc.transactions.setCategory.mutationOptions({
+      onSuccess: (_, { categoryId }) => {
+        onSuccess();
+        // Uncategorized (null) gets no rule offer.
+        if (categoryId) onRecategorized(txn, categoryId);
+      },
+    }),
+  );
   const resetCategory = useMutation(trpc.transactions.resetCategory.mutationOptions({ onSuccess }));
   const setExcluded = useMutation(trpc.transactions.setExcluded.mutationOptions({ onSuccess }));
   const setNote = useMutation(trpc.transactions.setNote.mutationOptions({ onSuccess }));
@@ -286,4 +324,45 @@ function TransactionEditor({ txn }: { txn: Txn }) {
       </p>
     </div>
   );
+}
+
+type OnRecategorized = (txn: Txn, categoryId: string) => void;
+
+/**
+ * "Always categorize like this?" after a recategorize (KOI-300): a toast
+ * offering a rule for the suggested Pattern, skipped when that Pattern
+ * couldn't be saved (too short, or a rule already has it). Accepting opens
+ * the rule form prefilled; dismissing leaves just the Manual Category.
+ */
+function useRuleOffer(): [OnRecategorized, ReactNode] {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<{ pattern: string; categoryId: string } | null>(null);
+  const { data: categories } = useQuery(trpc.categories.list.queryOptions());
+  const { data: rules } = useQuery({ ...trpc.categoryRules.list.queryOptions(), enabled: !!draft });
+
+  const offer: OnRecategorized = async (txn, categoryId) => {
+    const current = await queryClient.fetchQuery(trpc.categoryRules.list.queryOptions());
+    const valid = validatePattern(suggestPattern(txn.name, txn.merchantName), current);
+    if (!valid.ok) return;
+    const categoryName = categories?.find((c) => c.id === categoryId)?.name ?? "this category";
+    toast(`Always categorize transactions containing “${valid.pattern}” as ${categoryName}?`, {
+      id: "category-rule-offer",
+      action: { label: "Create rule", onClick: () => setDraft({ pattern: valid.pattern, categoryId }) },
+      cancel: { label: "Dismiss", onClick: () => {} },
+    });
+  };
+
+  const dialog = (
+    <Dialog open={!!draft} onOpenChange={(open) => !open && setDraft(null)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New category rule</DialogTitle>
+        </DialogHeader>
+        {draft && rules && categories && (
+          <RuleForm rules={rules} categories={categories} suggested={draft} onDone={() => setDraft(null)} />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+  return [offer, dialog];
 }
