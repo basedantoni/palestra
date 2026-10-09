@@ -4,8 +4,11 @@ import {
   defaultCategoryId,
   isManualCategory,
   matchRule,
+  recategorizations,
+  ruleRecategorizations,
   resolveCategory,
   validatePattern,
+  withCandidateRule,
 } from "./category-rules";
 
 const categoryByName = new Map([
@@ -126,5 +129,90 @@ describe("validatePattern", () => {
   it("allows a rule to keep its own pattern on edit", () => {
     expect(validatePattern("starbucks", existing, "r1")).toEqual({ ok: true, pattern: "starbucks" });
     expect(validatePattern("uber", existing, "r1")).toMatchObject({ ok: false });
+  });
+});
+
+describe("withCandidateRule", () => {
+  const now = new Date("2026-10-08");
+  const existing = [rule("r1", "uber", "cat-travel", "2026-01-01"), rule("r2", "amazon", "cat-shop", "2026-02-01")];
+
+  it("keeps a new rule's own createdAt when it has one", () => {
+    const saved = new Date("2026-10-07");
+    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", categoryId: "cat-food", createdAt: saved }, now);
+    expect(rules.at(-1)!.createdAt).toBe(saved);
+  });
+
+  it("adds a new rule as the newest", () => {
+    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", categoryId: "cat-food" }, now);
+    expect(rules).toHaveLength(3);
+    expect(rules.at(-1)).toEqual({ id: "new", pattern: "eats", categoryId: "cat-food", createdAt: now });
+  });
+
+  it("replaces an edited rule, keeping its createdAt", () => {
+    const rules = withCandidateRule(existing, { id: "r1", pattern: "uber eats", categoryId: "cat-food" }, now);
+    expect(rules).toEqual([
+      { id: "r1", pattern: "uber eats", categoryId: "cat-food", createdAt: new Date("2026-01-01") },
+      existing[1],
+    ]);
+  });
+});
+
+const row = (id: string, name: string, categoryId: string | null) => ({
+  id,
+  name,
+  plaidCategoryPrimary: "FOOD_AND_DRINK",
+  categoryId,
+});
+
+describe("recategorizations", () => {
+  it("returns only rows whose resolved category changes", () => {
+    const rules = [rule("r1", "starbucks", "cat-coffee")];
+    const rows = [
+      row("t1", "STARBUCKS #1", "cat-food"), // changes
+      row("t2", "STARBUCKS #2", "cat-coffee"), // already right
+      row("t3", "CHIPOTLE", "cat-food"), // default, unchanged
+    ];
+    expect(recategorizations(rows, rules, categoryByName)).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
+  });
+
+  it("falls back to the Default Category when no rule matches any more", () => {
+    expect(recategorizations([row("t1", "CHIPOTLE", "cat-coffee")], [], categoryByName)).toEqual([
+      { id: "t1", categoryId: "cat-food" },
+    ]);
+  });
+
+  it("honours longest-pattern precedence across the whole rule set", () => {
+    const rules = [rule("r1", "amazon prime", "cat-subs"), rule("r2", "amazon", "cat-shop", "2026-09-01")];
+    expect(recategorizations([row("t1", "AMAZON PRIME*1", "cat-food")], rules, categoryByName)).toEqual([
+      { id: "t1", categoryId: "cat-subs" },
+    ]);
+  });
+});
+
+describe("ruleRecategorizations", () => {
+  it("leaves rows the rule doesn't match alone, even if a deleted rule categorized them", () => {
+    const rows = [row("t1", "STARBUCKS #1", "cat-food"), row("t2", "UBER TRIP", "cat-travel")];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, categoryByName),
+    ).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
+  });
+
+  it("on edit, re-resolves rows the old pattern matched", () => {
+    const rules = [rule("r1", "starbucks", "cat-coffee")];
+    const rows = [row("t1", "STARBUCKS #1", "cat-coffee"), row("t2", "STARBUCKS RESERVE", "cat-coffee")];
+    expect(
+      ruleRecategorizations(rows, rules, { id: "r1", pattern: "starbucks reserve", categoryId: "cat-shop" }, categoryByName),
+    ).toEqual([
+      { id: "t1", categoryId: "cat-food" },
+      { id: "t2", categoryId: "cat-shop" },
+    ]);
+  });
+
+  it("keeps longest-pattern precedence from other rules", () => {
+    const rules = [rule("r1", "amazon prime", "cat-subs")];
+    const rows = [row("t1", "AMAZON PRIME*1", "cat-subs"), row("t2", "AMAZON MKTP", "cat-food")];
+    expect(
+      ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, categoryByName),
+    ).toEqual([{ id: "t2", categoryId: "cat-shop" }]);
   });
 });

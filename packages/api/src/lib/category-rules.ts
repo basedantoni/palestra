@@ -68,6 +68,7 @@ export function resolveCategory(
 
 export const MIN_PATTERN_LENGTH = 3;
 export const MAX_PATTERN_LENGTH = 100;
+export const DUPLICATE_PATTERN_REASON = "A rule with this pattern already exists";
 
 export type PatternValidation = { ok: true; pattern: string } | { ok: false; reason: string };
 
@@ -86,7 +87,81 @@ export function validatePattern(
   }
   const lower = trimmed.toLowerCase();
   if (existing.some((r) => r.id !== editingRuleId && r.pattern.toLowerCase() === lower)) {
-    return { ok: false, reason: "A rule with this pattern already exists" };
+    return { ok: false, reason: DUPLICATE_PATTERN_REASON };
   }
   return { ok: true, pattern: trimmed };
+}
+
+/** A rule about to be saved: new (with the DB's createdAt once inserted) or an edit of an existing id. */
+export interface CandidateRule {
+  id: string;
+  pattern: string;
+  categoryId: string;
+  createdAt?: Date;
+}
+
+export interface Recategorization {
+  id: string;
+  categoryId: string | null;
+}
+
+/**
+ * The user's rule set as if `candidate` were saved: an edit replaces the rule
+ * with the same id (keeping its createdAt, as the DB does), a new rule joins
+ * as the newest.
+ */
+export function withCandidateRule(
+  rules: readonly MatchableRule[],
+  candidate: CandidateRule,
+  now: Date = new Date(),
+): MatchableRule[] {
+  const { id, pattern, categoryId } = candidate;
+  const edited = rules.find((r) => r.id === id);
+  if (!edited) return [...rules, { id, pattern, categoryId, createdAt: candidate.createdAt ?? now }];
+  return rules.map((r) => (r === edited ? { id, pattern, categoryId, createdAt: r.createdAt } : r));
+}
+
+export interface CategorizableTransaction {
+  id: string;
+  name: string;
+  plaidCategoryPrimary: string | null;
+  categoryId: string | null;
+}
+
+/**
+ * Re-resolve each transaction against the full rule set and return only
+ * those whose category changes. Callers pass non-manual rows only (ADR 0004).
+ */
+export function recategorizations(
+  rows: readonly CategorizableTransaction[],
+  rules: readonly MatchableRule[],
+  categoryByName: ReadonlyMap<string, string>,
+): Recategorization[] {
+  const changes: Recategorization[] = [];
+  for (const row of rows) {
+    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, categoryByName);
+    if (categoryId !== row.categoryId) changes.push({ id: row.id, categoryId });
+  }
+  return changes;
+}
+
+/**
+ * Retroactive apply of one rule: only rows its Pattern matches (or, on edit,
+ * its previous Pattern matched) are re-resolved, against the full rule set as
+ * if the rule were saved. Rows a deleted rule once categorized stay as they
+ * are — applying is one-shot, never a sweep (ADR 0004).
+ */
+export function ruleRecategorizations(
+  rows: readonly CategorizableTransaction[],
+  rules: readonly MatchableRule[],
+  candidate: CandidateRule,
+  categoryByName: ReadonlyMap<string, string>,
+): Recategorization[] {
+  const previous = rules.find((r) => r.id === candidate.id);
+  const patterns = [candidate.pattern, previous?.pattern].flatMap((p) => (p ? [p.toLowerCase()] : []));
+  const touched = rows.filter((row) => {
+    const name = row.name.toLowerCase();
+    return patterns.some((p) => name.includes(p));
+  });
+  return recategorizations(touched, withCandidateRule(rules, candidate), categoryByName);
 }

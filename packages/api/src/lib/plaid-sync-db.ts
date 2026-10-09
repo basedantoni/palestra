@@ -20,7 +20,6 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@life-tracker/db";
 import {
   category,
-  categoryRule,
   financialAccount,
   plaidItem,
   transaction,
@@ -38,6 +37,7 @@ import {
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
 import { SEED_CATEGORIES } from "./category-seed";
 import { resolveCategory } from "./category-rules";
+import { loadCategoryByName, loadMatchableRules } from "./category-rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -55,11 +55,7 @@ async function ensureSeedCategories(userId: string): Promise<Map<string, string>
     )
     .onConflictDoNothing();
 
-  const rows = await db
-    .select({ id: category.id, name: category.name })
-    .from(category)
-    .where(eq(category.userId, userId));
-  return new Map(rows.map((r) => [r.name, r.id]));
+  return loadCategoryByName(db, userId);
 }
 
 /** Drain the full Plaid sync pagination for one item. */
@@ -119,15 +115,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const accountIdByPlaid = new Map(accounts.map((a) => [a.plaidAccountId, a.id]));
 
   const categoryByName = await ensureSeedCategories(userId);
-  const rules = await db
-    .select({
-      id: categoryRule.id,
-      pattern: categoryRule.pattern,
-      categoryId: categoryRule.categoryId,
-      createdAt: categoryRule.createdAt,
-    })
-    .from(categoryRule)
-    .where(eq(categoryRule.userId, userId));
+  const rules = await loadMatchableRules(db, userId);
 
   // Account balances + daily snapshots.
   await persistAccountBalances(userId, accountIdByPlaid, mutations);

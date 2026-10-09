@@ -65,6 +65,9 @@ const render = (clause: unknown) => new PgDialect().sqlToQuery(clause as SQL);
 type Calls = Array<[string, unknown[]]>;
 let insertCalls: Array<{ table: unknown; calls: Calls; returning: unknown[] }>;
 let deleteCalls: Array<{ table: unknown; calls: Calls }>;
+let updateCalls: Array<{ table: unknown; calls: Calls }>;
+let updateError: unknown;
+let ruleUpdateReturns: unknown[];
 let insertReturns: unknown[];
 let deleteReturns: unknown[];
 
@@ -90,14 +93,27 @@ beforeEach(() => {
   vi.clearAllMocks();
   insertCalls = [];
   deleteCalls = [];
-  insertReturns = [{ id: RULE_ID }];
+  updateCalls = [];
+  updateError = undefined;
+  ruleUpdateReturns = [{ id: RULE_ID }];
+  insertReturns = [{ id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }];
   deleteReturns = [{ id: RULE_ID }];
   mockDb.insert.mockImplementation((table: unknown) => {
     const calls: Calls = [];
     insertCalls.push({ table, calls, returning: insertReturns });
     return makeChain(table === categoryRule ? insertReturns : [], calls);
   });
-  mockDb.update.mockImplementation(() => makeChain([]));
+  mockDb.update.mockImplementation((table: unknown) => {
+    const calls: Calls = [];
+    updateCalls.push({ table, calls });
+    if (updateError && table === categoryRule) {
+      const err = updateError;
+      return { set: () => ({ where: () => ({ returning: () => Promise.reject(err) }) }) };
+    }
+    // Rule updates return the saved id; transaction updates report one row written each.
+    return makeChain(table === categoryRule ? ruleUpdateReturns : { rowCount: 1 }, calls);
+  });
+  mockDb.transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(mockDb));
   mockDb.delete.mockImplementation((table: unknown) => {
     const calls: Calls = [];
     deleteCalls.push({ table, calls });
@@ -124,7 +140,7 @@ describe("categoryRules.create", () => {
 
     const result = await makeCaller().categoryRules.create({ pattern: "  Starbucks ", categoryId: CAT_ID });
 
-    expect(result).toEqual({ id: RULE_ID });
+    expect(result).toEqual({ rule: { id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }, applied: 0 });
     expect(owned.params()).toEqual([CAT_ID, USER_ID]);
     expect(existing.params()).toEqual([USER_ID]);
     const insert = insertCalls.find((i) => i.table === categoryRule)!;
@@ -171,6 +187,212 @@ describe("categoryRules.create", () => {
 
     await expect(
       makeCaller().categoryRules.create({ pattern: "starbucks", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});
+
+/** `set` + rendered WHERE params of each update against the transaction table. */
+function transactionUpdates() {
+  return updateCalls
+    .filter((u) => u.table === transaction)
+    .map(({ calls }) => ({ set: callArg(calls, "set"), params: render(callArg(calls, "where")).params }));
+}
+
+const OTHER_CAT = "00000000-0000-4000-8000-0000000000c2";
+const existingRule = (id: string, pattern: string, categoryId: string, createdAt = "2026-01-01") => ({
+  id,
+  pattern,
+  categoryId,
+  createdAt: new Date(createdAt),
+});
+const txn = (id: string, name: string, categoryId: string | null) => ({
+  id,
+  name,
+  plaidCategoryPrimary: "FOOD_AND_DRINK",
+  categoryId,
+});
+/** The selects plannedChanges runs after the rules: categories, then non-manual transactions. */
+function applyContext(rows: unknown[]): { txnParams: () => unknown[] } {
+  selectReturns([{ id: "cat-food", name: "Food & Drink" }]);
+  const t = selectReturns(rows);
+  return { txnParams: t.params };
+}
+
+describe("categoryRules.preview", () => {
+  it("counts non-manual transactions whose category would change", async () => {
+    const owned = selectReturns([{ id: CAT_ID }]);
+    selectReturns([]); // rules
+    const ctx = applyContext([
+      txn("t1", "STARBUCKS #1", "cat-food"), // would change
+      txn("t2", "STARBUCKS #2", CAT_ID), // already there
+      txn("t3", "CHIPOTLE", "cat-food"), // no match
+    ]);
+
+    await expect(
+      makeCaller().categoryRules.preview({ pattern: "starbucks", categoryId: CAT_ID }),
+    ).resolves.toEqual({ matchCount: 1 });
+    expect(owned.params()).toEqual([CAT_ID, USER_ID]);
+    // Scoped to the caller, manual rows excluded.
+    expect(ctx.txnParams()).toEqual([USER_ID, false]);
+  });
+
+  it("previews an edit as replacing the existing rule", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
+    applyContext([txn("t1", "STARBUCKS #1", OTHER_CAT), txn("t2", "STARBUCKS RESERVE", OTHER_CAT)]);
+
+    await expect(
+      makeCaller().categoryRules.preview({ pattern: "starbucks reserve", categoryId: CAT_ID, ruleId: RULE_ID }),
+    ).resolves.toEqual({ matchCount: 2 }); // t2 → CAT_ID, t1 loses the rule → Default Category
+  });
+
+  it("respects longer patterns from other rules", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule("r-long", "amazon prime", OTHER_CAT)]);
+    applyContext([txn("t1", "AMAZON PRIME*1", OTHER_CAT), txn("t2", "AMAZON MKTP", "cat-food")]);
+
+    await expect(makeCaller().categoryRules.preview({ pattern: "amazon", categoryId: CAT_ID })).resolves.toEqual({
+      matchCount: 1,
+    });
+  });
+
+  it("is zero for a pattern too short to save, without querying", async () => {
+    await expect(makeCaller().categoryRules.preview({ pattern: "ab", categoryId: CAT_ID })).resolves.toEqual({
+      matchCount: 0,
+    });
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it("rejects a rule the caller doesn't own with NOT_FOUND", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]);
+
+    await expect(
+      makeCaller().categoryRules.preview({ pattern: "starbucks", categoryId: CAT_ID, ruleId: RULE_ID }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("categoryRules.create with applyToExisting", () => {
+  it("leaves rows the new pattern doesn't match alone", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]); // rules
+    // UBER TRIP still carries a deleted rule's category; applying "starbucks" must not revert it.
+    applyContext([txn("t1", "UBER TRIP", OTHER_CAT)]);
+
+    const result = await makeCaller().categoryRules.create({
+      pattern: "starbucks",
+      categoryId: CAT_ID,
+      applyToExisting: true,
+    });
+
+    expect(result.applied).toBe(0);
+    expect(transactionUpdates()).toEqual([]);
+  });
+
+  it("updates exactly the changing non-manual rows, scoped to the caller", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]); // rules
+    applyContext([txn("t1", "STARBUCKS #1", "cat-food"), txn("t2", "STARBUCKS #2", CAT_ID), txn("t3", "CHIPOTLE", "cat-food")]);
+
+    const result = await makeCaller().categoryRules.create({
+      pattern: "starbucks",
+      categoryId: CAT_ID,
+      applyToExisting: true,
+    });
+
+    expect(result.applied).toBe(1);
+    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID }, params: [USER_ID, false, "t1"] }]);
+  });
+
+  it("updates nothing without applyToExisting", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]);
+
+    const result = await makeCaller().categoryRules.create({ pattern: "starbucks", categoryId: CAT_ID });
+
+    expect(result.applied).toBe(0);
+    expect(transactionUpdates()).toEqual([]);
+  });
+});
+
+describe("categoryRules.update", () => {
+  it("saves the edited rule, scoped to the caller, and leaves transactions alone without apply", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
+
+    const result = await makeCaller().categoryRules.update({ id: RULE_ID, pattern: " Starbucks ", categoryId: CAT_ID });
+
+    expect(result).toEqual({ rule: { id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }, applied: 0 });
+    const ruleUpdate = updateCalls.find((u) => u.table === categoryRule)!;
+    expect(callArg(ruleUpdate.calls, "set")).toEqual({ pattern: "Starbucks", categoryId: CAT_ID });
+    expect(render(callArg(ruleUpdate.calls, "where")).params).toEqual([RULE_ID, USER_ID]);
+    expect(transactionUpdates()).toEqual([]);
+  });
+
+  it("re-resolves past transactions against the edited rule set when applying", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
+    applyContext([txn("t1", "STARBUCKS #1", OTHER_CAT), txn("t2", "CHIPOTLE", "cat-food")]);
+
+    const result = await makeCaller().categoryRules.update({
+      id: RULE_ID,
+      pattern: "starbucks",
+      categoryId: CAT_ID,
+      applyToExisting: true,
+    });
+
+    expect(result.applied).toBe(1);
+    expect(transactionUpdates()).toEqual([{ set: { categoryId: CAT_ID }, params: [USER_ID, false, "t1"] }]);
+  });
+
+  it("rejects a rule the caller doesn't own with NOT_FOUND", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([]); // the caller has no such rule
+
+    await expect(
+      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(updateCalls).toEqual([]);
+  });
+
+  it("rejects a rule deleted mid-save with NOT_FOUND and applies nothing", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
+    ruleUpdateReturns = [];
+
+    await expect(
+      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID, applyToExisting: true }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(transactionUpdates()).toEqual([]);
+  });
+
+  it("rejects a foreign category with NOT_FOUND", async () => {
+    selectReturns([]);
+
+    await expect(
+      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(updateCalls).toEqual([]);
+  });
+
+  it("allows keeping its own pattern but rejects another rule's", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT), existingRule("r2", "uber", OTHER_CAT)]);
+
+    await expect(
+      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "UBER", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/already exists/) });
+    expect(updateCalls).toEqual([]);
+  });
+
+  it("maps a unique-index race to BAD_REQUEST", async () => {
+    selectReturns([{ id: CAT_ID }]);
+    selectReturns([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
+    updateError = Object.assign(new Error("Failed query"), { cause: { code: "23505" } });
+
+    await expect(
+      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "uber", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });

@@ -9,7 +9,8 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
-import { defaultCategoryId } from "../lib/category-rules";
+import { resolveCategory } from "../lib/category-rules";
+import { loadCategoryByName, loadMatchableRules } from "../lib/category-rules-db";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
@@ -124,26 +125,25 @@ export const transactionsRouter = router({
       return { ok: true };
     }),
 
-  /** Reset to automatic: clear the Manual Category and restore the Default Category. */
+  /** Reset to automatic: clear the Manual Category and re-resolve as a fresh sync would (matching rule, else Default Category). */
   resetCategory: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const owned = and(eq(transaction.id, input.id), eq(transaction.userId, userId));
       const [row] = await db
-        .select({ plaidCategoryPrimary: transaction.plaidCategoryPrimary })
+        .select({ name: transaction.name, plaidCategoryPrimary: transaction.plaidCategoryPrimary })
         .from(transaction)
         .where(owned)
         .limit(1);
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
 
-      const categories = await db
-        .select({ id: category.id, name: category.name })
-        .from(category)
-        .where(eq(category.userId, userId));
-      const categoryId = defaultCategoryId(
+      // Same resolution as a fresh sync: matching rule, else Default Category.
+      const categoryId = resolveCategory(
+        row.name,
         row.plaidCategoryPrimary,
-        new Map(categories.map((c) => [c.name, c.id])),
+        await loadMatchableRules(db, userId),
+        await loadCategoryByName(db, userId),
       );
       await db.update(transaction).set({ categoryId, categoryOverridden: false }).where(owned);
       return { ok: true };
