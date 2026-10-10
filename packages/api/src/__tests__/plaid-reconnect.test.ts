@@ -9,6 +9,9 @@
  *   succeeds; a failed sync leaves it broken; foreign item → NOT_FOUND
  * - linking a bank stores its institution display name; a failed name lookup
  *   never breaks the link
+ * - items linked under another PLAID_ENV are refused before Plaid is called, and
+ *   linking tags the item with the running PLAID_ENV (KOI-288)
+ * - removeItem is scoped to the caller: foreign id → NOT_FOUND (KOI-288)
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +37,7 @@ const { mockDb, makeChain, mockSync, mockPlaid } = vi.hoisted(() => {
     itemPublicTokenExchange: vi.fn(),
     accountsGet: vi.fn(),
     institutionsGetById: vi.fn(),
+    itemRemove: vi.fn(),
   };
   return { mockDb, makeChain, mockSync: vi.fn(), mockPlaid };
 });
@@ -53,6 +57,9 @@ import type { SQL } from "drizzle-orm";
 
 import { appRouter } from "../routers/index";
 import { encryptToken } from "../lib/token-encryption";
+import { env } from "@life-tracker/env/server";
+
+const OTHER_ENV = env.PLAID_ENV === "production" ? "sandbox" : "production";
 
 const USER_ID = "user-reconnect-1";
 const ITEM_ID = "00000000-0000-4000-8000-0000000000c3";
@@ -106,7 +113,7 @@ beforeEach(() => {
 describe("plaid.createLinkToken update mode", () => {
   it("issues an update-mode token for an owned item using its access token, without products", async () => {
     const query = selectCapturingWhere([
-      { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "error" },
+      { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "error", plaidEnv: env.PLAID_ENV },
     ]);
     mockPlaid.linkTokenCreate.mockResolvedValueOnce({ data: { link_token: "link-update-1" } });
 
@@ -131,10 +138,24 @@ describe("plaid.createLinkToken update mode", () => {
   });
 
   it("refuses update mode for a revoked item (Plaid can't repair it) and never calls Plaid", async () => {
-    selectCapturingWhere([{ accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "revoked" }]);
+    selectCapturingWhere([
+      { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "revoked", plaidEnv: env.PLAID_ENV },
+    ]);
 
     await expect(makeCaller().plaid.createLinkToken({ plaidItemId: ITEM_ID })).rejects.toMatchObject({
       code: "PRECONDITION_FAILED",
+    });
+    expect(mockPlaid.linkTokenCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses update mode for an item linked under another PLAID_ENV and never calls Plaid", async () => {
+    selectCapturingWhere([
+      { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "error", plaidEnv: OTHER_ENV },
+    ]);
+
+    await expect(makeCaller().plaid.createLinkToken({ plaidItemId: ITEM_ID })).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: `Linked in ${OTHER_ENV} — switch PLAID_ENV to manage`,
     });
     expect(mockPlaid.linkTokenCreate).not.toHaveBeenCalled();
   });
@@ -233,6 +254,7 @@ describe("plaid.exchangePublicToken institution name", () => {
     expect(insertValues[0]).toMatchObject({
       institutionId: "ins_109508",
       institutionName: "First Platypus Bank",
+      plaidEnv: env.PLAID_ENV,
     });
   });
 
@@ -246,5 +268,18 @@ describe("plaid.exchangePublicToken institution name", () => {
     await flush();
 
     expect(insertValues[0]).toMatchObject({ institutionName: null });
+  });
+});
+
+describe("plaid.removeItem", () => {
+  it("rejects an item the caller doesn't own with NOT_FOUND, revoking and deleting nothing", async () => {
+    const query = selectCapturingWhere([]);
+
+    await expect(
+      makeCaller().plaid.removeItem({ plaidItemId: ITEM_ID, force: true }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(query.params()).toEqual([ITEM_ID, USER_ID]);
+    expect(mockPlaid.itemRemove).not.toHaveBeenCalled();
+    expect(mockDb.delete).not.toHaveBeenCalled();
   });
 });

@@ -54,6 +54,7 @@ import { categoryRule, transaction } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
+import { env } from "@life-tracker/env/server";
 
 const USER_ID = "user-rules";
 const ITEM_ID = "00000000-0000-4000-8000-0000000000a1";
@@ -433,7 +434,9 @@ describe("categoryRules.delete", () => {
 });
 
 function syncWith(names: string[], rules: unknown[]) {
-  selectReturns([{ id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: null }]);
+  selectReturns([
+    { id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: null, plaidEnv: env.PLAID_ENV },
+  ]);
   mockPlaid.transactionsSync.mockResolvedValueOnce({
     data: {
       added: names.map((name, i) => ({

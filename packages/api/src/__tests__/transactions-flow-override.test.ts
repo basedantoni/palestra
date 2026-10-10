@@ -61,6 +61,7 @@ import { transaction } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
+import { env } from "@life-tracker/env/server";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -132,7 +133,9 @@ beforeEach(() => {
 // ────────────────────────────────────────────────────────────────────────────
 describe("syncPlaidItem upsert", () => {
   it("keeps the stored flow on a modified transaction whose flow was overridden", async () => {
-    selectReturns([{ id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: "c1" }]);
+    selectReturns([
+      { id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+    ]);
     mockPlaid.transactionsSync.mockResolvedValueOnce({
       data: {
         added: [],

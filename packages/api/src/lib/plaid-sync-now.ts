@@ -8,11 +8,14 @@ import { db } from "@life-tracker/db";
 import { plaidItem } from "@life-tracker/db/schema/index";
 
 import { describePlaidError } from "./plaid-client";
+import { foreignPlaidEnvError } from "./plaid-env";
 import { syncPlaidItem } from "./plaid-sync-db";
 
 export type PlaidItemSyncResult = { plaidItemId: string; institutionName: string | null } & (
   | { ok: true; added: number; modified: number; removed: number }
   | { ok: false; error: string }
+  /** Linked under another PLAID_ENV; Plaid was not called. */
+  | { ok: false; skipped: true; error: string }
 );
 
 /**
@@ -21,6 +24,7 @@ export type PlaidItemSyncResult = { plaidItemId: string; institutionName: string
  *
  * One item failing doesn't stop the rest; its error is reported in its result.
  * Revoked items are skipped — Plaid would reject them until the user reconnects.
+ * Items from another Plaid environment are skipped too: their token can't work here.
  */
 export async function syncPlaidItemsForUser(
   userId: string,
@@ -32,6 +36,7 @@ export async function syncPlaidItemsForUser(
       id: plaidItem.id,
       institutionName: plaidItem.institutionName,
       status: plaidItem.status,
+      plaidEnv: plaidItem.plaidEnv,
     })
     .from(plaidItem)
     .where(plaidItemId ? and(owned, eq(plaidItem.id, plaidItemId)) : owned);
@@ -41,6 +46,11 @@ export async function syncPlaidItemsForUser(
   const results: PlaidItemSyncResult[] = [];
   for (const item of items) {
     const base = { plaidItemId: item.id, institutionName: item.institutionName };
+    const foreignEnv = foreignPlaidEnvError(item.plaidEnv);
+    if (foreignEnv) {
+      results.push({ ...base, ok: false, skipped: true, error: foreignEnv });
+      continue;
+    }
     if (item.status === "revoked") {
       results.push({ ...base, ok: false, error: "Access revoked — reconnect this bank" });
       continue;

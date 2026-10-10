@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
+import { plaidEnvEnum } from "./enums";
 import { user } from "./auth";
 
 /**
@@ -14,6 +15,9 @@ import { user } from "./auth";
  * successful drain. `status` mirrors Plaid Item health ("active",
  * "login_required", "pending_expiration", "error") so the UI can surface a
  * reconnect prompt on ITEM_LOGIN_REQUIRED.
+ *
+ * `plaidEnv` is the environment that issued the token. A token only works in
+ * that environment, so sync and revoke skip items from another `PLAID_ENV`.
  */
 export const plaidItem = pgTable(
   "plaid_item",
@@ -28,6 +32,7 @@ export const plaidItem = pgTable(
     accessTokenEnc: text("access_token_enc").notNull(),
     transactionCursor: text("transaction_cursor"),
     status: text("status").default("active").notNull(),
+    plaidEnv: plaidEnvEnum("plaid_env").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

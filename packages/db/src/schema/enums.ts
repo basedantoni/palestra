@@ -144,3 +144,6 @@ export const transactionFlowEnum = pgEnum("transaction_flow", [
   "expense",
   "transfer",
 ]);
+
+/** Plaid environment that issued an item's access token; tokens only work there (KOI-288). */
+export const plaidEnvEnum = pgEnum("plaid_env", ["sandbox", "production"]);
