@@ -12,10 +12,12 @@ import {
   withCandidateRule,
 } from "./category-rules";
 
+// "Uncategorized" here stands for a leftover or user-made category of that name
+// (cat-user-uncat): it must never become anyone's Default Category (KOI-301).
 const categoryByName = new Map([
   ["Food & Drink", "cat-food"],
   ["Shopping", "cat-shop"],
-  ["Uncategorized", "cat-uncat"],
+  ["Uncategorized", "cat-user-uncat"],
 ]);
 
 describe("defaultCategoryId", () => {
@@ -23,9 +25,10 @@ describe("defaultCategoryId", () => {
     expect(defaultCategoryId("FOOD_AND_DRINK", categoryByName)).toBe("cat-food");
   });
 
-  it("falls back to the Uncategorized seed for an unknown or missing primary", () => {
-    expect(defaultCategoryId("SOMETHING_NEW", categoryByName)).toBe("cat-uncat");
-    expect(defaultCategoryId(null, categoryByName)).toBe("cat-uncat");
+  it("is null (Uncategorized) for an unknown or missing primary", () => {
+    expect(defaultCategoryId("SOMETHING_NEW", categoryByName)).toBeNull();
+    expect(defaultCategoryId(null, categoryByName)).toBeNull();
+    expect(defaultCategoryId(undefined, categoryByName)).toBeNull();
   });
 
   it("is null when the user has no matching category", () => {
@@ -50,8 +53,9 @@ describe("isManualCategory", () => {
     expect(isManualCategory(null, "FOOD_AND_DRINK", new Map())).toBe(false);
   });
 
-  it("treats an unknown primary's default as the Uncategorized seed", () => {
-    expect(isManualCategory("cat-uncat", "SOMETHING_NEW", categoryByName)).toBe(false);
+  it("treats an unknown primary's default as no category", () => {
+    expect(isManualCategory(null, "SOMETHING_NEW", categoryByName)).toBe(false);
+    expect(isManualCategory("cat-user-uncat", "SOMETHING_NEW", categoryByName)).toBe(true);
     expect(isManualCategory("cat-food", "SOMETHING_NEW", categoryByName)).toBe(true);
   });
 });

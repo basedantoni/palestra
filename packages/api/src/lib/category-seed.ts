@@ -62,10 +62,14 @@ export const SEED_CATEGORIES: string[] = [
   "Loan Payments",
   "Bank Fees",
   "Government & Non-Profit",
-  "Uncategorized",
 ];
 
-export function categoryNameForPfc(pfcPrimary: string | null | undefined): string {
-  if (!pfcPrimary) return "Uncategorized";
-  return PFC_TO_NAME[pfcPrimary] ?? "Uncategorized";
+/**
+ * The seed category name for a Plaid PFC primary, or null when it can't be
+ * mapped: the transaction is then Uncategorized (no category), never put in a
+ * category named "Uncategorized" (KOI-301).
+ */
+export function categoryNameForPfc(pfcPrimary: string | null | undefined): string | null {
+  if (!pfcPrimary) return null;
+  return PFC_TO_NAME[pfcPrimary] ?? null;
 }

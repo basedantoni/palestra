@@ -23,7 +23,7 @@ Spend restricted to categorized transactions; what a budget is measured against.
 _Avoid_: Spend (when the uncategorized portion is excluded)
 
 **Uncategorized**:
-Spend with no category assigned. Shown as its own bucket, never dropped.
+Spend with no category assigned. Shown as its own bucket, never dropped. It is never a category itself, so no category may be named "Uncategorized".
 
 **Refund**:
 An expense-flow transaction that returns money; it reduces spend in the month it posts and is not matched back to the original purchase.
@@ -64,7 +64,7 @@ A category the user chose by hand for one transaction, including choosing Uncate
 _Avoid_: Override (unqualified), custom category
 
 **Default Category**:
-The category derived from the bank's own classification when a transaction first arrives. A matching category rule takes precedence over it.
+The category derived from the bank's own classification when a transaction first arrives. A matching category rule takes precedence over it. When the bank's classification maps to no category, there is no Default Category and the transaction is Uncategorized.
 _Avoid_: Plaid category, auto category
 
 ### Finance — position
