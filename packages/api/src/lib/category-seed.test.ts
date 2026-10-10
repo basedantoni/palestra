@@ -12,21 +12,22 @@ describe("categoryNameForPfc", () => {
     expect(categoryNameForPfc("TRANSFER_OUT")).toBe("Transfers");
   });
 
-  it("falls back to Uncategorized for null/unknown", () => {
-    expect(categoryNameForPfc(null)).toBe("Uncategorized");
-    expect(categoryNameForPfc(undefined)).toBe("Uncategorized");
-    expect(categoryNameForPfc("SOMETHING_NEW")).toBe("Uncategorized");
+  it("is null (Uncategorized: no category) for null/unknown", () => {
+    expect(categoryNameForPfc(null)).toBeNull();
+    expect(categoryNameForPfc(undefined)).toBeNull();
+    expect(categoryNameForPfc("SOMETHING_NEW")).toBeNull();
   });
 
   it("every Plaid PFC primary resolves to a name present in SEED_CATEGORIES", () => {
     const names = new Set(SEED_CATEGORIES);
     for (const primary of PFC_PRIMARIES) {
-      expect(names.has(categoryNameForPfc(primary))).toBe(true);
+      expect(names.has(categoryNameForPfc(primary)!)).toBe(true);
     }
   });
 
-  it("SEED_CATEGORIES has no duplicates and includes Uncategorized", () => {
+  it("SEED_CATEGORIES has no duplicates and no Uncategorized category", () => {
     expect(new Set(SEED_CATEGORIES).size).toBe(SEED_CATEGORIES.length);
-    expect(SEED_CATEGORIES).toContain("Uncategorized");
+    // Uncategorized means no category (glossary), never a real one (KOI-301).
+    expect(SEED_CATEGORIES).not.toContain("Uncategorized");
   });
 });
