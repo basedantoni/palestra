@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
-import { trpc } from "@/utils/trpc";
+import { type RouterOutputs, trpc } from "@/utils/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,14 +28,11 @@ type Account = {
   currentBalance: number | null;
 };
 
-type BankItem = {
-  id: string;
-  institutionName: string | null;
-  status: string;
-  plaidEnv: "sandbox" | "production";
-  /** Linked under another PLAID_ENV: this server can't sync or revoke it. Not broken. */
-  foreignEnv: boolean;
-};
+/** `foreignEnv`: linked under another PLAID_ENV, so this server can't sync or revoke it. Not broken. */
+type BankItem = Pick<
+  RouterOutputs["plaid"]["listItems"][number],
+  "id" | "institutionName" | "status" | "plaidEnv" | "foreignEnv"
+>;
 
 /** A Plaid item is healthy only while active; anything else needs the user's attention. */
 function isBroken(item: BankItem): boolean {
@@ -233,6 +230,8 @@ function groupByBank(
   for (const a of accounts) {
     let group = groups.get(a.plaidItemId);
     if (!group) {
+      // Placeholder while listItems hasn't loaded or caught up: rendered as a healthy,
+      // same-environment bank. plaidEnv is unknown here and is only read when foreignEnv is set.
       const item = itemById.get(a.plaidItemId) ?? {
         id: a.plaidItemId,
         institutionName: null,

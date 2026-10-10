@@ -28,6 +28,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
 import { SEED_CATEGORIES, categoryNameForPfc } from "../packages/api/src/lib/category-seed";
+import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
 import { deterministicUUID } from "../packages/db/src/seed";
 
@@ -146,7 +147,7 @@ async function seedFinance() {
       itemId: STUCK_ITEM_ID,
       institutionName: "Old Other-Env Bank",
       accessTokenEnc: "fixture-not-a-real-token",
-      plaidEnv: env.PLAID_ENV === "production" ? "sandbox" : "production",
+      plaidEnv: otherPlaidEnv(),
     });
 
     await tx.insert(financialAccount).values(

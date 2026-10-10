@@ -58,8 +58,9 @@ import type { SQL } from "drizzle-orm";
 import { appRouter } from "../routers/index";
 import { encryptToken } from "../lib/token-encryption";
 import { env } from "@life-tracker/env/server";
+import { otherPlaidEnv } from "../lib/plaid-env";
 
-const OTHER_ENV = env.PLAID_ENV === "production" ? "sandbox" : "production";
+const OTHER_ENV = otherPlaidEnv();
 
 const USER_ID = "user-reconnect-1";
 const ITEM_ID = "00000000-0000-4000-8000-0000000000c3";

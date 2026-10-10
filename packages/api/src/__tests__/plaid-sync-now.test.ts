@@ -60,8 +60,9 @@ import type { SQL } from "drizzle-orm";
 
 import { appRouter } from "../routers/index";
 import { env } from "@life-tracker/env/server";
+import { otherPlaidEnv } from "../lib/plaid-env";
 
-const OTHER_ENV = env.PLAID_ENV === "production" ? "sandbox" : "production";
+const OTHER_ENV = otherPlaidEnv();
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -97,7 +98,7 @@ function selectCapturingWhere(rows: unknown[]): { params: () => unknown[] } {
   return { params: () => (where ? new PgDialect().sqlToQuery(where).params : []) };
 }
 
-function item(id: string, status = "active", plaidEnv: string = env.PLAID_ENV) {
+function item(id: string, status = "active", plaidEnv = env.PLAID_ENV) {
   return { id, institutionName: `Bank ${id.slice(-2)}`, status, plaidEnv };
 }
 
@@ -160,7 +161,7 @@ describe("plaid.syncNow", () => {
   });
 
   it("skips items linked under another PLAID_ENV without calling Plaid", async () => {
-    selectReturns([item(ITEM_A), item(ITEM_B, "revoked", OTHER_ENV)]);
+    selectReturns([item(ITEM_A), item(ITEM_B, "active", OTHER_ENV)]);
     mockSync.mockResolvedValueOnce({ added: 1, modified: 0, removed: 0 });
 
     const result = await makeCaller().plaid.syncNow({});
@@ -177,6 +178,15 @@ describe("plaid.syncNow", () => {
         error: `Linked in ${OTHER_ENV} — switch PLAID_ENV to manage`,
       },
     ]);
+  });
+
+  it("reports a foreign revoked item as skipped, not as needing reconnect", async () => {
+    selectReturns([item(ITEM_A, "revoked", OTHER_ENV)]);
+
+    const [result] = await makeCaller().plaid.syncNow({});
+
+    expect(result).toMatchObject({ ok: false, skipped: true });
+    expect(mockSync).not.toHaveBeenCalled();
   });
 
   it("syncs only the requested item when given an id the caller owns", async () => {

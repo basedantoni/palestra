@@ -53,6 +53,8 @@ vi.mock("../lib/plaid-sync-db", () => ({ syncPlaidItem: mockSync }));
 vi.mock("../lib/plaid-webhook-verify", () => ({ verifyPlaidWebhook: mockVerify }));
 
 // Import after mocks are set up
+import { env } from "@life-tracker/env/server";
+import { otherPlaidEnv } from "../lib/plaid-env";
 import { drainPendingPlaidEvents, plaidWebhookApp } from "../lib/plaid-webhook";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -73,9 +75,9 @@ async function post(body: unknown): Promise<Response> {
   );
 }
 
-/** Next db.select() resolves to a found plaid_item row. */
-function itemFound() {
-  mockDb.select.mockReturnValueOnce(makeChain([{ id: ITEM_ROW_ID }]));
+/** Next db.select() resolves to a found plaid_item row (in the running PLAID_ENV by default). */
+function itemFound(plaidEnv = env.PLAID_ENV) {
+  mockDb.select.mockReturnValueOnce(makeChain([{ id: ITEM_ROW_ID, plaidEnv }]));
 }
 function itemNotFound() {
   mockDb.select.mockReturnValueOnce(makeChain([]));
@@ -185,6 +187,26 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     expect(updateSets[0]).toMatchObject({ status: "done" });
   });
 
+  it("sync code on an item from another PLAID_ENV → 200, event skipped quietly, no sync", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    itemFound(otherPlaidEnv());
+    const res = await post({
+      webhook_type: "TRANSACTIONS",
+      webhook_code: "SYNC_UPDATES_AVAILABLE",
+      item_id: ITEM_ID,
+    });
+    expect(res.status).toBe(200);
+    await flush();
+    expect(mockSync).not.toHaveBeenCalled();
+    expect(updateSets).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        errorMessage: `Linked in ${otherPlaidEnv()} — switch PLAID_ENV to manage`,
+      }),
+    ]);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it("non-sync TRANSACTIONS code → 200, marks event done, does NOT trigger sync", async () => {
     itemFound();
     const res = await post({
@@ -203,11 +225,21 @@ describe("drainPendingPlaidEvents", () => {
   it("re-runs a pending event and triggers sync", async () => {
     // 1st select: pending events; 2nd select: resolve item row for that event.
     mockDb.select.mockReturnValueOnce(makeChain([{ id: "evt-1", itemId: ITEM_ID }]));
-    mockDb.select.mockReturnValueOnce(makeChain([{ id: ITEM_ROW_ID }]));
+    itemFound();
 
     await drainPendingPlaidEvents();
     await flush();
 
     expect(mockSync).toHaveBeenCalledWith(ITEM_ROW_ID);
+  });
+
+  it("marks a pending event for a foreign-environment item skipped without syncing", async () => {
+    mockDb.select.mockReturnValueOnce(makeChain([{ id: "evt-1", itemId: ITEM_ID }]));
+    itemFound(otherPlaidEnv());
+
+    await drainPendingPlaidEvents();
+
+    expect(mockSync).not.toHaveBeenCalled();
+    expect(updateSets).toEqual([expect.objectContaining({ status: "skipped" })]);
   });
 });

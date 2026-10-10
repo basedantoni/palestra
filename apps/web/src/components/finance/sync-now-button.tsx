@@ -29,7 +29,7 @@ export function SyncNowButton() {
           </span>
         ) : (
           <span key={f.plaidItemId} className="max-w-xs text-right text-xs text-destructive">
-            {f.institutionName ?? "A bank"} failed to sync{"error" in f ? `: ${f.error}` : ""}
+            {f.institutionName ?? "A bank"} failed to sync: {f.error}
           </span>
         ),
       )}

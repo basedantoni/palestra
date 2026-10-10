@@ -13,7 +13,7 @@ import { encryptToken } from "../lib/token-encryption";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
 import { canRepairInUpdateMode, getOwnedPlaidItem } from "../lib/plaid-item-access";
 import { removeFinancialAccount, removePlaidItem } from "../lib/plaid-account-remove";
-import { foreignPlaidEnvError } from "../lib/plaid-env";
+import { foreignPlaidEnvError, isForeignPlaidEnv } from "../lib/plaid-env";
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { syncPlaidItemsForUser } from "../lib/plaid-sync-now";
 import {
@@ -284,6 +284,6 @@ export const plaidRouter = router({
       })
       .from(plaidItem)
       .where(eq(plaidItem.userId, ctx.session.user.id));
-    return items.map((item) => ({ ...item, foreignEnv: foreignPlaidEnvError(item.plaidEnv) !== null }));
+    return items.map((item) => ({ ...item, foreignEnv: isForeignPlaidEnv(item.plaidEnv) }));
   }),
 });
