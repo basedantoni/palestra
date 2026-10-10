@@ -29,6 +29,7 @@ import { decryptToken } from "./token-encryption";
 import { todayUtc } from "./date-utils";
 import { persistAccountBalances } from "./plaid-balance-db";
 import { getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
+import { foreignPlaidEnvError } from "./plaid-env";
 import {
   type PlaidSyncDelta,
   type PlaidTransactionInput,
@@ -100,6 +101,9 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     .where(eq(plaidItem.id, plaidItemId))
     .limit(1);
   if (!item) throw new Error(`plaid_item ${plaidItemId} not found`);
+  // Every sync path (webhook, drain, initial sync, syncNow, repair) lands here.
+  const foreignEnv = foreignPlaidEnvError(item.plaidEnv);
+  if (foreignEnv) throw new Error(foreignEnv);
 
   const userId = item.userId;
   const accessToken = decryptToken(item.accessTokenEnc, getTokenEncryptionKey());

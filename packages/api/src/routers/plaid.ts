@@ -12,7 +12,8 @@ import { protectedProcedure, router } from "../index";
 import { encryptToken } from "../lib/token-encryption";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
 import { canRepairInUpdateMode, getOwnedPlaidItem } from "../lib/plaid-item-access";
-import { removeFinancialAccount } from "../lib/plaid-account-remove";
+import { removeFinancialAccount, removePlaidItem } from "../lib/plaid-account-remove";
+import { foreignPlaidEnvError, isForeignPlaidEnv } from "../lib/plaid-env";
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { syncPlaidItemsForUser } from "../lib/plaid-sync-now";
 import {
@@ -57,6 +58,8 @@ export const plaidRouter = router({
       if (input?.plaidItemId) {
         const item = await getOwnedPlaidItem(userId, input.plaidItemId);
         if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Plaid item not found" });
+        const foreignEnv = foreignPlaidEnvError(item.plaidEnv);
+        if (foreignEnv) throw new TRPCError({ code: "PRECONDITION_FAILED", message: foreignEnv });
         if (item.status === "revoked") {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
@@ -123,12 +126,14 @@ export const plaidRouter = router({
           institutionName,
           accessTokenEnc: encryptToken(accessToken, getTokenEncryptionKey()),
           status: "active",
+          plaidEnv: env.PLAID_ENV,
         })
         .onConflictDoUpdate({
           target: plaidItem.itemId,
           set: {
             accessTokenEnc: encryptToken(accessToken, getTokenEncryptionKey()),
             status: "active",
+            plaidEnv: env.PLAID_ENV,
             ...(institutionName ? { institutionName } : {}),
           },
         });
@@ -203,6 +208,24 @@ export const plaidRouter = router({
     }),
 
   /**
+   * Remove a whole bank (Plaid Item), e.g. one left with no accounts after a
+   * failed revoke. Without `force`, a failed revoke keeps the row and returns
+   * the error; `force` (user confirmed) deletes it anyway — the Item may then
+   * still exist at Plaid and must be removed in the Plaid dashboard.
+   */
+  removeItem: protectedProcedure
+    .input(z.object({ plaidItemId: z.string().uuid(), force: z.boolean().default(false) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await removePlaidItem(ctx.session.user.id, input.plaidItemId, input.force);
+      if (!result.removed && result.notFound) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Plaid item not found" });
+      }
+      return result.removed
+        ? { removed: true as const, revoked: result.revoked }
+        : { removed: false as const, error: result.error };
+    }),
+
+  /**
    * Called after Plaid Link update mode succeeds for a broken item. Update mode
    * returns no public token to exchange, so prove the repair by syncing: only a
    * successful sync marks the item active. Awaited so the client refreshes
@@ -245,16 +268,22 @@ export const plaidRouter = router({
       return results;
     }),
 
-  /** List linked institutions + their connection health (for the reconnect banner). */
+  /**
+   * List linked institutions + their connection health (for the reconnect
+   * banner). `foreignEnv` flags items linked under another PLAID_ENV, which
+   * this server can't sync or revoke.
+   */
   listItems: protectedProcedure.query(async ({ ctx }) => {
-    return db
+    const items = await db
       .select({
         id: plaidItem.id,
         institutionId: plaidItem.institutionId,
         institutionName: plaidItem.institutionName,
         status: plaidItem.status,
+        plaidEnv: plaidItem.plaidEnv,
       })
       .from(plaidItem)
       .where(eq(plaidItem.userId, ctx.session.user.id));
+    return items.map((item) => ({ ...item, foreignEnv: isForeignPlaidEnv(item.plaidEnv) }));
   }),
 });

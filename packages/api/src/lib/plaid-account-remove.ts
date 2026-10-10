@@ -11,6 +11,10 @@
  *    deleted. If Plaid refuses, the Item row (and its encrypted token) is kept
  *    so the revoke can be retried; only the account row is deleted.
  *
+ * `removePlaidItem` is the escape hatch for a bank Plaid won't revoke (e.g. a
+ * token from another Plaid environment): with `force`, the local row and its
+ * token are dropped anyway and the user cleans up in the Plaid dashboard.
+ *
  * Transactions, balance snapshots, and goal links cascade via FKs.
  */
 import { and, eq } from "drizzle-orm";
@@ -20,10 +24,18 @@ import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
 
 import { decryptToken } from "./token-encryption";
 import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
+import { foreignPlaidEnvError } from "./plaid-env";
 
 export type RemoveAccountResult =
   | { removed: false }
   | { removed: true; itemRemoved: boolean };
+
+export type RemoveItemResult =
+  | { removed: false; notFound: true }
+  | { removed: false; notFound: false; error: string }
+  | { removed: true; revoked: boolean };
+
+type RevokeResult = { ok: true } | { ok: false; error: string };
 
 /** Plaid already considers the Item gone — safe to drop our row. */
 export function isPlaidItemGoneError(err: unknown): boolean {
@@ -48,7 +60,7 @@ export async function removeFinancialAccount(
     .from(financialAccount)
     .where(eq(financialAccount.plaidItemId, account.plaidItemId));
 
-  if (siblings.length <= 1 && (await revokePlaidItem(account.plaidItemId))) {
+  if (siblings.length <= 1 && (await revokePlaidItem(account.plaidItemId)).ok) {
     // Cascades to the account row and everything under it.
     await db.delete(plaidItem).where(eq(plaidItem.id, account.plaidItemId));
     return { removed: true, itemRemoved: true };
@@ -58,22 +70,51 @@ export async function removeFinancialAccount(
   return { removed: true, itemRemoved: false };
 }
 
-/** Revoke the Item at Plaid. Returns true if our row can be safely deleted. */
-async function revokePlaidItem(plaidItemId: string): Promise<boolean> {
+/**
+ * Remove a whole bank (Plaid Item) and everything under it. Revokes at Plaid
+ * first; when that fails the row is kept unless `force`, in which case it is
+ * deleted anyway and the Item may still exist (and bill) at Plaid.
+ */
+export async function removePlaidItem(
+  userId: string,
+  plaidItemId: string,
+  force: boolean,
+): Promise<RemoveItemResult> {
   const [item] = await db
-    .select({ accessTokenEnc: plaidItem.accessTokenEnc })
+    .select({ id: plaidItem.id })
+    .from(plaidItem)
+    .where(and(eq(plaidItem.id, plaidItemId), eq(plaidItem.userId, userId)))
+    .limit(1);
+  if (!item) return { removed: false, notFound: true };
+
+  const revoke = await revokePlaidItem(item.id);
+  if (!revoke.ok && !force) return { removed: false, notFound: false, error: revoke.error };
+
+  await db.delete(plaidItem).where(eq(plaidItem.id, item.id));
+  return { removed: true, revoked: revoke.ok };
+}
+
+/** Revoke the Item at Plaid. `ok` means our row can be safely deleted. */
+async function revokePlaidItem(plaidItemId: string): Promise<RevokeResult> {
+  const [item] = await db
+    .select({ accessTokenEnc: plaidItem.accessTokenEnc, plaidEnv: plaidItem.plaidEnv })
     .from(plaidItem)
     .where(eq(plaidItem.id, plaidItemId))
     .limit(1);
-  if (!item) return false;
+  if (!item) return { ok: false, error: "Plaid item not found" };
+
+  // A foreign-environment token can't be revoked from here; don't send it to Plaid.
+  const foreignEnv = foreignPlaidEnvError(item.plaidEnv);
+  if (foreignEnv) return { ok: false, error: foreignEnv };
 
   try {
     const accessToken = decryptToken(item.accessTokenEnc, getTokenEncryptionKey());
     await getPlaidClient().itemRemove({ access_token: accessToken });
-    return true;
+    return { ok: true };
   } catch (err) {
-    if (isPlaidItemGoneError(err)) return true;
-    console.error(`[plaid] itemRemove failed for plaid_item ${plaidItemId}:`, describePlaidError(err));
-    return false;
+    if (isPlaidItemGoneError(err)) return { ok: true };
+    const error = describePlaidError(err);
+    console.error(`[plaid] itemRemove failed for plaid_item ${plaidItemId}:`, error);
+    return { ok: false, error };
   }
 }

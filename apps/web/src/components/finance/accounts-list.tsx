@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
-import { trpc } from "@/utils/trpc";
+import { type RouterOutputs, trpc } from "@/utils/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,11 +28,15 @@ type Account = {
   currentBalance: number | null;
 };
 
-type BankItem = { id: string; institutionName: string | null; status: string };
+/** `foreignEnv`: linked under another PLAID_ENV, so this server can't sync or revoke it. Not broken. */
+type BankItem = Pick<
+  RouterOutputs["plaid"]["listItems"][number],
+  "id" | "institutionName" | "status" | "plaidEnv" | "foreignEnv"
+>;
 
 /** A Plaid item is healthy only while active; anything else needs the user's attention. */
-function isBroken(status: string): boolean {
-  return status !== "active";
+function isBroken(item: BankItem): boolean {
+  return !item.foreignEnv && item.status !== "active";
 }
 
 const STATUS_COPY: Record<string, { short: string; long: string }> = {
@@ -69,6 +73,7 @@ export function AccountsList() {
   const { data: items } = useQuery(trpc.plaid.listItems.queryOptions());
   const invalidateFinance = useInvalidateFinance();
   const [pendingRemoval, setPendingRemoval] = useState<Account | null>(null);
+  const [pendingBank, setPendingBank] = useState<BankItem | null>(null);
 
   const removeAccount = useMutation(
     trpc.plaid.removeAccount.mutationOptions({
@@ -80,19 +85,35 @@ export function AccountsList() {
     }),
   );
 
+  const removeItem = useMutation(
+    trpc.plaid.removeItem.mutationOptions({
+      onSuccess: (result) => {
+        // A failed revoke comes back as data so the dialog can offer force-remove.
+        if (!result.removed) return;
+        invalidateFinance();
+        setPendingBank(null);
+      },
+    }),
+  );
+  const revokeError =
+    removeItem.data && !removeItem.data.removed ? removeItem.data.error : null;
+
   if (isLoading) return <div className="text-muted-foreground">Loading accounts…</div>;
-  if (!accounts || accounts.length === 0) {
+  // A bank can outlive its accounts (failed revoke), so it still needs a row to remove it from.
+  if ((!accounts || accounts.length === 0) && (!items || items.length === 0)) {
     return <div className="text-muted-foreground">No accounts connected yet.</div>;
   }
 
-  const groups = groupByBank(accounts, items ?? []);
-  const brokenCount = groups.filter((g) => isBroken(g.item.status)).length;
+  const groups = groupByBank(accounts ?? [], items ?? []);
+  const brokenCount = groups.filter((g) => isBroken(g.item)).length;
 
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between">
         <span className="text-sm text-muted-foreground">Net worth</span>
-        <span className="text-xl font-semibold tabular-nums">{usd.format(netWorth(accounts))}</span>
+        <span className="text-xl font-semibold tabular-nums">
+          {usd.format(netWorth(accounts ?? []))}
+        </span>
       </div>
       {brokenCount > 0 && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -108,6 +129,10 @@ export function AccountsList() {
           onRemove={(a) => {
             removeAccount.reset();
             setPendingRemoval(a);
+          }}
+          onRemoveBank={() => {
+            removeItem.reset();
+            setPendingBank(item);
           }}
         />
       ))}
@@ -148,11 +173,54 @@ export function AccountsList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={pendingBank !== null}
+        onOpenChange={(open) => {
+          if (!open && !removeItem.isPending) setPendingBank(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove {pendingBank?.institutionName ?? "this bank"}?</DialogTitle>
+            <DialogDescription>
+              {revokeError
+                ? `Plaid couldn't revoke access: ${revokeError}. Removing anyway discards the stored access token here, but the connection may still exist — and be billed — at Plaid. Remove the Item in the Plaid dashboard (${pendingBank?.plaidEnv} environment) afterwards.`
+                : "This revokes access at Plaid and deletes the bank with all of its accounts, transactions and balance history."}
+            </DialogDescription>
+          </DialogHeader>
+          {removeItem.isError && (
+            <p className="text-xs text-destructive">{removeItem.error.message}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingBank(null)}
+              disabled={removeItem.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                pendingBank &&
+                removeItem.mutate({ plaidItemId: pendingBank.id, force: revokeError !== null })
+              }
+              disabled={removeItem.isPending}
+            >
+              {removeItem.isPending ? "Removing…" : revokeError ? "Remove anyway" : "Remove bank"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-/** Group accounts under their bank, keeping banks in first-seen account order. */
+/**
+ * Group accounts under their bank, keeping banks in first-seen account order.
+ * Banks with no accounts left come last so they can still be removed.
+ */
 function groupByBank(
   accounts: Account[],
   items: BankItem[],
@@ -162,15 +230,22 @@ function groupByBank(
   for (const a of accounts) {
     let group = groups.get(a.plaidItemId);
     if (!group) {
+      // Placeholder while listItems hasn't loaded or caught up: rendered as a healthy,
+      // same-environment bank. plaidEnv is unknown here and is only read when foreignEnv is set.
       const item = itemById.get(a.plaidItemId) ?? {
         id: a.plaidItemId,
         institutionName: null,
         status: "active",
+        plaidEnv: "production",
+        foreignEnv: false,
       };
       group = { item, accounts: [] };
       groups.set(a.plaidItemId, group);
     }
     group.accounts.push(a);
+  }
+  for (const item of items) {
+    if (!groups.has(item.id)) groups.set(item.id, { item, accounts: [] });
   }
   return [...groups.values()];
 }
@@ -179,13 +254,17 @@ function BankGroup({
   item,
   accounts,
   onRemove,
+  onRemoveBank,
 }: {
   item: BankItem;
   accounts: Account[];
   onRemove: (account: Account) => void;
+  onRemoveBank: () => void;
 }) {
   const reconnect = useReconnectBank(item.id);
-  const broken = isBroken(item.status);
+  const broken = isBroken(item);
+  // Removing the last account normally removes the bank; these are the cases where it can't.
+  const stuck = item.foreignEnv || accounts.length === 0;
   const repairable = broken && item.status !== "revoked";
   const bankName = item.institutionName ?? "Linked bank";
   const copy = STATUS_COPY[item.status] ?? UNKNOWN_STATUS_COPY;
@@ -202,7 +281,13 @@ function BankGroup({
               {copy.short}
             </Badge>
           )}
+          {item.foreignEnv && <Badge variant="secondary">Linked in {item.plaidEnv}</Badge>}
         </div>
+        {stuck && (
+          <Button size="xs" variant="outline" onClick={onRemoveBank}>
+            Remove bank
+          </Button>
+        )}
         {repairable && (
           <Button
             size="xs"
@@ -221,6 +306,17 @@ function BankGroup({
       {broken && reconnect.state === "idle" && (
         <p className="border-t border-border px-4 py-1.5 text-xs text-muted-foreground">
           {copy.long}
+        </p>
+      )}
+      {item.foreignEnv && (
+        <p className="border-t border-border px-4 py-1.5 text-xs text-muted-foreground">
+          This bank was linked in Plaid {item.plaidEnv}, and this server runs a different Plaid
+          environment, so it can't sync it. Switch PLAID_ENV to manage it, or remove it here.
+        </p>
+      )}
+      {!item.foreignEnv && accounts.length === 0 && (
+        <p className="border-t border-border px-4 py-1.5 text-xs text-muted-foreground">
+          No accounts left, but Plaid couldn't revoke this bank. Remove it to stop syncing.
         </p>
       )}
       {message && <p className="border-t border-border px-4 py-1.5 text-xs">{message}</p>}

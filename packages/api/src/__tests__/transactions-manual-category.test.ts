@@ -61,6 +61,7 @@ import { transaction } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
+import { env } from "@life-tracker/env/server";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -210,7 +211,9 @@ describe("transactions.resetCategory", () => {
 // ────────────────────────────────────────────────────────────────────────────
 describe("syncPlaidItem upsert", () => {
   it("never overwrites categoryId or the manual flag on a modified transaction", async () => {
-    selectReturns([{ id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: "c1" }]);
+    selectReturns([
+      { id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+    ]);
     mockPlaid.transactionsSync.mockResolvedValueOnce({
       data: {
         added: [],

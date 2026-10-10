@@ -4,6 +4,7 @@
  * - plaid.syncNow syncs every item the caller owns and reports per-item results
  * - one item failing doesn't abort the others; the error is reported per item
  * - revoked items are skipped (Plaid would reject them) and reported as such
+ * - items linked under another PLAID_ENV are skipped without calling Plaid (KOI-288)
  * - the item query is scoped to the caller (asserted on the rendered WHERE)
  * - syncNow with a plaidItemId the caller doesn't own → NOT_FOUND, nothing synced
  * - exchangePublicToken kicks off a sync for the new item without waiting on a
@@ -58,6 +59,10 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
 import { appRouter } from "../routers/index";
+import { env } from "@life-tracker/env/server";
+import { otherPlaidEnv } from "../lib/plaid-env";
+
+const OTHER_ENV = otherPlaidEnv();
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -93,8 +98,8 @@ function selectCapturingWhere(rows: unknown[]): { params: () => unknown[] } {
   return { params: () => (where ? new PgDialect().sqlToQuery(where).params : []) };
 }
 
-function item(id: string, status = "active") {
-  return { id, institutionName: `Bank ${id.slice(-2)}`, status };
+function item(id: string, status = "active", plaidEnv = env.PLAID_ENV) {
+  return { id, institutionName: `Bank ${id.slice(-2)}`, status, plaidEnv };
 }
 
 beforeEach(() => {
@@ -153,6 +158,35 @@ describe("plaid.syncNow", () => {
         error: "Access revoked — reconnect this bank",
       },
     ]);
+  });
+
+  it("skips items linked under another PLAID_ENV without calling Plaid", async () => {
+    selectReturns([item(ITEM_A), item(ITEM_B, "active", OTHER_ENV)]);
+    mockSync.mockResolvedValueOnce({ added: 1, modified: 0, removed: 0 });
+
+    const result = await makeCaller().plaid.syncNow({});
+
+    expect(mockSync).toHaveBeenCalledTimes(1);
+    expect(mockSync).toHaveBeenCalledWith(ITEM_A);
+    expect(result).toEqual([
+      { plaidItemId: ITEM_A, institutionName: "Bank a1", ok: true, added: 1, modified: 0, removed: 0 },
+      {
+        plaidItemId: ITEM_B,
+        institutionName: "Bank b2",
+        ok: false,
+        skipped: true,
+        error: `Linked in ${OTHER_ENV} — switch PLAID_ENV to manage`,
+      },
+    ]);
+  });
+
+  it("reports a foreign revoked item as skipped, not as needing reconnect", async () => {
+    selectReturns([item(ITEM_A, "revoked", OTHER_ENV)]);
+
+    const [result] = await makeCaller().plaid.syncNow({});
+
+    expect(result).toMatchObject({ ok: false, skipped: true });
+    expect(mockSync).not.toHaveBeenCalled();
   });
 
   it("syncs only the requested item when given an id the caller owns", async () => {

@@ -4,7 +4,8 @@
  * Creates the dev user (via Better-Auth, so the password hash is real), marks
  * onboarding done, and resets a "Fixture Bank" Plaid item with accounts and
  * transactions covering the awkward cases: repeated merchants, blank Manual
- * Category rows, pending rows, a transfer pair, and an unknown Plaid category.
+ * Category rows, pending rows, a transfer pair, and an unknown Plaid category,
+ * plus a zero-account bank linked under the other PLAID_ENV (KOI-288).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
  * transactions) and the dev user's category rules, then re-inserts the same
@@ -23,10 +24,11 @@ import {
   userPreferences,
 } from "@life-tracker/db/schema/index";
 import { env } from "@life-tracker/env/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
 import { SEED_CATEGORIES, categoryNameForPfc } from "../packages/api/src/lib/category-seed";
+import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
 import { deterministicUUID } from "../packages/db/src/seed";
 
@@ -34,6 +36,8 @@ const DEV_EMAIL = "dev@palestra.local";
 const DEV_PASSWORD = "palestra-dev-password";
 
 const FIXTURE_ITEM_ID = "fixture-item-dev";
+/** A bank linked under the other PLAID_ENV with no accounts left: the stuck case force-remove fixes (KOI-288). */
+const STUCK_ITEM_ID = "fixture-item-other-env";
 const id = (key: string) => deterministicUUID(`koi-302-fixture:${key}`);
 
 type Fixture = {
@@ -124,7 +128,7 @@ async function seedFinance() {
     const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
 
     // Reset: cascades to the fixture accounts and their transactions.
-    await tx.delete(plaidItem).where(eq(plaidItem.itemId, FIXTURE_ITEM_ID));
+    await tx.delete(plaidItem).where(inArray(plaidItem.itemId, [FIXTURE_ITEM_ID, STUCK_ITEM_ID]));
     await tx.delete(categoryRule).where(eq(categoryRule.userId, userId));
 
     const plaidItemId = id("item");
@@ -135,6 +139,15 @@ async function seedFinance() {
       institutionName: "Fixture Bank",
       // Not a real token: "Sync now" on this item fails by design.
       accessTokenEnc: "fixture-not-a-real-token",
+      plaidEnv: env.PLAID_ENV,
+    });
+    await tx.insert(plaidItem).values({
+      id: id("item:other-env"),
+      userId,
+      itemId: STUCK_ITEM_ID,
+      institutionName: "Old Other-Env Bank",
+      accessTokenEnc: "fixture-not-a-real-token",
+      plaidEnv: otherPlaidEnv(),
     });
 
     await tx.insert(financialAccount).values(

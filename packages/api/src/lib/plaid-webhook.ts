@@ -8,7 +8,8 @@
  * Requests are authenticated via the `Plaid-Verification` JWT (ES256 signature,
  * body-hash match, 5-min replay window) in `plaid-webhook-verify.ts`; anything
  * unverified is rejected with 401. An event is only acted on when its `item_id`
- * resolves to a known `plaid_item`.
+ * resolves to a known `plaid_item`. Items linked under another PLAID_ENV are
+ * marked `skipped` without a sync: their token can't work here (KOI-288).
  */
 import { randomUUID } from "node:crypto";
 
@@ -18,6 +19,7 @@ import { Hono } from "hono";
 import { db } from "@life-tracker/db";
 import { plaidItem, plaidWebhookEvent } from "@life-tracker/db/schema/index";
 
+import { type PlaidEnv, foreignPlaidEnvError } from "./plaid-env";
 import { syncPlaidItem } from "./plaid-sync-db";
 import { verifyPlaidWebhook } from "./plaid-webhook-verify";
 
@@ -28,9 +30,20 @@ const TRANSACTION_CODES = new Set([
   "DEFAULT_UPDATE",
 ]);
 
-async function processEvent(eventId: string, plaidItemId: string): Promise<void> {
+async function processEvent(
+  eventId: string,
+  item: { id: string; plaidEnv: PlaidEnv },
+): Promise<void> {
+  const foreignEnv = foreignPlaidEnvError(item.plaidEnv);
+  if (foreignEnv) {
+    await db
+      .update(plaidWebhookEvent)
+      .set({ status: "skipped", processedAt: new Date(), errorMessage: foreignEnv })
+      .where(eq(plaidWebhookEvent.id, eventId));
+    return;
+  }
   try {
-    await syncPlaidItem(plaidItemId);
+    await syncPlaidItem(item.id);
     await db
       .update(plaidWebhookEvent)
       .set({ status: "done", processedAt: new Date() })
@@ -68,7 +81,7 @@ plaidWebhookApp.post("/webhook", async (c) => {
   if (!itemId) return c.json({ error: "missing item_id" }, 400);
 
   const [item] = await db
-    .select({ id: plaidItem.id })
+    .select({ id: plaidItem.id, plaidEnv: plaidItem.plaidEnv })
     .from(plaidItem)
     .where(eq(plaidItem.itemId, itemId))
     .limit(1);
@@ -106,7 +119,7 @@ plaidWebhookApp.post("/webhook", async (c) => {
   }
 
   if (webhookType === "TRANSACTIONS" && TRANSACTION_CODES.has(webhookCode)) {
-    void processEvent(eventId, item.id);
+    void processEvent(eventId, item);
   } else {
     await db
       .update(plaidWebhookEvent)
@@ -126,7 +139,7 @@ export async function drainPendingPlaidEvents(): Promise<void> {
 
   for (const ev of pending) {
     const [item] = await db
-      .select({ id: plaidItem.id })
+      .select({ id: plaidItem.id, plaidEnv: plaidItem.plaidEnv })
       .from(plaidItem)
       .where(eq(plaidItem.itemId, ev.itemId))
       .limit(1);
@@ -137,6 +150,6 @@ export async function drainPendingPlaidEvents(): Promise<void> {
         .where(eq(plaidWebhookEvent.id, ev.id));
       continue;
     }
-    await processEvent(ev.id, item.id);
+    await processEvent(ev.id, item);
   }
 }
