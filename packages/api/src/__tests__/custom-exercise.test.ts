@@ -206,7 +206,6 @@ describe("admin.approveExercise", () => {
 
   it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
     // Nothing queued: the update returns no rows.
-
     await expect(
       adminCaller.admin.approveExercise({ id: EXERCISE_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -252,7 +251,7 @@ describe("admin.rejectExercise", () => {
   });
 
   it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
-
+    // Nothing queued: the update returns no rows.
     await expect(
       adminCaller.admin.rejectExercise({ id: EXERCISE_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -312,7 +311,7 @@ describe("notifications.markRead", () => {
   });
 
   it("returns null when notification is not found", async () => {
-
+    // Nothing queued: the update returns no rows.
     const result = await userCaller.notifications.markRead({ id: NOTIF_ID });
 
     expect(result).toBeNull();
@@ -324,14 +323,12 @@ describe("notifications.markRead", () => {
 // ---------------------------------------------------------------------------
 describe("notifications.markAllRead", () => {
   it("returns success", async () => {
-
     const result = await userCaller.notifications.markAllRead();
 
     expect(result).toEqual({ success: true });
   });
 
   it("only touches the DB once (single update, not per-notification)", async () => {
-
     await userCaller.notifications.markAllRead();
 
     expect(mockDb.updated(notification)).toHaveLength(1);
