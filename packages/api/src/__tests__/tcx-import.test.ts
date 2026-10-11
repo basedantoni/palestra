@@ -1,73 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  enqueueRecalcs,
-} = vi.hoisted(() => {
-  function makeChain(
-    resolveWith: unknown = [],
-    onValues?: (value: unknown) => void,
-  ) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "values") {
-            return vi.fn((value: unknown) => {
-              onValues?.(value);
-              return proxy;
-            });
-          }
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return vi.fn(() => proxy);
-        },
-      },
-    );
+const { enqueueRecalcs } = vi.hoisted(() => ({
+  enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
+}));
 
-    return proxy;
-  }
-
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: {
-        findFirst: vi.fn(),
-      },
-    },
-  };
-
-  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
-
-  return {
-    mockDb,
-    mockTx,
-    makeChain,
-    enqueueRecalcs,
-  };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -84,8 +21,11 @@ vi.mock("../lib/recalc-queue", () => ({
   enqueueRecalcs,
 }));
 
+import { exercise, exerciseLog, personalRecord, workout } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
 import { fingerprintTcxRun, type ParsedTcxRun } from "../lib/tcx-import";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "00000000-0000-4000-8000-000000000301";
 const SHORT_RUN_ID = "00000000-0000-4000-8000-000000000302";
@@ -148,11 +88,19 @@ const duplicateRunSameRequest: ParsedTcxRun = {
 describe("tcxImport router", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    // recordPr issues two tx.select calls per record type (existing + prior best);
-    // default to "no prior PRs" so both running PRs are recorded.
-    mockTx.select.mockReturnValue(makeChain([]));
+    // recordPr reads personal_record twice per record type (existing + prior
+    // best); nothing queued means "no prior PRs", so both running PRs record.
   });
+
+  /** The running-exercise lookup, then the duplicate check's matching workouts. */
+  const existingWorkouts = (duplicates: unknown[] = []) => {
+    mockDb.onSelect(exercise, runningExerciseRows);
+    mockDb.onSelect(workout, duplicates);
+  };
+
+  /** Every insert's .values() payload (workout, log, PRs), in order. */
+  const insertedValues = () =>
+    mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.arg("values"));
 
   const isLogInsert = (v: unknown): v is Record<string, unknown> =>
     typeof v === "object" &&
@@ -164,16 +112,12 @@ describe("tcxImport router", () => {
     typeof v === "object" && v !== null && "recordType" in v;
 
   it("previews DB duplicates and repeated files in the same request", async () => {
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            date: new Date(duplicateRun.startedAt),
-            distanceMeter: duplicateRun.distanceMeter,
-          },
-        ]),
-      );
+    existingWorkouts([
+      {
+        date: new Date(duplicateRun.startedAt),
+        distanceMeter: duplicateRun.distanceMeter,
+      },
+    ]);
 
     const result = await userCaller.tcxImport.preview({
       runs: [shortRun, duplicateRun, duplicateRunSameRequest],
@@ -204,13 +148,7 @@ describe("tcxImport router", () => {
   });
 
   it("commits new TCX runs as cardio workouts and exercise logs", async () => {
-    const insertedValues: unknown[] = [];
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(
-      makeChain([], (value) => insertedValues.push(value)),
-    );
+    existingWorkouts();
 
     const result = await userCaller.tcxImport.commit({
       runs: [shortRun],
@@ -222,20 +160,25 @@ describe("tcxImport router", () => {
       skippedInvalidCount: 0,
       totalCount: 1,
     });
-    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.db.transaction).toHaveBeenCalledTimes(1);
     // workout + exercise log + 2 running PRs (longest_distance + best_pace)
-    expect(mockTx.insert).toHaveBeenCalledTimes(4);
-    expect(insertedValues[0]).toMatchObject({
+    expect(mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.table)).toEqual([
+      workout,
+      exerciseLog,
+      personalRecord,
+      personalRecord,
+    ]);
+    expect(insertedValues()[0]).toMatchObject({
       userId: USER_ID,
       date: new Date(shortRun.startedAt),
       workoutType: "cardio",
       durationMinutes: 30,
       source: "nike_run_club",
     });
-    expect(insertedValues[0]).toMatchObject({
+    expect(insertedValues()[0]).toMatchObject({
       notes: expect.stringContaining("Imported from TCX (nike_run_club)"),
     });
-    expect(insertedValues[1]).toMatchObject({
+    expect(insertedValues()[1]).toMatchObject({
       exerciseId: SHORT_RUN_ID,
       exerciseName: "Short Run",
       order: 0,
@@ -251,19 +194,13 @@ describe("tcxImport router", () => {
   });
 
   it("maps runs under 8km to Short Run and 8km or longer to Long Run", async () => {
-    const insertedValues: unknown[] = [];
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(
-      makeChain([], (value) => insertedValues.push(value)),
-    );
+    existingWorkouts();
 
     await userCaller.tcxImport.commit({
       runs: [shortRun, longRun],
     });
 
-    const logInserts = insertedValues.filter(isLogInsert);
+    const logInserts = insertedValues().filter(isLogInsert);
     expect(logInserts[0]).toMatchObject({
       exerciseId: SHORT_RUN_ID,
       exerciseName: "Short Run",
@@ -275,20 +212,16 @@ describe("tcxImport router", () => {
   });
 
   it("skips already-imported TCX runs on rerun without opening a transaction", async () => {
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            date: new Date(shortRun.startedAt),
-            distanceMeter: shortRun.distanceMeter,
-          },
-          {
-            date: new Date(longRun.startedAt),
-            distanceMeter: longRun.distanceMeter,
-          },
-        ]),
-      );
+    existingWorkouts([
+      {
+        date: new Date(shortRun.startedAt),
+        distanceMeter: shortRun.distanceMeter,
+      },
+      {
+        date: new Date(longRun.startedAt),
+        distanceMeter: longRun.distanceMeter,
+      },
+    ]);
 
     const result = await userCaller.tcxImport.commit({
       runs: [shortRun, longRun],
@@ -300,18 +233,12 @@ describe("tcxImport router", () => {
       skippedInvalidCount: 0,
       totalCount: 2,
     });
-    expect(mockDb.transaction).not.toHaveBeenCalled();
-    expect(mockTx.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.transaction).not.toHaveBeenCalled();
+    expect(insertedValues()).toEqual([]);
   });
 
   it("commits only selected fingerprints when provided", async () => {
-    const insertedValues: unknown[] = [];
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(makeChain([]));
-    mockTx.insert.mockReturnValue(
-      makeChain([], (value) => insertedValues.push(value)),
-    );
+    existingWorkouts();
 
     const result = await userCaller.tcxImport.commit({
       runs: [shortRun, longRun],
@@ -322,25 +249,19 @@ describe("tcxImport router", () => {
 
     expect(result.createdCount).toBe(1);
     expect(result.totalCount).toBe(1);
-    expect(insertedValues[1]).toMatchObject({
+    expect(insertedValues()[1]).toMatchObject({
       exerciseId: LONG_RUN_ID,
       exerciseName: "Long Run",
     });
   });
 
   it("records longest_distance and best_pace PRs when a run beats prior best", async () => {
-    const insertedValues: unknown[] = [];
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(makeChain([]));
-    // default mockTx.select → [] means no prior PRs, so both running PRs record.
-    mockTx.insert.mockReturnValue(
-      makeChain([], (value) => insertedValues.push(value)),
-    );
+    existingWorkouts();
+    // Nothing queued for personal_record → no prior PRs, so both running PRs record.
 
     await userCaller.tcxImport.commit({ runs: [shortRun] });
 
-    const prInserts = insertedValues.filter(isPrInsert);
+    const prInserts = insertedValues().filter(isPrInsert);
     const longestDistance = prInserts.find(
       (v) => v.recordType === "longest_distance",
     );
@@ -367,25 +288,15 @@ describe("tcxImport router", () => {
   });
 
   it("does not record a PR when a run is shorter/slower than the existing best", async () => {
-    const insertedValues: unknown[] = [];
-    mockDb.select
-      .mockReturnValueOnce(makeChain(runningExerciseRows))
-      .mockReturnValueOnce(makeChain([]));
+    existingWorkouts();
     // recordPr(longest_distance): existing [], prior best 999999 (unbeatable)
     // recordPr(best_pace): existing [], prior best 1 s/km (unbeatable, lower is better)
-    mockTx.select
-      .mockReturnValueOnce(makeChain([]))
-      .mockReturnValueOnce(makeChain([{ value: 999999 }]))
-      .mockReturnValueOnce(makeChain([]))
-      .mockReturnValueOnce(makeChain([{ value: 1 }]));
-    mockTx.insert.mockReturnValue(
-      makeChain([], (value) => insertedValues.push(value)),
-    );
+    mockDb.onSelect(personalRecord, [], [{ value: 999999 }], [], [{ value: 1 }]);
 
     const result = await userCaller.tcxImport.commit({ runs: [shortRun] });
 
     expect(result.createdCount).toBe(1);
-    const prInserts = insertedValues.filter(isPrInsert);
+    const prInserts = insertedValues().filter(isPrInsert);
     expect(prInserts).toHaveLength(0);
   });
 });

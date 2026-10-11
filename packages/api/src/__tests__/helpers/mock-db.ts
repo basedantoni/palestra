@@ -4,8 +4,13 @@
  * Results are queued per table, not per call: `onSelect(categoryRule, rows)`
  * answers the next select *from categoryRule*, so adding a query against
  * another table to a code path doesn't shift what every later select returns.
- * A table with nothing queued answers `[]` (for writes too: an empty `.returning()`). Every select/insert/update/delete
- * is recorded with its table, so tests assert on writes by table too.
+ * A table with nothing queued answers `[]` (writes too: an empty `.returning()`),
+ * or its `fallback(...)` if set. A queued result may be `rejectWith(err)`, or a
+ * function of the op evaluated when awaited (e.g. echo inserted rows back).
+ *
+ * Every select/insert/update/delete is recorded with its table, so tests assert
+ * on writes by table (`inserted`, `updated`, `deleted`, `selected` WHERE params).
+ * A transaction runs its callback against the same mock.
  *
  * Wire it in with
  *   vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));

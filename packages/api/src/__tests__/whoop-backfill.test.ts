@@ -31,42 +31,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
 const {
-  mockDb,
-  makeChain,
   mockGetValidToken,
   mockTriggerBackfillFn,
   mockStopBackfillFn,
 } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
   const mockGetValidToken = vi.fn().mockResolvedValue("mock-access-token");
 
   // Mocks for whoop-backfill module (used in router tests)
@@ -77,8 +45,6 @@ const {
   const mockClearBackfillStateFn = vi.fn();
 
   return {
-    mockDb,
-    makeChain,
     mockGetValidToken,
     mockTriggerBackfillFn,
     mockStopBackfillFn,
@@ -88,7 +54,7 @@ const {
   };
 });
 
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -283,7 +249,10 @@ vi.mock("../lib/whoop-backfill", async (importOriginal) => {
   };
 });
 
+import { notification as notificationTable, whoopConnection } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper: create a tRPC caller
@@ -291,7 +260,7 @@ import { appRouter } from "../routers/index";
 function makeCtx(userId = USER_ID) {
   return {
     session: { user: { id: userId } },
-    db: mockDb,
+    db: mockDb.db,
   } as any;
 }
 
@@ -303,7 +272,12 @@ function makeCaller(userId = USER_ID) {
 // DB mock helpers
 // ────────────────────────────────────────────────────────────────────────────
 function mockSelectConnection(row: Record<string, unknown> | null) {
-  mockDb.select.mockReturnValueOnce(makeChain(row ? [row] : []));
+  mockDb.onSelect(whoopConnection, row ? [row] : []);
+}
+
+/** The connection row the backfill run reads once at start. */
+function connectionIs(row: Record<string, unknown>) {
+  mockDb.onSelect(whoopConnection, [row]);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -593,48 +567,10 @@ describe("triggerBackfill function — pagination and import logic", () => {
     // - connection update (lastImportedAt)
 
     // Connection lookup (shared for whole backfill run, read once at start)
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
 
-    // For each activity: dedup check → no existing workout
-    // act-001
-    mockDb.select.mockReturnValueOnce(makeChain([])); // no existing workout
-    // act-002
-    mockDb.select.mockReturnValueOnce(makeChain([])); // no existing workout
+    // For each activity: dedup check → nothing queued, so no existing workout
 
-    // Transaction for act-001
-    mockDb.transaction.mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
-    });
-    // Transaction for act-002
-    mockDb.transaction.mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
-    });
 
     await realTriggerBackfill(USER_ID, 30);
 
@@ -648,7 +584,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     expect(fetchCall[0]).toContain("start=");
 
     // Two transactions (one per activity)
-    expect(mockDb.transaction).toHaveBeenCalledTimes(2);
+    expect(mockDb.db.transaction).toHaveBeenCalledTimes(2);
   });
 
   it("k. stops early when shouldStop = true after first activity", async () => {
@@ -683,30 +619,15 @@ describe("triggerBackfill function — pagination and import logic", () => {
     });
 
     // Connection lookup
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
 
     // act-stop-001: dedup → no existing workout, then transaction runs and triggers stop
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
     // Override transaction to trigger stop after first call
     let transactionCallCount = 0;
-    mockDb.transaction.mockImplementation(async (fn: any) => {
+    mockDb.db.transaction.mockImplementation(async (fn: any) => {
       transactionCallCount++;
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      const result = await fn(tx);
+      const result = await fn(mockDb.db);
       // After first transaction, trigger stop
       if (transactionCallCount === 1) {
         realStopBackfill(USER_ID);
@@ -720,7 +641,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     expect(realGetBackfillState(USER_ID)).toBeNull();
 
     // Only one transaction was run (second activity was skipped due to stop)
-    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.db.transaction).toHaveBeenCalledTimes(1);
   });
 
   it("l. emits summary notification on completion when notifyOnAutoImport = true", async () => {
@@ -746,43 +667,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
     });
 
     // Connection lookup: notifyOnAutoImport = true
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: true }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: true });
 
     // Dedup for act-notif-001 → no existing workout
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
-    // Transaction
-    mockDb.transaction.mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
-    });
 
-    // Capture notification insert
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockReturnValue({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    });
 
     await realTriggerBackfill(USER_ID, 30);
 
     // Summary notification should be emitted
-    const notification = outerInsertValues.find(
+    const notification = (mockDb.inserted(notificationTable) as Array<Record<string, unknown>>).find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notification).toBeDefined();
@@ -815,39 +709,14 @@ describe("triggerBackfill function — pagination and import logic", () => {
     });
 
     // Connection lookup: notifyOnAutoImport = false
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
 
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
-    mockDb.transaction.mockImplementationOnce(async (fn: any) => {
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
-    });
 
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockReturnValue({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    });
 
     await realTriggerBackfill(USER_ID, 30);
 
-    const notification = outerInsertValues.find(
+    const notification = (mockDb.inserted(notificationTable) as Array<Record<string, unknown>>).find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notification).toBeUndefined();
@@ -866,9 +735,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     });
 
     // Connection lookup
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
 
     await realTriggerBackfill(USER_ID, 30);
 
@@ -902,31 +769,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
         json: () => Promise.resolve(page2Response),
       });
 
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
     for (let index = 0; index < 35; index++) {
-      mockDb.select.mockReturnValueOnce(makeChain([]));
-    }
+      }
 
     const observedTotals: number[] = [];
-    mockDb.transaction.mockImplementation(async (fn: any) => {
+    mockDb.db.transaction.mockImplementation(async (fn: any) => {
       const state = realGetBackfillState(USER_ID);
       if (state) observedTotals.push(state.totalCount);
 
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
+      return fn(mockDb.db);
     });
 
     await realTriggerBackfill(USER_ID, 30);
@@ -951,31 +803,16 @@ describe("triggerBackfill function — pagination and import logic", () => {
       json: () => Promise.resolve(pageResponse),
     });
 
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
     for (let index = 0; index < 7; index++) {
-      mockDb.select.mockReturnValueOnce(makeChain([]));
-    }
+      }
 
     const observedTotals: number[] = [];
-    mockDb.transaction.mockImplementation(async (fn: any) => {
+    mockDb.db.transaction.mockImplementation(async (fn: any) => {
       const state = realGetBackfillState(USER_ID);
       if (state) observedTotals.push(state.totalCount);
 
-      const tx = {
-        insert: vi
-          .fn()
-          .mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
-        update: vi
-          .fn()
-          .mockReturnValue({
-            set: vi
-              .fn()
-              .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
-      };
-      return fn(tx);
+      return fn(mockDb.db);
     });
 
     await realTriggerBackfill(USER_ID, 30);
@@ -989,9 +826,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("network failure"));
 
     // Connection lookup succeeds
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    connectionIs({ autoImportEnabled: true, notifyOnAutoImport: false });
 
     // Should NOT throw
     await expect(realTriggerBackfill(USER_ID, 30)).resolves.not.toThrow();
@@ -1052,13 +887,7 @@ describe("handleWhoopCallback — first connect triggers backfill", () => {
     });
 
     // DB insert/upsert returns lastImportedAt: null (first connect)
-    mockDb.insert.mockReturnValueOnce({
-      values: vi.fn().mockReturnValue({
-        onConflictDoUpdate: vi
-          .fn()
-          .mockResolvedValue([{ lastImportedAt: null }]),
-      }),
-    });
+    mockDb.onInsert(whoopConnection, [{ lastImportedAt: null }]);
 
     const setImmediateSpy = vi.spyOn(globalThis, "setImmediate" as any);
 
