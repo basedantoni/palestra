@@ -9,33 +9,17 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, makeChain } = vi.hoisted(() => {
-  /** Thenable query-builder stand-in; reports where()/values()/set() calls. */
-  function makeChain(resolveWith: unknown = [], spy?: (method: string, arg: unknown) => void) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          return (arg: unknown) => {
-            spy?.(prop, arg);
-            return proxy;
-          };
-        },
-      },
-    );
-    return proxy;
-  }
-  const mockDb = { select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(), transaction: vi.fn() };
-  return { mockDb, makeChain };
-});
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
-
-import { PgDialect } from "drizzle-orm/pg-core";
-import type { SQL } from "drizzle-orm";
+import {
+  balanceSnapshot,
+  financialAccount,
+  savingsGoal,
+  savingsGoalAccount,
+} from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "user-goals";
 const GOAL = "00000000-0000-4000-8000-0000000000a1";
@@ -43,74 +27,50 @@ const ACCT_1 = "00000000-0000-4000-8000-0000000000b1";
 const ACCT_2 = "00000000-0000-4000-8000-0000000000b2";
 
 const makeCaller = () => appRouter.createCaller({ session: { user: { id: USER_ID } } } as any);
-const render = (clause: unknown) => new PgDialect().sqlToQuery(clause as SQL).params;
 
-function selectReturning(rows: unknown[]): () => unknown[] {
-  let where: unknown;
-  mockDb.select.mockReturnValueOnce(makeChain(rows, (m, a) => m === "where" && (where = a)));
-  return () => (where ? render(where) : []);
-}
-
-let inserted: unknown[];
-let deletedWhere: unknown[];
-let updates: Array<{ set: unknown; where?: unknown }>;
+/** Every insert/update/delete, whatever the table. */
+const writes = () => mockDb.ops.filter((op) => op.kind !== "select");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  inserted = [];
-  deletedWhere = [];
-  updates = [];
-  mockDb.insert.mockImplementation(() => makeChain([], (m, a) => m === "values" && inserted.push(a)));
-  mockDb.delete.mockImplementation(() => makeChain([], (m, a) => m === "where" && deletedWhere.push(render(a))));
-  mockDb.update.mockImplementation(() => {
-    const u: { set: unknown; where?: unknown } = { set: undefined };
-    updates.push(u);
-    return makeChain([], (m, a) => {
-      if (m === "set") u.set = a;
-      if (m === "where") u.where = render(a);
-    });
-  });
-  mockDb.transaction.mockImplementation((cb: (tx: typeof mockDb) => unknown) => cb(mockDb));
 });
 
 describe("goals.update", () => {
   it("changes only the given fields on the caller's goal", async () => {
-    const goalParams = selectReturning([{ id: GOAL }]);
+    mockDb.onSelect(savingsGoal, [{ id: GOAL }]);
 
     await makeCaller().goals.update({ id: GOAL, name: "Rainy day fund", targetDate: null });
 
-    expect(goalParams()).toEqual([GOAL, USER_ID]);
-    expect(updates).toEqual([{ set: { name: "Rainy day fund", targetDate: null }, where: [GOAL, USER_ID] }]);
-    expect(deletedWhere).toEqual([]);
-    expect(inserted).toEqual([]);
+    expect(mockDb.selected(savingsGoal)).toEqual([[GOAL, USER_ID]]);
+    expect(mockDb.updated(savingsGoal)).toEqual([
+      { set: { name: "Rainy day fund", targetDate: null }, where: [GOAL, USER_ID] },
+    ]);
+    expect(mockDb.deleted(savingsGoalAccount)).toEqual([]);
+    expect(mockDb.inserted(savingsGoalAccount)).toEqual([]);
   });
 
   it("replaces linked accounts after checking the caller owns all of them", async () => {
-    selectReturning([{ id: GOAL }]);
-    const acctParams = selectReturning([{ id: ACCT_1 }, { id: ACCT_2 }]);
+    mockDb.onSelect(savingsGoal, [{ id: GOAL }]);
+    mockDb.onSelect(financialAccount, [{ id: ACCT_1 }, { id: ACCT_2 }]);
 
     await makeCaller().goals.update({ id: GOAL, accountIds: [ACCT_1, ACCT_2] });
 
-    expect(acctParams()).toEqual([USER_ID, ACCT_1, ACCT_2]);
-    expect(deletedWhere).toEqual([[GOAL]]);
-    expect(inserted).toEqual([
-      [
-        { goalId: GOAL, accountId: ACCT_1 },
-        { goalId: GOAL, accountId: ACCT_2 },
-      ],
+    expect(mockDb.selected(financialAccount)).toEqual([[USER_ID, ACCT_1, ACCT_2]]);
+    expect(mockDb.deleted(savingsGoalAccount)).toEqual([[GOAL]]);
+    expect(mockDb.inserted(savingsGoalAccount)).toEqual([
+      { goalId: GOAL, accountId: ACCT_1 },
+      { goalId: GOAL, accountId: ACCT_2 },
     ]);
   });
 
   it("refuses accounts the caller doesn't own, writing nothing", async () => {
-    selectReturning([{ id: GOAL }]);
-    selectReturning([{ id: ACCT_1 }]); // ACCT_2 isn't theirs
+    mockDb.onSelect(savingsGoal, [{ id: GOAL }]);
+    mockDb.onSelect(financialAccount, [{ id: ACCT_1 }]); // ACCT_2 isn't theirs
 
     await expect(
       makeCaller().goals.update({ id: GOAL, name: "x", accountIds: [ACCT_1, ACCT_2] }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(updates).toEqual([]);
-    expect(deletedWhere).toEqual([]);
-    expect(inserted).toEqual([]);
+    expect(writes()).toEqual([]);
   });
 
   it("requires at least one linked account", async () => {
@@ -120,10 +80,9 @@ describe("goals.update", () => {
   });
 
   it("returns NOT_FOUND for a goal the caller doesn't own", async () => {
-    selectReturning([]);
-
+    // Nothing queued: the goal lookup finds nothing.
     await expect(makeCaller().goals.update({ id: GOAL, name: "x" })).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(updates).toEqual([]);
+    expect(writes()).toEqual([]);
   });
 });
 
@@ -132,10 +91,11 @@ const day = (i: number) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slic
 
 describe("goals.list history", () => {
   it("returns the summed daily balance series for the chart, capped to the latest 180 days", async () => {
-    selectReturning([{ id: GOAL, userId: USER_ID, name: "Fund", targetAmount: 5000, targetDate: null }]);
-    selectReturning([{ accountId: ACCT_1 }, { accountId: ACCT_2 }]);
+    mockDb.onSelect(savingsGoal, [{ id: GOAL, userId: USER_ID, name: "Fund", targetAmount: 5000, targetDate: null }]);
+    mockDb.onSelect(savingsGoalAccount, [{ accountId: ACCT_1 }, { accountId: ACCT_2 }]);
     // 200 days × 2 accounts
-    selectReturning(
+    mockDb.onSelect(
+      balanceSnapshot,
       Array.from({ length: 200 }, (_, i) => [
         { accountId: ACCT_1, asOfDate: day(i), balance: 100 + i },
         { accountId: ACCT_2, asOfDate: day(i), balance: 1000 },

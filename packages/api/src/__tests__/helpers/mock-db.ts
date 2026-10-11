@@ -97,6 +97,7 @@ function resolveFor(op: MockDbOp, result: unknown): unknown {
 
 function createMockDb() {
   const queues = new Map<string, unknown[]>();
+  const fallbacks = new Map<string, unknown>();
   const ops: MockDbOp[] = [];
 
   // Tables are objects; a stable per-object id keys the queues by identity.
@@ -109,9 +110,11 @@ function createMockDb() {
     return `${kind}:${id}`;
   };
 
-  const dequeue = (kind: string, table: unknown, fallback: unknown) => {
-    const queue = queues.get(key(kind, table));
-    return queue && queue.length > 0 ? queue.shift() : fallback;
+  const dequeue = (kind: string, table: unknown, otherwise: unknown) => {
+    const k = key(kind, table);
+    const queue = queues.get(k);
+    if (queue && queue.length > 0) return queue.shift();
+    return fallbacks.has(k) ? fallbacks.get(k) : otherwise;
   };
   const enqueue = (kind: string, table: unknown, results: unknown[]) => {
     const k = key(kind, table);
@@ -194,6 +197,11 @@ function createMockDb() {
     /** Queue results for `db.query.<name>.<method>(...)`, e.g. ("workout", "findFirst", row). */
     onQuery: (name: string, method: string, ...results: unknown[]) =>
       enqueue(`query.${method}`, name, results),
+    /**
+     * What every `kind` op on `table` answers once its queue is empty, e.g.
+     * fallback("update", transaction, { rowCount: 1 }). Queued results win.
+     */
+    fallback: (kind: Kind, table: unknown, result: unknown) => fallbacks.set(key(kind, table), result),
     /** Queue results for successive `db.execute(...)` calls; unqueued gives `{ rows: [] }`. */
     onExecute: (...results: unknown[]) => enqueue("execute", "db", results),
 
@@ -215,6 +223,7 @@ function createMockDb() {
 
     reset() {
       queues.clear();
+      fallbacks.clear();
       ops.length = 0;
       db.select.mockReset().mockImplementation(select);
       db.selectDistinct.mockReset().mockImplementation(select);

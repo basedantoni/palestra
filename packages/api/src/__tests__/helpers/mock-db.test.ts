@@ -64,6 +64,19 @@ describe("mockDb", () => {
     );
   });
 
+  it("answers with a table's fallback once its queue is empty", async () => {
+    mockDb.fallback("update", transaction, { rowCount: 1 });
+    mockDb.onUpdate(transaction, { rowCount: 0 });
+
+    const { db } = mockDb;
+    const update = () => db.update(transaction).set({}).where(eq(transaction.id, "t1"));
+    await expect(update()).resolves.toEqual({ rowCount: 0 }); // queued first
+    await expect(update()).resolves.toEqual({ rowCount: 1 });
+    await expect(update()).resolves.toEqual({ rowCount: 1 });
+    // Other tables keep the plain default.
+    await expect(db.update(category).set({})).resolves.toEqual([]);
+  });
+
   it("computes a queued function result from the op when awaited", async () => {
     mockDb.onInsert(category, (op: MockDbOp) =>
       (op.arg("values") as Array<{ name: string }>).map((r, i) => ({ ...r, id: `id-${i}` })),
