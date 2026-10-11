@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [API](./packages/api/GLOSSARY.md): business rules for fitness tracking and personal finance
+- [API](./packages/api/GLOSSARY.md): business rules for fitness tracking, personal finance, and the TCG collection
 
 ## Relationships
 

@@ -75,3 +75,43 @@ An account's balance as recorded on a given day. History exists only from when t
 **Net Worth**:
 Total balance of asset accounts (depository, investment) minus total owed on liability accounts (credit, loan), across linked accounts only.
 _Avoid_: Total balance, wealth
+
+### TCG — cards
+
+The One Piece Card Game collection. Collected for artwork, not play or investment.
+
+**Card**:
+A game card identified by its card number (e.g. `OP05-069`) and character. Several artworks can share one card number.
+_Avoid_: Using "card" for a physical card or a specific artwork
+
+**Printing**:
+One release of a Card: a specific artwork, artist, variant (base, parallel, manga, reprint), language, and set. Identified by Bandai's variant ID plus language (e.g. `OP05-069_p1`, Japanese).
+_Avoid_: Variant (as a noun), version, edition
+
+**Copy**:
+One physical card the user holds, of a known Printing and condition.
+_Avoid_: Card, item, owned card
+
+**Want**:
+The user's intent to acquire one Copy of a specific Printing, bounded by a maximum delivered price and a minimum acceptable condition. It is open, ordered, fulfilled (a Copy arrived), or dropped.
+_Avoid_: Wishlist item, target
+
+**Art Rating**:
+The user's 0–5 judgement of a Printing's artwork. The only preference score the app keeps; buying rules stay the user's judgement.
+_Avoid_: Score, preference score
+
+**Theme**:
+A user-defined tag grouping Printings across characters, such as D Clan. What a theme covers is decided when tagging, not by the app.
+_Avoid_: Category (finance owns that word), collection
+
+**Offer**:
+A seller's price for a Printing, as seen by the user on a given date, recorded against a Want. Its delivered price includes item, shipping, and tax as one amount. Offers go stale; the date seen is part of the fact.
+_Avoid_: Listing, quote, price
+
+**Condition**:
+A Copy's physical state on one ordered scale: NM, LP, MP, HP, DMG. Japanese shop grades are converted to it when entered. Graded slabs are out of scope.
+_Avoid_: Grade, quality
+
+**Card Fund**:
+Money available for TCG purchases: the Cards category's monthly budgets summed since a start month, minus that category's Budgeted Spend over the same months. Unspent budget carries forward, unlike finance budgets; a month with no Cards budget adds nothing.
+_Avoid_: Chase fund, TCG budget, balance
