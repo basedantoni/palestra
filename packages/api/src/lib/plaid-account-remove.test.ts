@@ -45,7 +45,7 @@ function itemReads(owned: unknown[], tokenRow: unknown[] = []) {
 }
 
 /** Tables deleted from, in order. */
-const deletedTables = () => mockDb.ops.filter((op) => op.kind === "delete").map((op) => op.table);
+const deletedTables = () => mockDb.opsOf("delete").map((op) => op.table);
 
 beforeEach(() => {
   vi.clearAllMocks();

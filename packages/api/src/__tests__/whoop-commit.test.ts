@@ -51,8 +51,7 @@ import { mockDb } from "./helpers/mock-db";
 
 /** Every insert's .values() payload (workout, log, PRs), in order. */
 const insertedValues = () =>
-  mockDb.ops
-    .filter((op) => op.kind === "insert")
+  mockDb.opsOf("insert")
     .map((op) => op.arg("values") as Record<string, unknown>);
 
 // ────────────────────────────────────────────────────────────────────────────

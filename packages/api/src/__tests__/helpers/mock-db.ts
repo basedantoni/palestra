@@ -4,8 +4,10 @@
  * Results are queued per table, not per call: `onSelect(categoryRule, rows)`
  * answers the next select *from categoryRule*, so adding a query against
  * another table to a code path doesn't shift what every later select returns.
- * A table with nothing queued answers `[]` (writes too: an empty `.returning()`),
- * or its `fallback(...)` if set. A queued result may be `rejectWith(err)`, or a
+ * Order still matters *within* a table: successive selects from one table take
+ * its queued results in call order. A table with nothing queued answers `[]`
+ * (writes too: an empty `.returning()`), or its `fallback(...)` if set — so an
+ * unqueued select silently returns nothing rather than failing the test. A queued result may be `rejectWith(err)`, or a
  * function of the op evaluated when awaited (e.g. echo inserted rows back).
  *
  * Every select/insert/update/delete is recorded with its table, so tests assert
@@ -15,12 +17,14 @@
  * Wire it in with
  *   vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
  * It resets before every test (`setup.ts`), so nothing queued leaks between tests.
+ * A suite's own `vi.resetAllMocks()` is safe: Vitest resets each `db` method
+ * back to the implementation it was created with.
  */
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { vi } from "vitest";
 
-export type OnCall = (method: string, args: unknown[]) => void;
+type OnCall = (method: string, args: unknown[]) => void;
 
 const REJECT = Symbol("mock-db reject");
 
@@ -55,14 +59,6 @@ function chain(getResult: () => unknown, onCall?: OnCall): any {
     },
   );
   return proxy;
-}
-
-/**
- * A Drizzle-style query chain: any method call continues it, and awaiting it
- * gives `result` (or rejects, for `rejectWith`). `onCall` sees every call.
- */
-export function makeChain(result: unknown = [], onCall?: OnCall): any {
-  return chain(() => result, onCall);
 }
 
 const dialect = new PgDialect();
@@ -223,8 +219,11 @@ function createMockDb() {
     deleted: (table: unknown) => opsOf("delete", table).map((op) => whereParams(op.arg("where"))),
     /** WHERE params per select from `table`. */
     selected: (table: unknown) => opsOf("select", table).map((op) => whereParams(op.arg("where"))),
-    /** The raw ops against `table`, for assertions the shortcuts don't cover. */
-    opsOn: (table: unknown) => ops.filter((o) => o.table === table),
+    /** Ops of one kind (any table), in call order, e.g. opsOf("insert").map((op) => op.table). */
+    opsOf: (kind: MockDbOp["kind"]) => ops.filter((o) => o.kind === kind),
+    /** The raw ops against `table` (optionally of one kind), for assertions the shortcuts don't cover. */
+    opsOn: (table: unknown, kind?: MockDbOp["kind"]) =>
+      ops.filter((o) => o.table === table && (kind === undefined || o.kind === kind)),
 
     reset() {
       queues.clear();

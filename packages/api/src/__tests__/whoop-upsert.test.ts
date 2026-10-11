@@ -116,10 +116,10 @@ function mockTxFirstLog() {
   mockDb.onSelect(exerciseLog, [{ id: LOG_ID, exerciseId: RESOLVED_EXERCISE.id }]);
 }
 
-const inserts = () => mockDb.ops.filter((op) => op.kind === "insert");
+const inserts = () => mockDb.opsOf("insert");
 /** Every update's .set() payload, in order. */
 const capturedSets = () =>
-  mockDb.ops.filter((op) => op.kind === "update").map((op) => op.arg("set") as Record<string, unknown>);
+  mockDb.opsOf("update").map((op) => op.arg("set") as Record<string, unknown>);
 
 describe("upsertWhoopWorkout", () => {
   beforeEach(() => {

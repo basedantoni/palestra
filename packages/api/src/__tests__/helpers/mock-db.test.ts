@@ -3,25 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { category, categoryRule, transaction } from "@life-tracker/db/schema/index";
 
-import { type MockDbOp, makeChain, mockDb, rejectWith } from "./mock-db";
-
-describe("makeChain", () => {
-  it("resolves its result however long the chain, reporting every call", async () => {
-    const calls: Array<[string, unknown[]]> = [];
-    const chain = makeChain([{ id: 1 }], (method, args) => calls.push([method, args]));
-
-    await expect(chain.from("t").where("w").limit(1)).resolves.toEqual([{ id: 1 }]);
-    expect(calls).toEqual([
-      ["from", ["t"]],
-      ["where", ["w"]],
-      ["limit", [1]],
-    ]);
-  });
-
-  it("rejects with a rejectWith result", async () => {
-    await expect(makeChain(rejectWith(new Error("boom"))).where()).rejects.toThrow("boom");
-  });
-});
+import { type MockDbOp, mockDb, rejectWith } from "./mock-db";
 
 describe("mockDb", () => {
   it("returns queued select results per table, in call order, then []", async () => {
@@ -51,6 +33,24 @@ describe("mockDb", () => {
     expect(mockDb.deleted(categoryRule)).toEqual([["r1"]]);
     expect(mockDb.selected(category)).toEqual([["u1"]]);
     expect(mockDb.inserted(transaction)).toEqual([]);
+  });
+
+  it("filters recorded ops by kind, and by table and kind", async () => {
+    const { db } = mockDb;
+    await db.insert(category).values({ id: "c1" });
+    await db.update(transaction).set({ categoryId: null });
+    await db.insert(categoryRule).values({ id: "r1" });
+
+    expect(mockDb.opsOf("insert").map((op) => op.table)).toEqual([category, categoryRule]);
+    expect(mockDb.opsOf("update").map((op) => op.arg("set"))).toEqual([{ categoryId: null }]);
+    expect(mockDb.opsOn(category, "insert")).toHaveLength(1);
+    expect(mockDb.opsOn(category, "update")).toEqual([]);
+  });
+
+  it("resolves however long the chain, and rejects with a rejectWith result", async () => {
+    mockDb.onSelect(category, rejectWith(new Error("boom")));
+
+    await expect(mockDb.db.select().from(category).where(eq(category.id, "c")).limit(1)).rejects.toThrow("boom");
   });
 
   it("serves insert/update/delete results (e.g. .returning()) per table", async () => {

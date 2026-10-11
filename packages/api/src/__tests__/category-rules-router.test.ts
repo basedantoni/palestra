@@ -46,7 +46,7 @@ const ownsCategory = (rows: unknown[] = [{ id: CAT_ID }]) => mockDb.onSelect(cat
 /** The caller's existing Category Rules. */
 const rulesAre = (rows: unknown[]) => mockDb.onSelect(categoryRule, rows);
 /** Every update, whatever the table. */
-const updates = () => mockDb.ops.filter((op) => op.kind === "update");
+const updates = () => mockDb.opsOf("update");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -347,7 +347,7 @@ describe("categoryRules.delete", () => {
   it("deletes only the caller's rule and leaves transactions untouched", async () => {
     await makeCaller().categoryRules.delete({ id: RULE_ID });
 
-    expect(mockDb.ops.filter((op) => op.kind === "delete").map((op) => op.table)).toEqual([categoryRule]);
+    expect(mockDb.opsOf("delete").map((op) => op.table)).toEqual([categoryRule]);
     expect(mockDb.deleted(categoryRule)).toEqual([[RULE_ID, USER_ID]]);
     expect(updates()).toEqual([]);
   });
@@ -409,7 +409,7 @@ describe("syncPlaidItem with Category Rules", () => {
 
     await syncPlaidItem(ITEM_ID);
 
-    const upsert = mockDb.opsOn(transaction).find((op) => op.kind === "insert")!;
+    const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as { set: Record<string, unknown> };
     expect(onConflict.set).not.toHaveProperty("categoryId");
   });

@@ -513,6 +513,17 @@ describe("triggerBackfill function — pagination and import logic", () => {
     realClearBackfillState(USER_ID);
   });
 
+  /** Record the backfill state's totalCount as each activity's transaction starts. */
+  function recordTotalCountPerImport(): number[] {
+    const observed: number[] = [];
+    mockDb.db.transaction.mockImplementation(async (fn: any) => {
+      const state = realGetBackfillState(USER_ID);
+      if (state) observed.push(state.totalCount);
+      return fn(mockDb.db);
+    });
+    return observed;
+  }
+
   it("j. paginates Whoop API and processes each activity (new import path)", async () => {
     // Mock DB: connection with autoImportEnabled=true, notifyOnAutoImport=false
     // Called once per workoutProcessor invocation (2 activities) + once for connection check
@@ -773,13 +784,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     for (let index = 0; index < 35; index++) {
       }
 
-    const observedTotals: number[] = [];
-    mockDb.db.transaction.mockImplementation(async (fn: any) => {
-      const state = realGetBackfillState(USER_ID);
-      if (state) observedTotals.push(state.totalCount);
-
-      return fn(mockDb.db);
-    });
+    const observedTotals = recordTotalCountPerImport();
 
     await realTriggerBackfill(USER_ID, 30);
 
@@ -807,13 +812,7 @@ describe("triggerBackfill function — pagination and import logic", () => {
     for (let index = 0; index < 7; index++) {
       }
 
-    const observedTotals: number[] = [];
-    mockDb.db.transaction.mockImplementation(async (fn: any) => {
-      const state = realGetBackfillState(USER_ID);
-      if (state) observedTotals.push(state.totalCount);
-
-      return fn(mockDb.db);
-    });
+    const observedTotals = recordTotalCountPerImport();
 
     await realTriggerBackfill(USER_ID, 30);
 

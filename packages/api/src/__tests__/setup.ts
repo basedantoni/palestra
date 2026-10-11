@@ -1,5 +1,8 @@
 import dotenv from "dotenv";
 import path from "path";
+import { beforeEach } from "vitest";
+
+import { mockDb } from "./helpers/mock-db";
 
 // Try to load local .env for development (no-op in CI where the file doesn't exist)
 dotenv.config({
@@ -15,7 +18,4 @@ process.env.CORS_ORIGIN ??= "http://localhost:3001";
 process.env.ADMIN_EMAILS ??= "admin@test.internal";
 
 // Shared mocked db (KOI-303): nothing queued or recorded leaks between tests.
-import { beforeEach } from "vitest";
-import { mockDb } from "./helpers/mock-db";
-
 beforeEach(() => mockDb.reset());

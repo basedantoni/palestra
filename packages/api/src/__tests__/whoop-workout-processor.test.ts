@@ -126,10 +126,10 @@ function mockFetch(responseBody: unknown, ok = true, status = 200) {
 
 /** Every update's .set() payload (workout, log, connection and event status), in order. */
 const updateSets = () =>
-  mockDb.ops.filter((op) => op.kind === "update").map((op) => op.arg("set") as Record<string, unknown>);
+  mockDb.opsOf("update").map((op) => op.arg("set") as Record<string, unknown>);
 
 /** Tables inserted into, in order. */
-const insertTables = () => mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.table);
+const insertTables = () => mockDb.opsOf("insert").map((op) => op.table);
 
 const insertedWorkout = () => mockDb.inserted(workout)[0] as Record<string, unknown>;
 const insertedLog = () => mockDb.inserted(exerciseLog)[0] as Record<string, unknown>;

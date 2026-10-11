@@ -139,7 +139,7 @@ describe("workouts cardio round-trip", () => {
 
     expect(created!.id).toBe(WORKOUT_ID);
     // 3 inserts: workout + exercise log + 1 PR (longest_distance only; best_pace is derived)
-    expect(mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.table)).toEqual([
+    expect(mockDb.opsOf("insert").map((op) => op.table)).toEqual([
       workout,
       exerciseLog,
       personalRecord,

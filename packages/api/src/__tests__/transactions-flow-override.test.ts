@@ -87,7 +87,7 @@ describe("syncPlaidItem upsert", () => {
 
     await syncPlaidItem(ITEM_ID);
 
-    const upsert = mockDb.opsOn(transaction).find((op) => op.kind === "insert")!;
+    const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as {
       set: Record<string, unknown>;
     };

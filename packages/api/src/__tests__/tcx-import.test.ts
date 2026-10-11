@@ -100,7 +100,7 @@ describe("tcxImport router", () => {
 
   /** Every insert's .values() payload (workout, log, PRs), in order. */
   const insertedValues = () =>
-    mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.arg("values"));
+    mockDb.opsOf("insert").map((op) => op.arg("values"));
 
   const isLogInsert = (v: unknown): v is Record<string, unknown> =>
     typeof v === "object" &&
@@ -162,7 +162,7 @@ describe("tcxImport router", () => {
     });
     expect(mockDb.db.transaction).toHaveBeenCalledTimes(1);
     // workout + exercise log + 2 running PRs (longest_distance + best_pace)
-    expect(mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.table)).toEqual([
+    expect(mockDb.opsOf("insert").map((op) => op.table)).toEqual([
       workout,
       exerciseLog,
       personalRecord,

@@ -172,7 +172,7 @@ describe("syncPlaidItem upsert", () => {
 
     await syncPlaidItem(ITEM_ID);
 
-    const upsert = mockDb.opsOn(transaction).find((op) => op.kind === "insert")!;
+    const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const values = upsert.arg("values") as Record<string, unknown>;
     expect(values.categoryId).toBe("cat-food");
     const onConflict = upsert.arg("onConflictDoUpdate") as {

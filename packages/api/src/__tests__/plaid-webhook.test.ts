@@ -43,7 +43,7 @@ const ITEM_ROW_ID = "00000000-0000-4000-8000-0000000000aa";
 
 /** Every update's .set() payload, item status and event status alike, in order. */
 const updateSets = () =>
-  mockDb.ops.filter((op) => op.kind === "update").map((op) => op.arg("set") as Record<string, unknown>);
+  mockDb.opsOf("update").map((op) => op.arg("set") as Record<string, unknown>);
 
 async function post(body: unknown): Promise<Response> {
   return plaidWebhookApp.fetch(
