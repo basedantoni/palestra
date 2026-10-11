@@ -16,50 +16,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockGetValidToken } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockGetValidToken } = vi.hoisted(() => ({
+  mockGetValidToken: vi.fn().mockResolvedValue("mock-access-token"),
+}));
 
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockGetValidToken = vi.fn().mockResolvedValue("mock-access-token");
-
-  return { mockDb, mockTx, makeChain, mockGetValidToken };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -81,8 +42,11 @@ vi.mock("../lib/whoop-client", () => ({
 }));
 
 // Import after mocks
+import { whoopConnection, whoopSleep, whoopWebhookEvent } from "@life-tracker/db/schema/index";
+
 import { sleepProcessor, sleepDeleteProcessor } from "../lib/whoop-webhook";
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test constants
@@ -138,19 +102,16 @@ function mockFetch(responseBody: unknown, ok = true, status = 200) {
   } as unknown as Response);
 }
 
-function mockDbUpdate() {
-  mockDb.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    }),
-  });
+function mockAutoImportCheck(enabled: boolean) {
+  mockDb.onSelect(whoopConnection, [{ autoImportEnabled: enabled }]);
 }
 
-function mockAutoImportCheck(enabled: boolean) {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ autoImportEnabled: enabled }]),
-  );
-}
+/** The .set() payload of each webhook-event status update. */
+const eventUpdates = () =>
+  mockDb.updated(whoopWebhookEvent).map((u) => u.set as Record<string, unknown>);
+
+/** The upserted whoop_sleep rows. */
+const upsertedValues = () => mockDb.inserted(whoopSleep) as Array<Record<string, unknown>>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests: sleepProcessor
@@ -159,22 +120,11 @@ function mockAutoImportCheck(enabled: boolean) {
 describe("sleepProcessor — new sleep record (sleep.created)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("1. creates new whoop_sleep row with correct fields from Whoop API response", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_SLEEP);
-
-    const upsertedValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        upsertedValues.push(val as Record<string, unknown>);
-        return {
-          onConflictDoUpdate: vi.fn().mockResolvedValue([]),
-        };
-      }),
-    }));
 
     await sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID);
 
@@ -186,8 +136,8 @@ describe("sleepProcessor — new sleep record (sleep.created)", () => {
     );
 
     // Insert/upsert was called
-    expect(mockDb.insert).toHaveBeenCalledOnce();
-    const row = upsertedValues[0]!;
+    expect(upsertedValues()).toHaveLength(1);
+    const row = upsertedValues()[0]!;
 
     // Core fields
     expect(row.userId).toBe(USER_ID);
@@ -215,66 +165,43 @@ describe("sleepProcessor — new sleep record (sleep.created)", () => {
     expect(row.end).toBeInstanceOf(Date);
 
     // Event marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(eventUpdates()).toContainEqual(expect.objectContaining({ status: "processed" }));
   });
 });
 
 describe("sleepProcessor — update existing row (sleep.updated)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("2. updates existing row in place — no duplicate created", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_SLEEP_UPDATED);
 
-    let onConflictDoUpdateCalled = false;
-    const upsertedValues: Array<Record<string, unknown>> = [];
-
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        upsertedValues.push(val as Record<string, unknown>);
-        return {
-          onConflictDoUpdate: vi.fn(() => {
-            onConflictDoUpdateCalled = true;
-            return Promise.resolve([]);
-          }),
-        };
-      }),
-    }));
 
     await sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID);
 
     // Single insert with onConflictDoUpdate (upsert)
-    expect(mockDb.insert).toHaveBeenCalledOnce();
-    expect(onConflictDoUpdateCalled).toBe(true);
+    expect(upsertedValues()).toHaveLength(1);
+    expect(mockDb.opsOn(whoopSleep)[0]!.arg("onConflictDoUpdate")).toBeDefined();
 
     // Verify the upserted value contains updated score
-    const row = upsertedValues[0]!;
+    const row = upsertedValues()[0]!;
     expect(row.performancePct).toBeCloseTo(90.5);
 
     // Event marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(eventUpdates()).toContainEqual(expect.objectContaining({ status: "processed" }));
   });
 });
 
 describe("sleepProcessor — autoImportEnabled = false", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("5. marks event skipped without fetching from Whoop when autoImport is disabled", async () => {
     mockAutoImportCheck(false);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID);
 
@@ -283,10 +210,10 @@ describe("sleepProcessor — autoImportEnabled = false", () => {
     expect(global.fetch).not.toHaveBeenCalled();
 
     // No DB insert
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.insert).not.toHaveBeenCalled();
 
     // Event marked skipped
-    const skippedUpdate = capturedUpdateSets.find(
+    const skippedUpdate = eventUpdates().find(
       (s) => s.status === "skipped",
     );
     expect(skippedUpdate).toBeDefined();
@@ -302,19 +229,12 @@ describe("sleepProcessor — error handling", () => {
     mockAutoImportCheck(true);
     global.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await expect(
       sleepProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID),
     ).resolves.not.toThrow();
 
-    const failedUpdate = capturedUpdateSets.find((s) => s.status === "failed");
+    const failedUpdate = eventUpdates().find((s) => s.status === "failed");
     expect(failedUpdate).toBeDefined();
     expect(typeof failedUpdate!.errorMessage).toBe("string");
   });
@@ -327,55 +247,36 @@ describe("sleepProcessor — error handling", () => {
 describe("sleepDeleteProcessor", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("3. deletes whoop_sleep row when found and marks event processed", async () => {
     // sleep row found
-    mockDb.select.mockReturnValueOnce(makeChain([{ id: WHOOP_SLEEP_ID }]));
+    mockDb.onSelect(whoopSleep, [{ id: WHOOP_SLEEP_ID }]);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
-    mockDb.delete.mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    });
 
     await sleepDeleteProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID);
 
     // Delete was called
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(whoopSleep)).toHaveLength(1);
 
     // Event marked processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = eventUpdates().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
   });
 
   it("4. marks event processed even when no sleep row found (idempotent)", async () => {
-    // sleep row NOT found
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    // sleep row NOT found: nothing queued
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await sleepDeleteProcessor(EVENT_ID, USER_ID, WHOOP_SLEEP_ID);
 
     // Delete should NOT have been called
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(mockDb.deleted(whoopSleep)).toEqual([]);
 
     // Still marks event processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = eventUpdates().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
@@ -438,15 +339,7 @@ describe("whoopSleep.list", () => {
 
   it("6a. returns rows ordered by start desc with correct pagination shape", async () => {
     // Returns 2 rows (limit=25 by default, so nextCursor = null)
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue([SLEEP_ROW_1, SLEEP_ROW_2]),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopSleep, [SLEEP_ROW_1, SLEEP_ROW_2]);
 
     const result = await userCaller.whoopSleep.list({});
 
@@ -465,15 +358,7 @@ describe("whoopSleep.list", () => {
       { ...SLEEP_ROW_2, id: "sleep-row-3", whoopSleepId: "whoop-sleep-003" },
     ];
 
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopSleep, rows);
 
     const result = await userCaller.whoopSleep.list({ limit: 2 });
 
@@ -491,15 +376,7 @@ describe("whoopSleep.list", () => {
       end: new Date(`2026-05-${String((index % 28) + 1).padStart(2, "0")}T14:00:00.000Z`),
     }));
 
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopSleep, rows);
 
     const result = await userCaller.whoopSleep.list({
       from: "2026-05-01",
@@ -517,11 +394,7 @@ describe("whoopSleep.byId", () => {
   });
 
   it("7. returns the correct sleep row by id", async () => {
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([SLEEP_ROW_1]),
-      }),
-    });
+    mockDb.onSelect(whoopSleep, [SLEEP_ROW_1]);
 
     const result = await userCaller.whoopSleep.byId({ id: "sleep-row-1" });
 
@@ -532,11 +405,7 @@ describe("whoopSleep.byId", () => {
   });
 
   it("7b. returns null when sleep row not found", async () => {
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
-      }),
-    });
+    mockDb.onSelect(whoopSleep, []);
 
     const result = await userCaller.whoopSleep.byId({ id: "nonexistent" });
 

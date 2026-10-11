@@ -11,74 +11,11 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  enqueueRecalcs,
-} = vi.hoisted(() => {
-  function makeChain(
-    resolveWith: unknown = [],
-    onValues?: (value: unknown) => void,
-  ) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "values") {
-            return vi.fn((value: unknown) => {
-              onValues?.(value);
-              return proxy;
-            });
-          }
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return vi.fn(() => proxy);
-        },
-      },
-    );
+const { enqueueRecalcs } = vi.hoisted(() => ({
+  enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
+}));
 
-    return proxy;
-  }
-
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: {
-        findFirst: vi.fn(),
-      },
-    },
-  };
-
-  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
-
-  return {
-    mockDb,
-    mockTx,
-    makeChain,
-    enqueueRecalcs,
-  };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -95,7 +32,10 @@ vi.mock("../lib/recalc-queue", () => ({
   enqueueRecalcs,
 }));
 
+import { exercise, exerciseLog, personalRecord, workout } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "00000000-0000-4000-8000-000000000031";
 const WORKOUT_ID = "00000000-0000-4000-8000-000000000032";
@@ -117,69 +57,34 @@ const userCaller = appRouter.createCaller({
   headers: new Headers(),
 } as any);
 
+const LOG_INPUT = {
+  exerciseId: EXERCISE_ID,
+  exerciseName: "Long Run",
+  order: 0,
+  distanceMeter: FIVE_MILES_IN_METERS,
+  durationSeconds: 2700,
+};
+
+/** A cardio create's reads and writes: the exercise lookup, then the workout and log inserts. */
+function cardioCreateReturns(workoutDate: Date) {
+  mockDb.onSelect(exercise, [{ id: EXERCISE_ID, category: "cardio" }]);
+  mockDb.onInsert(workout, [{ id: WORKOUT_ID, userId: USER_ID, date: workoutDate, workoutType: "cardio" }]);
+  mockDb.onInsert(exerciseLog, [{ id: LOG_ID, workoutId: WORKOUT_ID, ...LOG_INPUT }]);
+}
+
 describe("distance normalization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
   });
 
   it("accepts distanceMeter (not distance) in create input", async () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
-
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    );
-
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-            durationMinutes: null,
-            templateId: null,
-            notes: null,
-            totalVolume: null,
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: LOG_ID,
-            workoutId: WORKOUT_ID,
-            exerciseId: EXERCISE_ID,
-            exerciseName: "Long Run",
-            order: 0,
-            rounds: null,
-            workDurationSeconds: null,
-            restDurationSeconds: null,
-            intensity: null,
-            distanceMeter: FIVE_MILES_IN_METERS,
-            durationSeconds: 2700,
-            heartRate: null,
-            durationMinutes: null,
-            notes: null,
-          },
-        ]),
-      )
-      .mockReturnValueOnce(makeChain([])); // PR insert for longest_distance
+    cardioCreateReturns(workoutDate);
 
     const created = await userCaller.workouts.create({
       date: workoutDate,
       workoutType: "cardio",
-      logs: [
-        {
-          exerciseId: EXERCISE_ID,
-          exerciseName: "Long Run",
-          order: 0,
-          distanceMeter: FIVE_MILES_IN_METERS,
-          durationSeconds: 2700,
-        },
-      ],
+      logs: [LOG_INPUT],
     });
 
     expect(created?.id).toBe(WORKOUT_ID);
@@ -187,79 +92,12 @@ describe("distance normalization", () => {
 
   it("stores distanceMeter value in insert, not distance", async () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
-    const capturedInserts: Array<Record<string, unknown>> = [];
+    cardioCreateReturns(workoutDate);
 
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    );
-
-    mockTx.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        capturedInserts.push(val as Record<string, unknown>);
-        return {
-          returning: vi.fn().mockResolvedValue([
-            {
-              id: LOG_ID,
-              workoutId: WORKOUT_ID,
-              exerciseId: EXERCISE_ID,
-              exerciseName: "Long Run",
-              order: 0,
-              distanceMeter: FIVE_MILES_IN_METERS,
-              durationSeconds: 2700,
-            },
-          ]),
-        };
-      }),
-    }));
-
-    // The first insert (workout) needs .returning() to return a workout row
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-          },
-        ]),
-      )
-      .mockReturnValueOnce({
-        values: vi.fn((val: unknown) => {
-          capturedInserts.push(val as Record<string, unknown>);
-          return makeChain([
-            {
-              id: LOG_ID,
-              workoutId: WORKOUT_ID,
-              exerciseId: EXERCISE_ID,
-              exerciseName: "Long Run",
-              order: 0,
-              distanceMeter: FIVE_MILES_IN_METERS,
-              durationSeconds: 2700,
-            },
-          ]);
-        }),
-      })
-      .mockReturnValueOnce(makeChain([])); // PR insert
-
-    await userCaller.workouts.create({
-      date: workoutDate,
-      workoutType: "cardio",
-      logs: [
-        {
-          exerciseId: EXERCISE_ID,
-          exerciseName: "Long Run",
-          order: 0,
-          distanceMeter: FIVE_MILES_IN_METERS,
-          durationSeconds: 2700,
-        },
-      ],
-    });
+    await userCaller.workouts.create({ date: workoutDate, workoutType: "cardio", logs: [LOG_INPUT] });
 
     // The exercise log insert should contain distanceMeter, not distance
-    const logInsert = capturedInserts.find(
-      (v) => typeof v === "object" && v !== null && "exerciseName" in v,
-    );
+    const [logInsert] = mockDb.inserted(exerciseLog);
     expect(logInsert).toBeDefined();
     expect(logInsert).toHaveProperty("distanceMeter", FIVE_MILES_IN_METERS);
     expect(logInsert).not.toHaveProperty("distance");
@@ -271,112 +109,33 @@ describe("distance normalization", () => {
     // Since zod strips unknown fields by default, passing `pace` should either be ignored
     // or cause a parse error. Either way, it must NOT reach the DB insert.
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
-    const capturedLogInserts: Array<Record<string, unknown>> = [];
-
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    );
-
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-          },
-        ]),
-      )
-      .mockReturnValueOnce({
-        values: vi.fn((val: unknown) => {
-          capturedLogInserts.push(val as Record<string, unknown>);
-          return makeChain([
-            {
-              id: LOG_ID,
-              workoutId: WORKOUT_ID,
-              exerciseName: "Long Run",
-              order: 0,
-            },
-          ]);
-        }),
-      })
-      .mockReturnValueOnce(makeChain([]));
+    cardioCreateReturns(workoutDate);
 
     await userCaller.workouts.create({
       date: workoutDate,
       workoutType: "cardio",
       logs: [
         {
-          exerciseId: EXERCISE_ID,
-          exerciseName: "Long Run",
-          order: 0,
-          distanceMeter: FIVE_MILES_IN_METERS,
-          durationSeconds: 2700,
+          ...LOG_INPUT,
           // @ts-expect-error — `pace` is not in the input schema; TypeScript correctly rejects it
           pace: 5.5, // should be stripped / not reach DB
         },
       ],
     });
 
-    const logInsert = capturedLogInserts[0];
+    const [logInsert] = mockDb.inserted(exerciseLog);
     expect(logInsert).not.toHaveProperty("pace");
   });
 
   it("records longest_distance PR in meters", async () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
-    const insertedPrs: Array<Record<string, unknown>> = [];
+    cardioCreateReturns(workoutDate); // no existing PRs
 
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    ); // no existing PRs
-
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: LOG_ID,
-            workoutId: WORKOUT_ID,
-            exerciseId: EXERCISE_ID,
-            exerciseName: "Long Run",
-            order: 0,
-            distanceMeter: FIVE_MILES_IN_METERS,
-            durationSeconds: 2700,
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([], (value) => {
-          insertedPrs.push(value as Record<string, unknown>);
-        }),
-      );
-
-    await userCaller.workouts.create({
-      date: workoutDate,
-      workoutType: "cardio",
-      logs: [
-        {
-          exerciseId: EXERCISE_ID,
-          exerciseName: "Long Run",
-          order: 0,
-          distanceMeter: FIVE_MILES_IN_METERS,
-          durationSeconds: 2700,
-        },
-      ],
-    });
+    await userCaller.workouts.create({ date: workoutDate, workoutType: "cardio", logs: [LOG_INPUT] });
 
     // Only one PR should be inserted: longest_distance (in meters)
     // best_pace should NOT be inserted (pace is derived, not stored)
+    const insertedPrs = mockDb.inserted(personalRecord);
     expect(insertedPrs).toHaveLength(1);
     expect(insertedPrs[0]).toMatchObject({
       recordType: "longest_distance",
@@ -389,38 +148,8 @@ describe("distance normalization", () => {
 
   it("round-trips distanceMeter: write meters, read back meters", async () => {
     const workoutDate = new Date("2026-04-27T12:00:00.000Z");
-
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    );
-
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: LOG_ID,
-            workoutId: WORKOUT_ID,
-            exerciseId: EXERCISE_ID,
-            exerciseName: "Long Run",
-            order: 0,
-            distanceMeter: FIVE_MILES_IN_METERS,
-            durationSeconds: 2700,
-          },
-        ]),
-      )
-      .mockReturnValueOnce(makeChain([])); // PR insert
-
-    mockDb.query.workout.findFirst.mockResolvedValue({
+    cardioCreateReturns(workoutDate);
+    mockDb.onQuery("workout", "findFirst", {
       id: WORKOUT_ID,
       userId: USER_ID,
       date: workoutDate,
@@ -450,19 +179,7 @@ describe("distance normalization", () => {
       ],
     });
 
-    await userCaller.workouts.create({
-      date: workoutDate,
-      workoutType: "cardio",
-      logs: [
-        {
-          exerciseId: EXERCISE_ID,
-          exerciseName: "Long Run",
-          order: 0,
-          distanceMeter: FIVE_MILES_IN_METERS,
-          durationSeconds: 2700,
-        },
-      ],
-    });
+    await userCaller.workouts.create({ date: workoutDate, workoutType: "cardio", logs: [LOG_INPUT] });
 
     const fetched = await userCaller.workouts.get({ id: WORKOUT_ID });
 

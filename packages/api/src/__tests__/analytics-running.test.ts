@@ -12,44 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: { findFirst: vi.fn() },
-      userPreferences: { findFirst: vi.fn() },
-    },
-  };
-
-  return { mockDb, makeChain };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -66,7 +29,10 @@ vi.mock("../lib/recalc-queue", () => ({
   enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { exerciseLog, personalRecord } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test constants
@@ -97,12 +63,10 @@ describe("analytics.runningHrTrend", () => {
   });
 
   it("returns one entry per run with avgHr populated", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { date: new Date("2026-04-10T12:00:00.000Z"), avgHr: 155 },
-        { date: new Date("2026-04-15T12:00:00.000Z"), avgHr: 162 },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      { date: new Date("2026-04-10T12:00:00.000Z"), avgHr: 155 },
+      { date: new Date("2026-04-15T12:00:00.000Z"), avgHr: 162 },
+    ]);
 
     const result = await userCaller.analytics.runningHrTrend({
       from: FROM,
@@ -115,12 +79,10 @@ describe("analytics.runningHrTrend", () => {
   });
 
   it("returns avgHr: null for runs where HR was not recorded (data gaps)", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { date: new Date("2026-04-10T12:00:00.000Z"), avgHr: null },
-        { date: new Date("2026-04-15T12:00:00.000Z"), avgHr: 148 },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      { date: new Date("2026-04-10T12:00:00.000Z"), avgHr: null },
+      { date: new Date("2026-04-15T12:00:00.000Z"), avgHr: 148 },
+    ]);
 
     const result = await userCaller.analytics.runningHrTrend({
       from: FROM,
@@ -133,7 +95,7 @@ describe("analytics.runningHrTrend", () => {
   });
 
   it("returns empty array when no Whoop-linked runs exist in range", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    mockDb.onSelect(exerciseLog, []);
 
     const result = await userCaller.analytics.runningHrTrend({
       from: FROM,
@@ -144,9 +106,7 @@ describe("analytics.runningHrTrend", () => {
   });
 
   it("allows omitted bounds for all-time Whoop running charts", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ date: new Date("2026-04-10T12:00:00.000Z"), avgHr: 155 }]),
-    );
+    mockDb.onSelect(exerciseLog, [{ date: new Date("2026-04-10T12:00:00.000Z"), avgHr: 155 }]);
 
     const result = await userCaller.analytics.runningHrTrend({});
 
@@ -154,26 +114,24 @@ describe("analytics.runningHrTrend", () => {
   });
 
   it("respects date range — passes from/to correctly to the query", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    mockDb.onSelect(exerciseLog, []);
 
     await userCaller.analytics.runningHrTrend({
       from: "2026-04-01",
       to: "2026-04-07",
     });
 
-    // Verify db.select was called (query ran)
-    expect(mockDb.select).toHaveBeenCalledTimes(1);
+    // The query ran once
+    expect(mockDb.selected(exerciseLog)).toHaveLength(1);
   });
 
   it("returns entries sorted by date ascending", async () => {
     // DB returns them in order (the router orderBy asc)
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { date: new Date("2026-04-01T12:00:00.000Z"), avgHr: 160 },
-        { date: new Date("2026-04-08T12:00:00.000Z"), avgHr: 155 },
-        { date: new Date("2026-04-20T12:00:00.000Z"), avgHr: 170 },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      { date: new Date("2026-04-01T12:00:00.000Z"), avgHr: 160 },
+      { date: new Date("2026-04-08T12:00:00.000Z"), avgHr: 155 },
+      { date: new Date("2026-04-20T12:00:00.000Z"), avgHr: 170 },
+    ]);
 
     const result = await userCaller.analytics.runningHrTrend({
       from: FROM,
@@ -195,18 +153,16 @@ describe("analytics.whoopPaceTrend", () => {
 
   it("calculates correct pace in miles for a mi user", async () => {
     // 10km run in 3600s → pace = 3600 / (10000/1609.344) = 3600/6.214 ≈ 579.4 sec/mi
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "mi",
     });
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-10T12:00:00.000Z"),
-          distanceMeter: 10000,
-          durationSeconds: 3600,
-        },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-10T12:00:00.000Z"),
+        distanceMeter: 10000,
+        durationSeconds: 3600,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -222,18 +178,16 @@ describe("analytics.whoopPaceTrend", () => {
 
   it("calculates correct pace in km for a km user", async () => {
     // 5km in 1500s → pace = 1500 / (5000/1000) = 300 sec/km = 5:00/km
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "km",
     });
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-12T12:00:00.000Z"),
-          distanceMeter: 5000,
-          durationSeconds: 1500,
-        },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-12T12:00:00.000Z"),
+        distanceMeter: 5000,
+        durationSeconds: 1500,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -246,18 +200,16 @@ describe("analytics.whoopPaceTrend", () => {
   });
 
   it("returns paceSecPerUnit: null when distanceMeter is null", async () => {
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "mi",
     });
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-10T12:00:00.000Z"),
-          distanceMeter: null,
-          durationSeconds: 1800,
-        },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-10T12:00:00.000Z"),
+        distanceMeter: null,
+        durationSeconds: 1800,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -269,18 +221,16 @@ describe("analytics.whoopPaceTrend", () => {
   });
 
   it("returns paceSecPerUnit: null when durationSeconds is null", async () => {
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "km",
     });
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-10T12:00:00.000Z"),
-          distanceMeter: 5000,
-          durationSeconds: null,
-        },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-10T12:00:00.000Z"),
+        distanceMeter: 5000,
+        durationSeconds: null,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -292,16 +242,14 @@ describe("analytics.whoopPaceTrend", () => {
   });
 
   it("defaults to mi unit when user preferences not found", async () => {
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce(undefined);
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-10T12:00:00.000Z"),
-          distanceMeter: 5000,
-          durationSeconds: 1500,
-        },
-      ]),
-    );
+    mockDb.onQuery("userPreferences", "findFirst", undefined);
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-10T12:00:00.000Z"),
+        distanceMeter: 5000,
+        durationSeconds: 1500,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -312,10 +260,10 @@ describe("analytics.whoopPaceTrend", () => {
   });
 
   it("returns empty array when no Whoop-linked runs exist", async () => {
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "mi",
     });
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    mockDb.onSelect(exerciseLog, []);
 
     const result = await userCaller.analytics.whoopPaceTrend({
       from: FROM,
@@ -326,18 +274,16 @@ describe("analytics.whoopPaceTrend", () => {
   });
 
   it("allows omitted bounds for all-time pace charts", async () => {
-    mockDb.query.userPreferences.findFirst.mockResolvedValueOnce({
+    mockDb.onQuery("userPreferences", "findFirst", {
       distanceUnit: "mi",
     });
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          date: new Date("2026-04-10T12:00:00.000Z"),
-          distanceMeter: 10000,
-          durationSeconds: 3600,
-        },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      {
+        date: new Date("2026-04-10T12:00:00.000Z"),
+        distanceMeter: 10000,
+        durationSeconds: 3600,
+      },
+    ]);
 
     const result = await userCaller.analytics.whoopPaceTrend({});
 
@@ -356,12 +302,10 @@ describe("analytics.weeklyRunDistance", () => {
   });
 
   it("returns weeks with aggregated distance", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { weekStart: "2026-04-06", distanceMeter: "25000" }, // SUM returns string in postgres
-        { weekStart: "2026-04-13", distanceMeter: "18000" },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      { weekStart: "2026-04-06", distanceMeter: "25000" }, // SUM returns string in postgres
+      { weekStart: "2026-04-13", distanceMeter: "18000" },
+    ]);
 
     const result = await userCaller.analytics.weeklyRunDistance({
       from: FROM,
@@ -380,13 +324,11 @@ describe("analytics.weeklyRunDistance", () => {
   });
 
   it("skips weeks with null or zero distance", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { weekStart: "2026-04-06", distanceMeter: "20000" },
-        { weekStart: "2026-04-13", distanceMeter: null },
-        { weekStart: "2026-04-20", distanceMeter: "0" },
-      ]),
-    );
+    mockDb.onSelect(exerciseLog, [
+      { weekStart: "2026-04-06", distanceMeter: "20000" },
+      { weekStart: "2026-04-13", distanceMeter: null },
+      { weekStart: "2026-04-20", distanceMeter: "0" },
+    ]);
 
     const result = await userCaller.analytics.weeklyRunDistance({
       from: FROM,
@@ -398,7 +340,7 @@ describe("analytics.weeklyRunDistance", () => {
   });
 
   it("returns empty array when no runs exist in range", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    mockDb.onSelect(exerciseLog, []);
 
     const result = await userCaller.analytics.weeklyRunDistance({
       from: FROM,
@@ -409,9 +351,7 @@ describe("analytics.weeklyRunDistance", () => {
   });
 
   it("allows omitted bounds for all-time weekly distance charts", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ weekStart: "2026-04-06", distanceMeter: "8046.72" }]),
-    );
+    mockDb.onSelect(exerciseLog, [{ weekStart: "2026-04-06", distanceMeter: "8046.72" }]);
 
     const result = await userCaller.analytics.weeklyRunDistance({});
 
@@ -424,9 +364,7 @@ describe("analytics.weeklyRunDistance", () => {
   });
 
   it("coerces distanceMeter from string (Postgres SUM returns string) to number", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ weekStart: "2026-04-06", distanceMeter: "16093.44" }]),
-    );
+    mockDb.onSelect(exerciseLog, [{ weekStart: "2026-04-06", distanceMeter: "16093.44" }]);
 
     const result = await userCaller.analytics.weeklyRunDistance({
       from: FROM,
@@ -452,37 +390,35 @@ describe("analytics.personalRecords", () => {
     const d3 = new Date("2026-03-01T12:00:00.000Z");
 
     // Rows arrive unsorted from the DB; the query must order them.
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          id: "pr-3",
-          exerciseId: "ex-1",
-          recordType: "max_weight",
-          value: 165,
-          previousRecordValue: 150,
-          dateAchieved: d3,
-          exerciseName: "Bench Press",
-        },
-        {
-          id: "pr-1",
-          exerciseId: "ex-1",
-          recordType: "max_weight",
-          value: 140,
-          previousRecordValue: null,
-          dateAchieved: d1,
-          exerciseName: "Bench Press",
-        },
-        {
-          id: "pr-2",
-          exerciseId: "ex-1",
-          recordType: "max_weight",
-          value: 150,
-          previousRecordValue: 140,
-          dateAchieved: d2,
-          exerciseName: "Bench Press",
-        },
-      ]),
-    );
+    mockDb.onSelect(personalRecord, [
+      {
+        id: "pr-3",
+        exerciseId: "ex-1",
+        recordType: "max_weight",
+        value: 165,
+        previousRecordValue: 150,
+        dateAchieved: d3,
+        exerciseName: "Bench Press",
+      },
+      {
+        id: "pr-1",
+        exerciseId: "ex-1",
+        recordType: "max_weight",
+        value: 140,
+        previousRecordValue: null,
+        dateAchieved: d1,
+        exerciseName: "Bench Press",
+      },
+      {
+        id: "pr-2",
+        exerciseId: "ex-1",
+        recordType: "max_weight",
+        value: 150,
+        previousRecordValue: 140,
+        dateAchieved: d2,
+        exerciseName: "Bench Press",
+      },
+    ]);
 
     const result = await userCaller.analytics.personalRecords();
 
@@ -511,7 +447,7 @@ describe("analytics.personalRecords", () => {
   });
 
   it("returns an empty array when the user has no personal records", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    mockDb.onSelect(personalRecord, []);
 
     const result = await userCaller.analytics.personalRecords();
 
@@ -520,28 +456,26 @@ describe("analytics.personalRecords", () => {
 
   it("groups multiple record types under a single exercise", async () => {
     const d = new Date("2026-03-04T12:00:00.000Z");
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          id: "pr-w",
-          exerciseId: "ex-1",
-          recordType: "max_weight",
-          value: 150,
-          previousRecordValue: null,
-          dateAchieved: d,
-          exerciseName: "Bench Press",
-        },
-        {
-          id: "pr-r",
-          exerciseId: "ex-1",
-          recordType: "max_reps",
-          value: 12,
-          previousRecordValue: null,
-          dateAchieved: d,
-          exerciseName: "Bench Press",
-        },
-      ]),
-    );
+    mockDb.onSelect(personalRecord, [
+      {
+        id: "pr-w",
+        exerciseId: "ex-1",
+        recordType: "max_weight",
+        value: 150,
+        previousRecordValue: null,
+        dateAchieved: d,
+        exerciseName: "Bench Press",
+      },
+      {
+        id: "pr-r",
+        exerciseId: "ex-1",
+        recordType: "max_reps",
+        value: 12,
+        previousRecordValue: null,
+        dateAchieved: d,
+        exerciseName: "Bench Press",
+      },
+    ]);
 
     const result = await userCaller.analytics.personalRecords();
 

@@ -16,44 +16,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockTrackInFlight } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          // All chained methods return the same proxy
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockTrackInFlight } = vi.hoisted(() => ({ mockTrackInFlight: vi.fn() }));
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockTrackInFlight = vi.fn();
-
-  return { mockDb, makeChain, mockTrackInFlight };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/whoop-inflight", () => ({
   trackInFlight: mockTrackInFlight,
   getInFlightCount: vi.fn().mockReturnValue(0),
@@ -76,7 +41,10 @@ vi.mock("@life-tracker/env/server", () => ({
 }));
 
 // Import after mocks are set up
+import { whoopConnection, whoopWebhookEvent } from "@life-tracker/db/schema/index";
+
 import { whoopWebhookApp } from "../lib/whoop-webhook";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -128,42 +96,24 @@ async function sendWebhook(options: {
 
 // v2: connection row has no webhookSecret field
 function mockConnectionFound(whoopUserId = WHOOP_USER_ID) {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([
-      {
-        id: "conn-1",
-        userId: APP_USER_ID,
-        whoopUserId,
-      },
-    ]),
-  );
+  mockDb.onSelect(whoopConnection, [{ id: "conn-1", userId: APP_USER_ID, whoopUserId }]);
 }
 
-function mockConnectionNotFound() {
-  mockDb.select.mockReturnValueOnce(makeChain([]));
-}
+/** Nothing queued: the connection lookup finds no row. */
+function mockConnectionNotFound() {}
 
+/** insert().values().onConflictDoNothing() → one row written. */
 function mockInsertNoConflict() {
-  // insert().values().onConflictDoNothing() → returns affected count
-  mockDb.insert.mockReturnValueOnce({
-    values: vi.fn().mockReturnValue({
-      onConflictDoNothing: vi.fn().mockResolvedValue({ rowCount: 1 }),
-    }),
-  });
+  mockDb.onInsert(whoopWebhookEvent, { rowCount: 1 });
 }
 
+/** A duplicate trace_id: onConflictDoNothing writes nothing. */
 function mockInsertConflict() {
-  // Simulates a duplicate trace_id → onConflictDoNothing returns rowCount: 0
-  mockDb.insert.mockReturnValueOnce({
-    values: vi.fn().mockReturnValue({
-      onConflictDoNothing: vi.fn().mockResolvedValue({ rowCount: 0 }),
-    }),
-  });
+  mockDb.onInsert(whoopWebhookEvent, { rowCount: 0 });
 }
 
-function mockUpdateOk() {
-  mockDb.update.mockReturnValueOnce(makeChain([]));
-}
+/** Every insert/update, whatever the table. */
+const writes = () => mockDb.ops.filter((op) => op.kind === "insert" || op.kind === "update");
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -172,10 +122,9 @@ function mockUpdateOk() {
 describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    // Default fallback: any un-mocked db.update() call returns a safe chain.
-    // This prevents unhandled errors from the async setImmediate claim path
-    // in tests that don't care about the hot path internals.
-    mockDb.update.mockReturnValue(makeChain({ rowCount: 0 }));
+    // The async setImmediate claim on the event row loses (rowCount 0) unless a
+    // test says otherwise, so tests that ignore the hot path don't run it.
+    mockDb.fallback("update", whoopWebhookEvent, { rowCount: 0 });
   });
 
   it("a. valid HMAC signature → 200 and event row created with status processed", async () => {
@@ -185,17 +134,16 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     mockConnectionFound();
     mockInsertNoConflict();
-    mockUpdateOk();
 
     const res = await sendWebhook({ body, signature: sig, timestamp });
 
     expect(res.status).toBe(200);
 
-    // Insert was called once (for the event row)
-    expect(mockDb.insert).toHaveBeenCalledOnce();
+    // One event row inserted
+    expect(mockDb.inserted(whoopWebhookEvent)).toHaveLength(1);
 
-    // Update was called once (for webhookLastReceivedAt)
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    // One connection update (webhookLastReceivedAt)
+    expect(mockDb.updated(whoopConnection)).toHaveLength(1);
   });
 
   it("b. invalid signature → 401, nothing written to DB", async () => {
@@ -208,8 +156,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     expect(res.status).toBe(401);
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
   });
 
   it("c. unknown whoopUserId → 200 (valid sig, valid secret, no connected user)", async () => {
@@ -224,8 +171,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     expect(res.status).toBe(200);
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
   });
 
   it("d. duplicate trace_id → 200, only one row (onConflictDoNothing)", async () => {
@@ -236,7 +182,6 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     // First delivery
     mockConnectionFound();
     mockInsertNoConflict();
-    mockUpdateOk();
 
     const res1 = await sendWebhook({ body, signature: sig, timestamp });
     expect(res1.status).toBe(200);
@@ -244,13 +189,12 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     // Second delivery (same trace_id) — simulates the DB returning rowCount: 0 due to conflict
     mockConnectionFound();
     mockInsertConflict();
-    mockUpdateOk();
 
     const res2 = await sendWebhook({ body, signature: sig, timestamp });
     expect(res2.status).toBe(200);
 
     // insert was called twice total (once per request), but the second would no-op at DB level
-    expect(mockDb.insert).toHaveBeenCalledTimes(2);
+    expect(mockDb.inserted(whoopWebhookEvent)).toHaveLength(2);
   });
 
   it("e. webhookLastReceivedAt advances on successful delivery", async () => {
@@ -258,18 +202,8 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     const timestamp = currentTimestamp();
     const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-
     mockConnectionFound();
     mockInsertNoConflict();
-
-    // Capture what gets passed to .set()
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: () => makeChain([]) };
-      }),
-    });
 
     const before = Date.now();
     const res = await sendWebhook({ body, signature: sig, timestamp });
@@ -277,8 +211,9 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     expect(res.status).toBe(200);
 
-    expect(capturedUpdateSets).toHaveLength(1);
-    const updatedAt = capturedUpdateSets[0]!.webhookLastReceivedAt as Date;
+    const connectionUpdates = mockDb.updated(whoopConnection);
+    expect(connectionUpdates).toHaveLength(1);
+    const updatedAt = (connectionUpdates[0]!.set as Record<string, unknown>).webhookLastReceivedAt as Date;
     expect(updatedAt).toBeInstanceOf(Date);
     expect(updatedAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(updatedAt.getTime()).toBeLessThanOrEqual(after);
@@ -300,7 +235,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     const res = await whoopWebhookApp.fetch(request);
 
     expect(res.status).toBe(401);
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.insert).not.toHaveBeenCalled();
   });
 
   it("missing X-WHOOP-Signature-Timestamp header → 401", async () => {
@@ -319,7 +254,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     const res = await whoopWebhookApp.fetch(request);
 
     expect(res.status).toBe(401);
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.insert).not.toHaveBeenCalled();
   });
 
   it("g. hot path fires atomic claim UPDATE (status='processing') and calls trackInFlight on success", async () => {
@@ -327,22 +262,16 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     const timestamp = currentTimestamp();
     const sig = sign(timestamp, body, WEBHOOK_SECRET);
 
-    // Route handler mocks: connection lookup + insert + webhookLastReceivedAt update
+    // Route handler: connection lookup + event insert (+ webhookLastReceivedAt update)
     mockConnectionFound();
     mockInsertNoConflict();
-    // Update #1: webhookLastReceivedAt
-    mockUpdateOk();
-    // Update #2: atomic claim — returns rowCount=1 (successfully claimed)
-    mockDb.update.mockReturnValueOnce(makeChain({ rowCount: 1 }));
+    // The atomic claim on the event row succeeds (rowCount=1)
+    mockDb.onUpdate(whoopWebhookEvent, { rowCount: 1 });
 
-    // Processor internals: workoutProcessor checks connection then fetches from Whoop.
-    // Return a connection with autoImportEnabled=false so the processor short-circuits
-    // to markEventSkipped (one more update call) without making any real network requests.
-    mockDb.select.mockReturnValue(
-      makeChain([{ autoImportEnabled: false, notifyOnAutoImport: false }]),
-    );
-    // Update #3: markEventSkipped inside the processor
-    mockUpdateOk();
+    // Processor internals: workoutProcessor checks the connection then fetches from Whoop.
+    // A connection with autoImportEnabled=false short-circuits it to markEventSkipped
+    // (one more update) without any real network requests.
+    mockDb.fallback("select", whoopConnection, [{ autoImportEnabled: false, notifyOnAutoImport: false }]);
 
     const res = await sendWebhook({ body, signature: sig, timestamp });
     expect(res.status).toBe(200);
@@ -353,7 +282,7 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     // Update #1 (webhookLastReceivedAt) + Update #2 (atomic claim) = 2 minimum
     // Update #3 (markEventSkipped) may also have fired by now
-    expect(mockDb.update.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mockDb.db.update.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     // trackInFlight should have been called with the processor promise
     expect(mockTrackInFlight).toHaveBeenCalledOnce();
@@ -368,9 +297,8 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
     const res = await sendWebhook({ body, signature: sig, timestamp });
 
     expect(res.status).toBe(401);
-    expect(mockDb.select).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(mockDb.db.select).not.toHaveBeenCalled();
+    expect(writes()).toEqual([]);
   });
 
   it("i. fresh timestamp with valid HMAC → 200", async () => {
@@ -380,7 +308,6 @@ describe("POST /webhook — Whoop webhook endpoint (v2)", () => {
 
     mockConnectionFound();
     mockInsertNoConflict();
-    mockUpdateOk();
 
     const res = await sendWebhook({ body, signature: sig, timestamp });
 

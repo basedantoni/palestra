@@ -15,72 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, mockTx, makeChain, makeTxUpdate } = vi.hoisted(() => {
-  /**
-   * Creates a Drizzle-style proxy that resolves to `resolveWith` when awaited.
-   * All chained methods (from, where, limit, set, etc.) return the same proxy
-   * so the full query builder chain resolves correctly.
-   */
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          // All other props (from, where, limit, set, values, etc.) return a
-          // function that returns the same proxy, continuing the chain.
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  /**
-   * Creates a chainable update mock for mockTx.update that captures the `.set()`
-   * value and stores it in `capturedSets`.
-   */
-  function makeTxUpdate(capturedSets: Array<Record<string, unknown>>) {
-    return vi.fn(() => ({
-      set: (val: unknown) => {
-        capturedSets.push(val as Record<string, unknown>);
-        return { where: () => makeChain([]) };
-      },
-    }));
-  }
-
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: {
-        findFirst: vi.fn(),
-      },
-    },
-  };
-
-  return { mockDb, mockTx, makeChain, makeTxUpdate };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -104,7 +39,10 @@ vi.mock("../lib/whoop-client", () => ({
   resolveWhoopExerciseId: vi.fn().mockResolvedValue(null),
 }));
 
+import { exerciseLog, workout } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 import { whoopActivityToExerciseLog } from "@life-tracker/shared";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -181,6 +119,10 @@ const UNSCORED_RUNNING_ACTIVITY = {
 // ────────────────────────────────────────────────────────────────────────────
 // Helper
 // ────────────────────────────────────────────────────────────────────────────
+/** The .set() of the (single) exercise_log / workout update. */
+const logSet = () => mockDb.updated(exerciseLog)[0]!.set as Record<string, unknown>;
+const workoutSet = () => mockDb.updated(workout)[0]!.set as Record<string, unknown>;
+
 function mockFetch(responseBody: unknown, ok = true, status = 200) {
   global.fetch = vi.fn().mockResolvedValue({
     ok,
@@ -249,7 +191,6 @@ describe("whoopActivityToExerciseLog DTO", () => {
 describe("whoop.listUnlinkedCardioActivities", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
   });
 
   it("returns only cardio/hiit activities, filtered from non-cardio types", async () => {
@@ -259,8 +200,7 @@ describe("whoop.listUnlinkedCardioActivities", () => {
       next_token: null,
     });
 
-    // No linked activities
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    // No linked activities: nothing queued
 
     const result = await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -279,15 +219,9 @@ describe("whoop.listUnlinkedCardioActivities", () => {
     });
 
     // The running activity is already linked
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        {
-          whoopActivityId: WHOOP_ACTIVITY_ID,
-          id: "workout-123",
-          date: new Date("2026-04-28"),
-        },
-      ]),
-    );
+    mockDb.onSelect(workout, [
+      { whoopActivityId: WHOOP_ACTIVITY_ID, id: "workout-123", date: new Date("2026-04-28") },
+    ]);
 
     const result = await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -302,7 +236,6 @@ describe("whoop.listUnlinkedCardioActivities", () => {
       records: [],
       next_token: null,
     });
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
     await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -318,7 +251,6 @@ describe("whoop.listUnlinkedCardioActivities", () => {
 
   it("passes nextToken to Whoop API when provided", async () => {
     mockFetch({ records: [], next_token: null });
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
     await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -335,7 +267,6 @@ describe("whoop.listUnlinkedCardioActivities", () => {
       records: [RUNNING_ACTIVITY],
       next_token: "next-page-token",
     });
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
     const result = await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -346,7 +277,6 @@ describe("whoop.listUnlinkedCardioActivities", () => {
 
   it("returns correct activity shape", async () => {
     mockFetch({ records: [RUNNING_ACTIVITY], next_token: null });
-    mockDb.select.mockReturnValueOnce(makeChain([]));
 
     const result = await userCaller.whoop.listUnlinkedCardioActivities({
       date: "2026-04-28",
@@ -373,26 +303,16 @@ describe("whoop.listUnlinkedCardioActivities", () => {
 describe("whoop.linkToWorkout", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
   });
 
   it("writes all DTO fields to the exercise log and sets whoopActivityId", async () => {
-    // 1. Workout lookup → found, not linked
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
-      )
-      // 2. Exercise log lookup → no existing metrics
-      .mockReturnValueOnce(
-        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
-      );
+    // Workout lookup → found, not linked; exercise log → no existing metrics
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: null }]);
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID, heartRate: null, intensity: null }]);
 
     // Whoop activity detail fetch
     mockFetch(RUNNING_ACTIVITY);
 
-    // Capture update calls inside the transaction
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdate(capturedSets);
 
     const result = await userCaller.whoop.linkToWorkout({
       workoutId: WORKOUT_ID,
@@ -402,28 +322,23 @@ describe("whoop.linkToWorkout", () => {
 
     expect(result).toEqual({ success: true, metricConflict: false });
 
-    // First update: exercise log fields
-    expect(capturedSets[0]!).toMatchObject({
+    // Exercise log fields
+    expect(logSet()).toMatchObject({
       heartRate: 155,
       intensity: 70,
       distanceMeter: 10000,
       durationMinutes: 60,
     });
-    expect(capturedSets[0]!.hrZoneDurations).toBeDefined();
+    expect(logSet().hrZoneDurations).toBeDefined();
 
-    // Second update: workout.whoopActivityId
-    expect(capturedSets[1]!).toEqual({ whoopActivityId: WHOOP_ACTIVITY_ID });
+    // workout.whoopActivityId
+    expect(workoutSet()).toEqual({ whoopActivityId: WHOOP_ACTIVITY_ID });
   });
 
   it("returns metricConflict: true when exercise log has existing metrics and force is false", async () => {
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
-      )
-      // Exercise log with existing metrics
-      .mockReturnValueOnce(
-        makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]),
-      );
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: null }]);
+    // Exercise log with existing metrics
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID, heartRate: 140, intensity: 55 }]);
 
     mockFetch(RUNNING_ACTIVITY);
 
@@ -436,22 +351,15 @@ describe("whoop.linkToWorkout", () => {
     expect(result).toEqual({ success: false, metricConflict: true });
 
     // Transaction should NOT have been called
-    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.db.transaction).not.toHaveBeenCalled();
   });
 
   it("overwrites existing metrics when force is true", async () => {
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
-      )
-      .mockReturnValueOnce(
-        makeChain([{ id: LOG_ID, heartRate: 140, intensity: 55 }]),
-      );
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: null }]);
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID, heartRate: 140, intensity: 55 }]);
 
     mockFetch(RUNNING_ACTIVITY);
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdate(capturedSets);
 
     const result = await userCaller.whoop.linkToWorkout({
       workoutId: WORKOUT_ID,
@@ -460,17 +368,12 @@ describe("whoop.linkToWorkout", () => {
     });
 
     expect(result).toEqual({ success: true, metricConflict: false });
-    expect(capturedSets[0]!).toMatchObject({ heartRate: 155, intensity: 70 });
+    expect(logSet()).toMatchObject({ heartRate: 155, intensity: 70 });
   });
 
   it("throws CONFLICT when same Whoop activity is linked to two workouts (unique constraint)", async () => {
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID_2, whoopActivityId: null }]),
-      )
-      .mockReturnValueOnce(
-        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
-      );
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID_2, whoopActivityId: null }]);
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID, heartRate: null, intensity: null }]);
 
     mockFetch(RUNNING_ACTIVITY);
 
@@ -484,7 +387,7 @@ describe("whoop.linkToWorkout", () => {
         constraint: "workout_userId_whoopActivityId_unique_idx",
       },
     );
-    mockDb.transaction.mockRejectedValueOnce(pgConstraintError);
+    mockDb.db.transaction.mockRejectedValueOnce(pgConstraintError);
 
     await expect(
       userCaller.whoop.linkToWorkout({
@@ -498,8 +401,7 @@ describe("whoop.linkToWorkout", () => {
   });
 
   it("throws NOT_FOUND when workout does not belong to user", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
-
+    // Nothing queued: the workout lookup finds nothing.
     await expect(
       userCaller.whoop.linkToWorkout({
         workoutId: WORKOUT_ID,
@@ -512,18 +414,11 @@ describe("whoop.linkToWorkout", () => {
   });
 
   it("writes null metrics when score_state !== SCORED", async () => {
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
-      )
-      .mockReturnValueOnce(
-        makeChain([{ id: LOG_ID, heartRate: null, intensity: null }]),
-      );
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: null }]);
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID, heartRate: null, intensity: null }]);
 
     mockFetch(UNSCORED_RUNNING_ACTIVITY);
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdate(capturedSets);
 
     const result = await userCaller.whoop.linkToWorkout({
       workoutId: WORKOUT_ID,
@@ -534,14 +429,14 @@ describe("whoop.linkToWorkout", () => {
     expect(result).toEqual({ success: true, metricConflict: false });
 
     // Metrics should be null (DTO returns null for unscored activities)
-    expect(capturedSets[0]!).toMatchObject({
+    expect(logSet()).toMatchObject({
       heartRate: null,
       intensity: null,
       distanceMeter: null,
       hrZoneDurations: null,
     });
     // durationMinutes is always derived from timestamps
-    expect(capturedSets[0]!.durationMinutes).toBe(45);
+    expect(logSet().durationMinutes).toBe(45);
   });
 });
 
@@ -551,18 +446,12 @@ describe("whoop.linkToWorkout", () => {
 describe("whoop.unlinkFromWorkout", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
   });
 
   it("clears whoopActivityId and nulls Whoop metrics on the exercise log", async () => {
-    mockDb.select
-      .mockReturnValueOnce(
-        makeChain([{ id: WORKOUT_ID, whoopActivityId: WHOOP_ACTIVITY_ID }]),
-      )
-      .mockReturnValueOnce(makeChain([{ id: LOG_ID }]));
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: WHOOP_ACTIVITY_ID }]);
+    mockDb.onSelect(exerciseLog, [{ id: LOG_ID }]);
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdate(capturedSets);
 
     const result = await userCaller.whoop.unlinkFromWorkout({
       workoutId: WORKOUT_ID,
@@ -570,8 +459,8 @@ describe("whoop.unlinkFromWorkout", () => {
 
     expect(result).toEqual({ success: true });
 
-    // First update: null out Whoop fields on exercise log
-    expect(capturedSets[0]!).toEqual({
+    // Null out Whoop fields on the exercise log
+    expect(logSet()).toEqual({
       heartRate: null,
       intensity: null,
       distanceMeter: null,
@@ -579,14 +468,12 @@ describe("whoop.unlinkFromWorkout", () => {
       hrZoneDurations: null,
     });
 
-    // Second update: clear whoopActivityId on workout
-    expect(capturedSets[1]!).toEqual({ whoopActivityId: null });
+    // Clear whoopActivityId on the workout
+    expect(workoutSet()).toEqual({ whoopActivityId: null });
   });
 
   it("is a no-op when workout has no whoopActivityId", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: WORKOUT_ID, whoopActivityId: null }]),
-    );
+    mockDb.onSelect(workout, [{ id: WORKOUT_ID, whoopActivityId: null }]);
 
     const result = await userCaller.whoop.unlinkFromWorkout({
       workoutId: WORKOUT_ID,
@@ -594,12 +481,11 @@ describe("whoop.unlinkFromWorkout", () => {
 
     expect(result).toEqual({ success: true });
     // No transaction should be executed
-    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.db.transaction).not.toHaveBeenCalled();
   });
 
   it("throws NOT_FOUND when workout does not belong to user", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([]));
-
+    // Nothing queued: the workout lookup finds nothing.
     await expect(
       userCaller.whoop.unlinkFromWorkout({ workoutId: WORKOUT_ID }),
     ).rejects.toMatchObject({

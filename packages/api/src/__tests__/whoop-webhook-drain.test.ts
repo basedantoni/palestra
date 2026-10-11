@@ -15,44 +15,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockDispatchWhoopEvent } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockDispatchWhoopEvent } = vi.hoisted(() => ({ mockDispatchWhoopEvent: vi.fn() }));
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    execute: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockDispatchWhoopEvent = vi.fn();
-
-  return { mockDb, makeChain, mockDispatchWhoopEvent };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -73,7 +38,9 @@ vi.mock("../lib/whoop-webhook", () => ({
 }));
 
 // Import after mocks are set up
+import { whoopWebhookEvent } from "@life-tracker/db/schema/index";
 import { drainPendingWhoopEvents } from "../lib/whoop-webhook-drain";
+import { mockDb } from "./helpers/mock-db";
 import {
   getInFlightCount,
   getInFlightPromises,
@@ -90,13 +57,13 @@ describe("drainPendingWhoopEvents", () => {
   });
 
   it("1. empty queue → returns { scanned: 0, dispatched: 0 }, no processor called", async () => {
-    mockDb.execute.mockResolvedValue({ rows: [] });
+    mockDb.onExecute({ rows: [] });
 
     const result = await drainPendingWhoopEvents();
 
     expect(result).toEqual({ scanned: 0, dispatched: 0 });
     expect(mockDispatchWhoopEvent).not.toHaveBeenCalled();
-    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(mockDb.updated(whoopWebhookEvent)).toEqual([]);
   });
 
   it("2. pending row past grace window → dispatched, trackInFlight called", async () => {
@@ -107,7 +74,7 @@ describe("drainPendingWhoopEvents", () => {
       whoop_resource_id: "act-uuid-999",
     };
 
-    mockDb.execute.mockResolvedValue({ rows: [pendingRow] });
+    mockDb.onExecute({ rows: [pendingRow] });
 
     const deferred = Promise.resolve();
     mockDispatchWhoopEvent.mockReturnValue(deferred);
@@ -132,7 +99,7 @@ describe("drainPendingWhoopEvents", () => {
       whoop_resource_id: "sleep-uuid-777",
     };
 
-    mockDb.execute.mockResolvedValue({ rows: [orphanRow] });
+    mockDb.onExecute({ rows: [orphanRow] });
     mockDispatchWhoopEvent.mockReturnValue(Promise.resolve());
 
     const result = await drainPendingWhoopEvents();
@@ -154,19 +121,18 @@ describe("drainPendingWhoopEvents", () => {
       whoop_resource_id: null,
     };
 
-    mockDb.execute.mockResolvedValue({ rows: [unknownRow] });
+    mockDb.onExecute({ rows: [unknownRow] });
     // dispatchWhoopEvent returns null for unknown types / missing resourceId
     mockDispatchWhoopEvent.mockReturnValue(null);
 
     // Mock the update().set().where() chain used for skipping
-    mockDb.update.mockReturnValueOnce(makeChain([]));
 
     const result = await drainPendingWhoopEvents();
 
     expect(result).toEqual({ scanned: 1, dispatched: 0 });
     expect(mockDispatchWhoopEvent).toHaveBeenCalledOnce();
     // DB update for skipping should have been called
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    expect(mockDb.updated(whoopWebhookEvent)).toHaveLength(1);
   });
 });
 
