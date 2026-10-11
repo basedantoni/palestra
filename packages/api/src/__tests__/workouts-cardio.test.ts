@@ -1,73 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  enqueueRecalcs,
-} = vi.hoisted(() => {
-  function makeChain(
-    resolveWith: unknown = [],
-    onValues?: (value: unknown) => void,
-  ) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "values") {
-            return vi.fn((value: unknown) => {
-              onValues?.(value);
-              return proxy;
-            });
-          }
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return vi.fn(() => proxy);
-        },
-      },
-    );
+const { enqueueRecalcs } = vi.hoisted(() => ({
+  enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
+}));
 
-    return proxy;
-  }
-
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: {
-        findFirst: vi.fn(),
-      },
-    },
-  };
-
-  const enqueueRecalcs = vi.fn().mockResolvedValue(undefined);
-
-  return {
-    mockDb,
-    mockTx,
-    makeChain,
-    enqueueRecalcs,
-  };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -84,7 +21,10 @@ vi.mock("../lib/recalc-queue", () => ({
   enqueueRecalcs,
 }));
 
+import { exercise, exerciseLog, personalRecord, workout } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "00000000-0000-4000-8000-000000000021";
 const WORKOUT_ID = "00000000-0000-4000-8000-000000000022";
@@ -106,63 +46,48 @@ const userCaller = appRouter.createCaller({
 describe("workouts cardio round-trip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
   });
 
   it("creates a cardio workout via tRPC and fetches the same cardio fields back", async () => {
     const workoutDate = new Date("2026-04-23T12:00:00.000Z");
-    const insertedPrs: Array<Record<string, unknown>> = [];
 
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ id: EXERCISE_ID, category: "cardio" }]),
-    );
+    mockDb.onSelect(exercise, [{ id: EXERCISE_ID, category: "cardio" }]);
 
     // 8.2 miles converted to meters (as if the client sends meters)
     const distanceInMeters = 8.2 * 1609.344;
 
-    mockTx.insert
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: WORKOUT_ID,
-            userId: USER_ID,
-            date: workoutDate,
-            workoutType: "cardio",
-            durationMinutes: null,
-            templateId: null,
-            notes: "Track block",
-            totalVolume: null,
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([
-          {
-            id: LOG_ID,
-            workoutId: WORKOUT_ID,
-            exerciseId: EXERCISE_ID,
-            exerciseName: "Long Run",
-            order: 0,
-            rounds: null,
-            workDurationSeconds: null,
-            restDurationSeconds: null,
-            intensity: 7,
-            distanceMeter: distanceInMeters,
-            durationSeconds: 2700,
-            heartRate: 148,
-            durationMinutes: null,
-            notes: "Steady effort",
-          },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeChain([], (value) => {
-          insertedPrs.push(value as Record<string, unknown>);
-        }),
-      );
+    mockDb.onInsert(workout, [
+      {
+        id: WORKOUT_ID,
+        userId: USER_ID,
+        date: workoutDate,
+        workoutType: "cardio",
+        durationMinutes: null,
+        templateId: null,
+        notes: "Track block",
+        totalVolume: null,
+      },
+    ]);
+    mockDb.onInsert(exerciseLog, [
+      {
+        id: LOG_ID,
+        workoutId: WORKOUT_ID,
+        exerciseId: EXERCISE_ID,
+        exerciseName: "Long Run",
+        order: 0,
+        rounds: null,
+        workDurationSeconds: null,
+        restDurationSeconds: null,
+        intensity: 7,
+        distanceMeter: distanceInMeters,
+        durationSeconds: 2700,
+        heartRate: 148,
+        durationMinutes: null,
+        notes: "Steady effort",
+      },
+    ]);
 
-    mockDb.query.workout.findFirst.mockResolvedValue({
+    mockDb.onQuery("workout", "findFirst", {
       id: WORKOUT_ID,
       userId: USER_ID,
       date: workoutDate,
@@ -214,8 +139,12 @@ describe("workouts cardio round-trip", () => {
 
     expect(created!.id).toBe(WORKOUT_ID);
     // 3 inserts: workout + exercise log + 1 PR (longest_distance only; best_pace is derived)
-    expect(mockTx.insert).toHaveBeenCalledTimes(3);
-    expect(insertedPrs).toEqual(
+    expect(mockDb.ops.filter((op) => op.kind === "insert").map((op) => op.table)).toEqual([
+      workout,
+      exerciseLog,
+      personalRecord,
+    ]);
+    expect(mockDb.inserted(personalRecord)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           userId: USER_ID,
