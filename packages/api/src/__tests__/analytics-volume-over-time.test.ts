@@ -1,43 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, makeChain } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {
-      workout: { findFirst: vi.fn() },
-      userPreferences: { findFirst: vi.fn() },
-    },
-  };
-
-  return { mockDb, makeChain };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -54,7 +17,10 @@ vi.mock("../lib/recalc-queue", () => ({
   enqueueRecalcs: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { workout } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "00000000-0000-4000-8000-000000000298";
 
@@ -76,13 +42,11 @@ describe("analytics.volumeOverTime", () => {
   });
 
   it("aggregates weekly volume when scoped by string date bounds", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { date: new Date("2026-04-07T12:00:00.000Z"), totalVolume: 1000 },
-        { date: new Date("2026-04-09T12:00:00.000Z"), totalVolume: 700 },
-        { date: new Date("2026-04-15T12:00:00.000Z"), totalVolume: 600 },
-      ]),
-    );
+    mockDb.onSelect(workout, [
+      { date: new Date("2026-04-07T12:00:00.000Z"), totalVolume: 1000 },
+      { date: new Date("2026-04-09T12:00:00.000Z"), totalVolume: 700 },
+      { date: new Date("2026-04-15T12:00:00.000Z"), totalVolume: 600 },
+    ]);
 
     const result = await userCaller.analytics.volumeOverTime({
       granularity: "weekly",
@@ -105,12 +69,10 @@ describe("analytics.volumeOverTime", () => {
   });
 
   it("aggregates monthly volume without requiring date bounds", async () => {
-    mockDb.select.mockReturnValueOnce(
-      makeChain([
-        { date: new Date("2026-04-07T12:00:00.000Z"), totalVolume: 1000 },
-        { date: new Date("2026-05-09T12:00:00.000Z"), totalVolume: 700 },
-      ]),
-    );
+    mockDb.onSelect(workout, [
+      { date: new Date("2026-04-07T12:00:00.000Z"), totalVolume: 1000 },
+      { date: new Date("2026-05-09T12:00:00.000Z"), totalVolume: 700 },
+    ]);
 
     const result = await userCaller.analytics.volumeOverTime({
       granularity: "monthly",

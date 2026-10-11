@@ -9,35 +9,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, makeChain } = vi.hoisted(() => {
-  /** Thenable query-builder stand-in; reports any where() clause to `onWhere`. */
-  function makeChain(resolveWith: unknown = [], onWhere?: (clause: unknown) => void) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          if (prop === "where") {
-            return (clause: unknown) => {
-              onWhere?.(clause);
-              return proxy;
-            };
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-  return { mockDb: { select: vi.fn() }, makeChain };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
+import { transaction, userPreferences } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 const USER_ID = "user-txn-filters";
 const ACCOUNT_A = "00000000-0000-4000-8000-00000000000a";
@@ -48,16 +28,15 @@ function makeCaller() {
   return appRouter.createCaller({ session: { user: { id: USER_ID } } } as any);
 }
 
-/** Next db.select() resolves to `rows`; returns the rendered WHERE params. */
+/** The transaction query returns `rows`; returns its rendered WHERE params. */
 function selectReturning(rows: unknown[]): () => unknown[] {
-  let where: SQL | undefined;
-  mockDb.select.mockReturnValueOnce(makeChain(rows, (clause) => (where = clause as SQL)));
-  return () => (where ? new PgDialect().sqlToQuery(where).params : []);
+  mockDb.onSelect(transaction, rows);
+  return () => mockDb.selected(transaction).at(-1) ?? [];
 }
 
 /** The user_preferences timezone lookup that precedes each filtered query. */
 function userTimezoneIs(timezone: string | null) {
-  mockDb.select.mockReturnValueOnce(makeChain(timezone ? [{ timezone }] : []));
+  mockDb.onSelect(userPreferences, timezone ? [{ timezone }] : []);
 }
 
 beforeEach(() => {
@@ -90,12 +69,10 @@ describe("transactions.list filters", () => {
 
   it("filters to uncategorized transactions when categoryId is null", async () => {
     userTimezoneIs(null);
-    let where: SQL | undefined;
-    mockDb.select.mockReturnValueOnce(makeChain([], (clause) => (where = clause as SQL)));
 
     await makeCaller().transactions.list({ period: { kind: "all" }, categoryId: null });
 
-    const query = new PgDialect().sqlToQuery(where!);
+    const query = new PgDialect().sqlToQuery(mockDb.opsOn(transaction)[0]!.arg("where") as SQL);
     expect(query.sql).toMatch(/"category_id" is null/);
     expect(query.params).toEqual([USER_ID]);
   });

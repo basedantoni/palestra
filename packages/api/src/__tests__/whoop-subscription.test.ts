@@ -21,41 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  return { mockDb, makeChain };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -81,6 +47,8 @@ vi.stubGlobal("fetch", mockFetch);
 import { appRouter } from "../routers/index";
 import { encryptToken } from "../lib/token-encryption";
 import { handleWhoopCallback } from "../lib/whoop-oauth";
+import { whoopConnection } from "@life-tracker/db/schema/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -98,7 +66,7 @@ const SUBSCRIPTION_ID = "sub-abc-123";
 function makeCtx(userId = APP_USER_ID) {
   return {
     session: { user: { id: userId } },
-    db: mockDb,
+    db: mockDb.db,
   } as any;
 }
 
@@ -111,22 +79,19 @@ function makeCaller(userId = APP_USER_ID) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function mockSelectConnection(row: Record<string, unknown> | null) {
-  mockDb.select.mockReturnValueOnce(makeChain(row ? [row] : []));
+  mockDb.onSelect(whoopConnection, row ? [row] : []);
 }
 
-function mockDeleteOk() {
-  mockDb.delete.mockReturnValueOnce({
-    where: vi.fn().mockReturnValue(makeChain([])),
-  });
-}
+/** The local delete: nothing to queue, it's recorded either way. */
+function mockDeleteOk() {}
 
 function mockInsertOnConflictDoUpdate(resolveWith: unknown = {}) {
-  mockDb.insert.mockReturnValueOnce({
-    values: vi.fn().mockReturnValue({
-      onConflictDoUpdate: vi.fn().mockResolvedValue(resolveWith),
-    }),
-  });
+  mockDb.onInsert(whoopConnection, resolveWith);
 }
+
+/** The .set() payload of each whoop_connection update. */
+const connectionSets = () =>
+  mockDb.updated(whoopConnection).map((u) => u.set as Record<string, unknown>);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Fetch mock helpers
@@ -264,8 +229,8 @@ describe("whoop.reregisterWebhook (v2)", () => {
 
     // No Whoop API calls, no DB writes
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(mockDb.update).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.update).not.toHaveBeenCalled();
+    expect(mockDb.db.insert).not.toHaveBeenCalled();
   });
 });
 
@@ -307,7 +272,7 @@ describe("whoop.disconnect (webhook cleanup)", () => {
     expect(deleteCall[1].method).toBe("DELETE");
 
     // Local row was deleted
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(whoopConnection)).toHaveLength(1);
   });
 
   it("j. Whoop delete fails → still deletes local row (best-effort)", async () => {
@@ -334,7 +299,7 @@ describe("whoop.disconnect (webhook cleanup)", () => {
 
     // Both were attempted
     expect(mockFetch).toHaveBeenCalledOnce();
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(whoopConnection)).toHaveLength(1);
   });
 
   it("k. no webhookSubscriptionId → skips Whoop delete, deletes local row", async () => {
@@ -359,7 +324,7 @@ describe("whoop.disconnect (webhook cleanup)", () => {
     expect(mockFetch).not.toHaveBeenCalled();
 
     // Local row deleted
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(whoopConnection)).toHaveLength(1);
   });
 });
 
@@ -373,59 +338,31 @@ describe("whoop.setAutoImport", () => {
   });
 
   it("o. setAutoImport({ enabled: false }) updates autoImportEnabled to false in DB", async () => {
-    let capturedSet: Record<string, unknown> = {};
-
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn((val: unknown) => {
-        capturedSet = val as Record<string, unknown>;
-        return {
-          where: vi.fn().mockReturnValue(makeChain([])),
-        };
-      }),
-    });
-
     const caller = makeCaller();
     const result = await caller.whoop.setAutoImport({ enabled: false });
 
     expect(result.ok).toBe(true);
-    expect(capturedSet.autoImportEnabled).toBe(false);
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    expect(connectionSets()[0]!.autoImportEnabled).toBe(false);
+    expect(connectionSets()).toHaveLength(1);
   });
 
   it("p. setAutoImport({ enabled: true }) updates autoImportEnabled to true in DB", async () => {
-    let capturedSet: Record<string, unknown> = {};
-
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn((val: unknown) => {
-        capturedSet = val as Record<string, unknown>;
-        return {
-          where: vi.fn().mockReturnValue(makeChain([])),
-        };
-      }),
-    });
-
     const caller = makeCaller();
     const result = await caller.whoop.setAutoImport({ enabled: true });
 
     expect(result.ok).toBe(true);
-    expect(capturedSet.autoImportEnabled).toBe(true);
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    expect(connectionSets()[0]!.autoImportEnabled).toBe(true);
+    expect(connectionSets()).toHaveLength(1);
   });
 
   it("q. setAutoImport updates only the authenticated user's row (correct userId in where clause)", async () => {
-    const updateWhereSpy = vi.fn().mockReturnValue(makeChain([]));
-
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn().mockReturnValue({
-        where: updateWhereSpy,
-      }),
-    });
-
     const caller = makeCaller(APP_USER_ID);
     await caller.whoop.setAutoImport({ enabled: false });
 
-    // where clause was called exactly once (scoped to user)
-    expect(updateWhereSpy).toHaveBeenCalledOnce();
+    // One update, scoped to the caller's row
+    const updates = mockDb.updated(whoopConnection);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.where).toContain(APP_USER_ID);
   });
 });
 
@@ -439,43 +376,21 @@ describe("whoop.setNotifyOnAutoImport", () => {
   });
 
   it("r. setNotifyOnAutoImport({ enabled: false }) updates notifyOnAutoImport to false in DB", async () => {
-    let capturedSet: Record<string, unknown> = {};
-
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn((val: unknown) => {
-        capturedSet = val as Record<string, unknown>;
-        return {
-          where: vi.fn().mockReturnValue(makeChain([])),
-        };
-      }),
-    });
-
     const caller = makeCaller();
     const result = await caller.whoop.setNotifyOnAutoImport({ enabled: false });
 
     expect(result.ok).toBe(true);
-    expect(capturedSet.notifyOnAutoImport).toBe(false);
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    expect(connectionSets()[0]!.notifyOnAutoImport).toBe(false);
+    expect(connectionSets()).toHaveLength(1);
   });
 
   it("s. setNotifyOnAutoImport({ enabled: true }) updates notifyOnAutoImport to true in DB", async () => {
-    let capturedSet: Record<string, unknown> = {};
-
-    mockDb.update.mockReturnValueOnce({
-      set: vi.fn((val: unknown) => {
-        capturedSet = val as Record<string, unknown>;
-        return {
-          where: vi.fn().mockReturnValue(makeChain([])),
-        };
-      }),
-    });
-
     const caller = makeCaller();
     const result = await caller.whoop.setNotifyOnAutoImport({ enabled: true });
 
     expect(result.ok).toBe(true);
-    expect(capturedSet.notifyOnAutoImport).toBe(true);
-    expect(mockDb.update).toHaveBeenCalledOnce();
+    expect(connectionSets()[0]!.notifyOnAutoImport).toBe(true);
+    expect(connectionSets()).toHaveLength(1);
   });
 });
 
@@ -504,16 +419,7 @@ describe("handleWhoopCallback (v2 — whoopUserId only, no subscription registra
       email: "user@example.com",
     });
 
-    // Capture what's stored
-    let capturedValues: Record<string, unknown> = {};
-    mockDb.insert.mockReturnValueOnce({
-      values: vi.fn((val: unknown) => {
-        capturedValues = val as Record<string, unknown>;
-        return {
-          onConflictDoUpdate: vi.fn().mockResolvedValue({}),
-        };
-      }),
-    });
+    mockInsertOnConflictDoUpdate();
 
     const result = await handleWhoopCallback(
       "user-1",
@@ -524,7 +430,7 @@ describe("handleWhoopCallback (v2 — whoopUserId only, no subscription registra
     expect(result.ok).toBe(true);
 
     // whoopUserId stored as string "99887"
-    expect(capturedValues.whoopUserId).toBe("99887");
+    expect((mockDb.inserted(whoopConnection)[0] as Record<string, unknown>).whoopUserId).toBe("99887");
   });
 
   it("m. fires setImmediate for backfill on first connect (lastImportedAt = null)", async () => {

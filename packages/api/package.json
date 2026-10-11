@@ -30,6 +30,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@life-tracker/config": "workspace:*",
     "@vitest/ui": "^4.1.9",
     "hono": "catalog:",

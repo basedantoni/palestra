@@ -21,63 +21,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const {
-  mockDb,
-  mockTx,
-  makeChain,
-  mockGetValidToken,
-  mockEnqueue,
-} = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockGetValidToken, mockEnqueue } = vi.hoisted(() => ({
+  mockGetValidToken: vi.fn().mockResolvedValue("mock-access-token"),
+  mockEnqueue: vi.fn().mockResolvedValue(undefined),
+}));
 
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockGetValidToken = vi.fn().mockResolvedValue("mock-access-token");
-  const mockEnqueue = vi.fn().mockResolvedValue(undefined);
-
-  return {
-    mockDb,
-    mockTx,
-    makeChain,
-    mockGetValidToken,
-    mockEnqueue,
-  };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -103,7 +52,10 @@ vi.mock("../lib/recalc-queue", () => ({
 }));
 
 // Import after mocks
+import { exerciseLog, notification, whoopConnection, workout } from "@life-tracker/db/schema/index";
+
 import { workoutProcessor, workoutDeleteProcessor } from "../lib/whoop-webhook";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test constants
@@ -172,90 +124,57 @@ function mockFetch(responseBody: unknown, ok = true, status = 200) {
   } as unknown as Response);
 }
 
-/** Simulate a tx.update that captures set values */
-function makeTxUpdateCapture(capturedSets: Array<Record<string, unknown>>) {
-  return vi.fn(() => ({
-    set: (val: unknown) => {
-      capturedSets.push(val as Record<string, unknown>);
-      return { where: () => makeChain([]) };
-    },
-  }));
-}
+/** Every update's .set() payload (workout, log, connection and event status), in order. */
+const updateSets = () =>
+  mockDb.opsOf("update").map((op) => op.arg("set") as Record<string, unknown>);
 
-/** Simulate an outer db.update (for marking event status) */
-function mockDbUpdate() {
-  mockDb.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    }),
-  });
-}
+/** Tables inserted into, in order. */
+const insertTables = () => mockDb.opsOf("insert").map((op) => op.table);
+
+const insertedWorkout = () => mockDb.inserted(workout)[0] as Record<string, unknown>;
+const insertedLog = () => mockDb.inserted(exerciseLog)[0] as Record<string, unknown>;
+const notifications = () => mockDb.inserted(notification) as Array<Record<string, unknown>>;
 
 /** Setup the autoImportEnabled + notifyOnAutoImport select response */
 function mockAutoImportCheck(enabled: boolean, notify = false) {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ autoImportEnabled: enabled, notifyOnAutoImport: notify }]),
-  );
+  mockDb.onSelect(whoopConnection, [{ autoImportEnabled: enabled, notifyOnAutoImport: notify }]);
 }
 
-/** Setup the workout dedup select — no existing workout for this whoopActivityId */
-function mockNoExistingWorkout() {
-  mockDb.select.mockReturnValueOnce(makeChain([]));
-}
+/** Setup the workout dedup select — no existing workout: nothing queued */
+function mockNoExistingWorkout() {}
 
 /** Setup the workout dedup select — existing whoop-sourced workout */
 function mockExistingWhoopWorkout() {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([
-      {
-        id: WORKOUT_ID,
-        source: "whoop",
-        date: new Date("2026-05-01"),
-        workoutType: "cardio",
-      },
-    ]),
-  );
+  mockDb.onSelect(workout, [
+    { id: WORKOUT_ID, source: "whoop", date: new Date("2026-05-01"), workoutType: "cardio" },
+  ]);
 }
 
 /** Setup the workout dedup select — existing manually-created workout with whoop link */
 function mockExistingManualWorkout() {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([
-      {
-        id: WORKOUT_ID,
-        source: "manual",
-        date: new Date("2026-05-01"),
-        workoutType: "cardio",
-      },
-    ]),
-  );
+  mockDb.onSelect(workout, [
+    { id: WORKOUT_ID, source: "manual", date: new Date("2026-05-01"), workoutType: "cardio" },
+  ]);
 }
 
 /**
  * Setup exercise log lookup for an existing workout.
  *
- * The firstLog lookup now runs inside the transaction (tx.select) via the
- * shared upsertWhoopWorkout helper. After the log update, recordRunningPrs
- * issues a further tx.select for the current PR best — that read defaults to
- * [] (no prior PR) via mockTx.select.mockReturnValue in beforeEach.
+ * The firstLog lookup runs inside the transaction via the shared
+ * upsertWhoopWorkout helper. After the log update, recordRunningPrs reads the
+ * current PR best — nothing queued for that, so [] (no prior PR).
  */
 function mockExistingExerciseLog() {
-  mockTx.select.mockReturnValueOnce(
-    makeChain([{ id: LOG_ID, exerciseId: null }]),
-  );
+  mockDb.onSelect(exerciseLog, [{ id: LOG_ID, exerciseId: null }]);
 }
 
 /** Setup delete-processor workout lookup — workout found */
 function mockDeleteWorkoutFound() {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ id: WORKOUT_ID, date: new Date("2026-05-01") }]),
-  );
+  mockDb.onSelect(workout, [{ id: WORKOUT_ID, date: new Date("2026-05-01") }]);
 }
 
-/** Setup delete-processor workout lookup — no workout */
-function mockDeleteWorkoutNotFound() {
-  mockDb.select.mockReturnValueOnce(makeChain([]));
-}
+/** Setup delete-processor workout lookup — no workout: nothing queued */
+function mockDeleteWorkoutNotFound() {}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests: workoutProcessor
@@ -269,9 +188,6 @@ describe("workoutProcessor — new import", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("1. creates new workout + exercise log for unseen activity with correct fields", async () => {
@@ -279,28 +195,20 @@ describe("workoutProcessor — new import", () => {
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
 
-    const insertedValues: Array<Record<string, unknown>> = [];
-    mockTx.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        insertedValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
-    mockTx.update = makeTxUpdateCapture([]);
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Two inserts: workout + exercise log
-    expect(mockTx.insert).toHaveBeenCalledTimes(2);
+    expect(insertTables()).toEqual([workout, exerciseLog]);
 
-    const workoutInsert = insertedValues[0]!;
+    const workoutInsert = insertedWorkout();
     expect(workoutInsert.source).toBe("whoop");
     expect(workoutInsert.whoopActivityId).toBe(WHOOP_ACTIVITY_ID);
     expect(workoutInsert.workoutType).toBe("cardio"); // running → cardio
     expect(workoutInsert.userId).toBe(USER_ID);
     expect(workoutInsert.date).toBeInstanceOf(Date);
 
-    const logInsert = insertedValues[1]!;
+    const logInsert = insertedLog();
     expect(logInsert.heartRate).toBe(155);
     expect(logInsert.intensity).toBe(70); // strain=14.7 → round(14.7/21*100) = 70
     expect(logInsert.distanceMeter).toBe(10000);
@@ -308,7 +216,7 @@ describe("workoutProcessor — new import", () => {
     expect(logInsert.hrZoneDurations).toBeDefined();
 
     // Event marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.db.update).toHaveBeenCalled();
   });
 
   it("1b. marks event processed after successful new import", async () => {
@@ -316,24 +224,12 @@ describe("workoutProcessor — new import", () => {
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockTx.insert.mockReturnValue({
-      values: vi.fn().mockResolvedValue([]),
-    });
-    mockTx.update = makeTxUpdateCapture([]);
 
-    // Capture the outer db.update calls (event status + connection lastImportedAt)
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Find the update that sets status=processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = updateSets().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
@@ -345,9 +241,6 @@ describe("workoutProcessor — auto-imported update (source = whoop)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("2. updates existing whoop workout in place without creating a duplicate", async () => {
@@ -356,16 +249,14 @@ describe("workoutProcessor — auto-imported update (source = whoop)", () => {
     mockExistingWhoopWorkout(); // dedup: existing whoop workout found
     mockExistingExerciseLog(); // exercise log lookup
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdateCapture(capturedSets);
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // No new workout insert should occur — only updates
-    expect(mockTx.insert).not.toHaveBeenCalled();
+    expect(insertTables()).toEqual([]);
 
     // Exercise log metrics should have been updated
-    const logUpdate = capturedSets.find(
+    const logUpdate = updateSets().find(
       (s) => s.heartRate !== undefined || s.intensity !== undefined,
     );
     expect(logUpdate).toBeDefined();
@@ -378,9 +269,6 @@ describe("workoutProcessor — manual-link update (source != whoop)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("3. updates exercise log metrics without creating new workout or altering workout source", async () => {
@@ -389,22 +277,20 @@ describe("workoutProcessor — manual-link update (source != whoop)", () => {
     mockExistingManualWorkout(); // dedup: existing manual workout found
     mockExistingExerciseLog(); // exercise log lookup
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdateCapture(capturedSets);
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // No new workout insert
-    expect(mockTx.insert).not.toHaveBeenCalled();
+    expect(insertTables()).toEqual([]);
 
     // Workout row itself should NOT be updated (source stays manual)
-    const workoutSourceUpdate = capturedSets.find(
+    const workoutSourceUpdate = updateSets().find(
       (s) => s.source !== undefined,
     );
     expect(workoutSourceUpdate).toBeUndefined();
 
     // Exercise log should have metrics updated
-    const logUpdate = capturedSets.find((s) => s.heartRate !== undefined);
+    const logUpdate = updateSets().find((s) => s.heartRate !== undefined);
     expect(logUpdate).toBeDefined();
     expect(logUpdate!.heartRate).toBe(155);
     expect(logUpdate!.distanceMeter).toBe(10000);
@@ -415,28 +301,20 @@ describe("workoutProcessor — PENDING_SCORE", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDbUpdate();
   });
 
   it("4. marks event skipped and creates no workout when score_state is PENDING_SCORE", async () => {
     mockAutoImportCheck(true);
     mockFetch(PENDING_SCORE_ACTIVITY);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Transaction should NOT have been called (no DB writes for workout)
-    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.db.transaction).not.toHaveBeenCalled();
 
     // Event should be marked skipped
-    const skippedUpdate = capturedUpdateSets.find(
+    const skippedUpdate = updateSets().find(
       (s) => s.status === "skipped",
     );
     expect(skippedUpdate).toBeDefined();
@@ -447,9 +325,6 @@ describe("workoutProcessor — INCOMPLETE score_state", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("5. imports INCOMPLETE activity with null score fields, no error", async () => {
@@ -457,21 +332,13 @@ describe("workoutProcessor — INCOMPLETE score_state", () => {
     mockFetch(INCOMPLETE_ACTIVITY);
     mockNoExistingWorkout();
 
-    const insertedValues: Array<Record<string, unknown>> = [];
-    mockTx.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        insertedValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
-    mockTx.update = makeTxUpdateCapture([]);
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Should have created workout + exercise log
-    expect(mockTx.insert).toHaveBeenCalledTimes(2);
+    expect(insertTables()).toEqual([workout, exerciseLog]);
 
-    const logInsert = insertedValues[1]!;
+    const logInsert = insertedLog();
     // INCOMPLETE → score fields should be null
     expect(logInsert.heartRate).toBeNull();
     expect(logInsert.intensity).toBeNull();
@@ -481,7 +348,7 @@ describe("workoutProcessor — INCOMPLETE score_state", () => {
     expect(logInsert.durationMinutes).toBe(60);
 
     // Event should be marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.db.update).toHaveBeenCalled();
   });
 });
 
@@ -489,19 +356,11 @@ describe("workoutProcessor — autoImportEnabled = false", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDbUpdate();
   });
 
   it("6. marks event skipped without any workout DB writes when autoImport is disabled", async () => {
     mockAutoImportCheck(false);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
@@ -509,10 +368,10 @@ describe("workoutProcessor — autoImportEnabled = false", () => {
     expect(mockGetValidToken).not.toHaveBeenCalled();
 
     // No transaction (no workout/log writes)
-    expect(mockDb.transaction).not.toHaveBeenCalled();
+    expect(mockDb.db.transaction).not.toHaveBeenCalled();
 
     // Event marked skipped
-    const skippedUpdate = capturedUpdateSets.find(
+    const skippedUpdate = updateSets().find(
       (s) => s.status === "skipped",
     );
     expect(skippedUpdate).toBeDefined();
@@ -526,27 +385,16 @@ describe("workoutDeleteProcessor", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDbUpdate();
   });
 
   it("7. deletes workout row when found and marks event processed", async () => {
     mockDeleteWorkoutFound();
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
-    mockDb.delete.mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    });
 
     await workoutDeleteProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Delete was called
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(workout)).toHaveLength(1);
 
     // Recalculations were enqueued (week-volume only; no exercise ids)
     expect(mockEnqueue).toHaveBeenCalledWith(USER_ID, {
@@ -554,7 +402,7 @@ describe("workoutDeleteProcessor", () => {
     });
 
     // Event marked processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = updateSets().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
@@ -563,21 +411,14 @@ describe("workoutDeleteProcessor", () => {
   it("8. marks event processed even when no workout found (idempotent)", async () => {
     mockDeleteWorkoutNotFound();
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await workoutDeleteProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Delete should NOT have been called
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(mockDb.deleted(workout)).toEqual([]);
 
     // Still marks event processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = updateSets().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
@@ -590,18 +431,13 @@ describe("workoutDeleteProcessor", () => {
 
 /** Setup: autoImportEnabled + notifyOnAutoImport */
 function mockAutoImportAndNotify(autoImport: boolean, notify: boolean) {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ autoImportEnabled: autoImport, notifyOnAutoImport: notify }]),
-  );
+  mockDb.onSelect(whoopConnection, [{ autoImportEnabled: autoImport, notifyOnAutoImport: notify }]);
 }
 
 describe("workoutProcessor — notification emission", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("9a. new import with notifyOnAutoImport=true → notification row inserted with correct type/title/message/workoutId", async () => {
@@ -609,29 +445,12 @@ describe("workoutProcessor — notification emission", () => {
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
 
-    // Capture all inserts
-    const insertedValues: Array<Record<string, unknown>> = [];
-    mockTx.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        insertedValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
-    mockTx.update = makeTxUpdateCapture([]);
 
-    // Capture outer db.insert (notification)
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
     // Notification insert should be among the outer inserts
-    const notifInsert = outerInsertValues.find(
+    const notifInsert = notifications().find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notifInsert).toBeDefined();
@@ -651,26 +470,11 @@ describe("workoutProcessor — notification emission", () => {
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
 
-    const insertedValues: Array<Record<string, unknown>> = [];
-    mockTx.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        insertedValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
-    mockTx.update = makeTxUpdateCapture([]);
 
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
-    const notifInsert = outerInsertValues.find(
+    const notifInsert = notifications().find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notifInsert).toBeUndefined();
@@ -682,20 +486,11 @@ describe("workoutProcessor — notification emission", () => {
     mockExistingManualWorkout(); // Path 1 — manual link
     mockExistingExerciseLog();
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdateCapture(capturedSets);
 
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
-    const notifInsert = outerInsertValues.find(
+    const notifInsert = notifications().find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notifInsert).toBeUndefined();
@@ -707,20 +502,11 @@ describe("workoutProcessor — notification emission", () => {
     mockExistingWhoopWorkout(); // Path 2 — auto-imported update
     mockExistingExerciseLog();
 
-    const capturedSets: Array<Record<string, unknown>> = [];
-    mockTx.update = makeTxUpdateCapture(capturedSets);
 
-    const outerInsertValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        outerInsertValues.push(val as Record<string, unknown>);
-        return Promise.resolve([]);
-      }),
-    }));
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
-    const notifInsert = outerInsertValues.find(
+    const notifInsert = notifications().find(
       (v) => v.type === "whoop_workout_imported",
     );
     expect(notifInsert).toBeDefined();
@@ -739,9 +525,6 @@ describe("workoutProcessor — recalculations", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     restoreRecalcMocks();
-    mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
-    mockTx.select.mockReturnValue(makeChain([]));
-    mockDbUpdate();
   });
 
   it("enqueues week-volume recalc after new import", async () => {
@@ -749,10 +532,6 @@ describe("workoutProcessor — recalculations", () => {
     mockFetch(SCORED_RUNNING_ACTIVITY);
     mockNoExistingWorkout();
 
-    mockTx.insert.mockReturnValue({
-      values: vi.fn().mockResolvedValue([]),
-    });
-    mockTx.update = makeTxUpdateCapture([]);
 
     await workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID);
 
@@ -776,20 +555,13 @@ describe("workoutProcessor — error handling", () => {
     // Simulate Whoop API error
     global.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     // Should NOT throw
     await expect(
       workoutProcessor(EVENT_ID, USER_ID, WHOOP_ACTIVITY_ID),
     ).resolves.not.toThrow();
 
-    const failedUpdate = capturedUpdateSets.find((s) => s.status === "failed");
+    const failedUpdate = updateSets().find((s) => s.status === "failed");
     expect(failedUpdate).toBeDefined();
     expect(typeof failedUpdate!.errorMessage).toBe("string");
   });

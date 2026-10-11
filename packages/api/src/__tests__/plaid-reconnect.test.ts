@@ -15,36 +15,20 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, makeChain, mockSync, mockPlaid } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          if (prop === "catch") return (err: any) => Promise.resolve(resolveWith).catch(err);
-          if (prop === "finally") return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
-
-  const mockDb = { insert: vi.fn(), update: vi.fn(), delete: vi.fn(), select: vi.fn() };
-  const mockPlaid = {
+const { mockSync, mockPlaid } = vi.hoisted(() => ({
+  mockSync: vi.fn(),
+  mockPlaid: {
     linkTokenCreate: vi.fn(),
     itemPublicTokenExchange: vi.fn(),
     accountsGet: vi.fn(),
     institutionsGetById: vi.fn(),
     itemRemove: vi.fn(),
-  };
-  return { mockDb, makeChain, mockSync: vi.fn(), mockPlaid };
-});
+  },
+}));
 
 const KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/plaid-sync-db", () => ({ syncPlaidItem: mockSync }));
 vi.mock("../lib/plaid-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/plaid-client")>()),
@@ -52,13 +36,13 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
   getTokenEncryptionKey: () => KEY,
 }));
 
-import { PgDialect } from "drizzle-orm/pg-core";
-import type { SQL } from "drizzle-orm";
+import { plaidItem } from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
 import { encryptToken } from "../lib/token-encryption";
 import { env } from "@life-tracker/env/server";
 import { otherPlaidEnv } from "../lib/plaid-env";
+import { mockDb } from "./helpers/mock-db";
 
 const OTHER_ENV = otherPlaidEnv();
 
@@ -67,53 +51,29 @@ const ITEM_ID = "00000000-0000-4000-8000-0000000000c3";
 const ACCESS_TOKEN = "access-sandbox-reconnect";
 
 function makeCaller() {
-  return appRouter.createCaller({ session: { user: { id: USER_ID } }, db: mockDb } as any);
+  return appRouter.createCaller({ session: { user: { id: USER_ID } }, db: mockDb.db } as any);
 }
 
 /**
- * Next db.select() resolves to these rows and records its WHERE clause, so
- * tests can prove the query itself is scoped (the mock ignores filters).
+ * The next plaid_item select returns these rows. The mock ignores filters, so
+ * tests prove scoping via the select's WHERE params (`mockDb.selected`).
  */
-function selectCapturingWhere(rows: unknown[]): { params: () => unknown[] } {
-  let where: SQL | undefined;
-  const chain = makeChain(rows);
-  mockDb.select.mockReturnValueOnce({
-    from: () => ({
-      where: (clause: SQL) => {
-        where = clause;
-        return chain;
-      },
-    }),
-  });
-  return { params: () => (where ? new PgDialect().sqlToQuery(where).params : []) };
+function itemIs(rows: unknown[]) {
+  mockDb.onSelect(plaidItem, rows);
 }
 
-let updateSets: Array<Record<string, unknown>>;
-let insertValues: Array<Record<string, unknown>>;
+const updateSets = () => mockDb.updated(plaidItem).map((u) => u.set);
+const insertValues = () => mockDb.inserted(plaidItem) as Array<Record<string, unknown>>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
-  updateSets = [];
-  insertValues = [];
-  mockDb.insert.mockImplementation(() => ({
-    values: (values: Record<string, unknown>) => {
-      insertValues.push(values);
-      return makeChain();
-    },
-  }));
-  mockDb.update.mockImplementation(() => ({
-    set: (values: Record<string, unknown>) => {
-      updateSets.push(values);
-      return makeChain();
-    },
-  }));
   mockSync.mockResolvedValue({ added: 0, modified: 0, removed: 0 });
 });
 
 describe("plaid.createLinkToken update mode", () => {
   it("issues an update-mode token for an owned item using its access token, without products", async () => {
-    const query = selectCapturingWhere([
+    itemIs([
       { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "error", plaidEnv: env.PLAID_ENV },
     ]);
     mockPlaid.linkTokenCreate.mockResolvedValueOnce({ data: { link_token: "link-update-1" } });
@@ -121,7 +81,7 @@ describe("plaid.createLinkToken update mode", () => {
     const result = await makeCaller().plaid.createLinkToken({ plaidItemId: ITEM_ID });
 
     expect(result).toEqual({ linkToken: "link-update-1" });
-    expect(query.params()).toEqual([ITEM_ID, USER_ID]);
+    expect(mockDb.selected(plaidItem)).toEqual([[ITEM_ID, USER_ID]]);
     const req = mockPlaid.linkTokenCreate.mock.calls[0]![0];
     expect(req.access_token).toBe(ACCESS_TOKEN);
     expect(req.products).toBeUndefined();
@@ -129,17 +89,17 @@ describe("plaid.createLinkToken update mode", () => {
   });
 
   it("rejects an item the caller doesn't own with NOT_FOUND and never calls Plaid", async () => {
-    const query = selectCapturingWhere([]);
+    itemIs([]);
 
     await expect(makeCaller().plaid.createLinkToken({ plaidItemId: ITEM_ID })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
-    expect(query.params()).toEqual([ITEM_ID, USER_ID]);
+    expect(mockDb.selected(plaidItem)).toEqual([[ITEM_ID, USER_ID]]);
     expect(mockPlaid.linkTokenCreate).not.toHaveBeenCalled();
   });
 
   it("refuses update mode for a revoked item (Plaid can't repair it) and never calls Plaid", async () => {
-    selectCapturingWhere([
+    itemIs([
       { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "revoked", plaidEnv: env.PLAID_ENV },
     ]);
 
@@ -150,7 +110,7 @@ describe("plaid.createLinkToken update mode", () => {
   });
 
   it("refuses update mode for an item linked under another PLAID_ENV and never calls Plaid", async () => {
-    selectCapturingWhere([
+    itemIs([
       { accessTokenEnc: encryptToken(ACCESS_TOKEN, KEY), status: "error", plaidEnv: OTHER_ENV },
     ]);
 
@@ -176,7 +136,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("plaid.markItemRepaired", () => {
   it("syncs an owned broken item and only then marks it active", async () => {
-    const query = selectCapturingWhere([{ id: ITEM_ID, status: "error" }]);
+    itemIs([{ id: ITEM_ID, status: "error" }]);
     mockSync.mockResolvedValueOnce({ added: 4, modified: 1, removed: 0 });
 
     await expect(makeCaller().plaid.markItemRepaired({ plaidItemId: ITEM_ID })).resolves.toEqual({
@@ -185,46 +145,46 @@ describe("plaid.markItemRepaired", () => {
       removed: 0,
     });
 
-    expect(query.params()).toEqual([ITEM_ID, USER_ID]);
+    expect(mockDb.selected(plaidItem)).toEqual([[ITEM_ID, USER_ID]]);
     expect(mockSync).toHaveBeenCalledWith(ITEM_ID);
-    expect(updateSets).toEqual([{ status: "active" }]);
+    expect(updateSets()).toEqual([{ status: "active" }]);
   });
 
   it("clears an expiring item once the sync succeeds", async () => {
-    selectCapturingWhere([{ id: ITEM_ID, status: "pending_expiration" }]);
+    itemIs([{ id: ITEM_ID, status: "pending_expiration" }]);
 
     await makeCaller().plaid.markItemRepaired({ plaidItemId: ITEM_ID });
 
-    expect(updateSets).toEqual([{ status: "active" }]);
+    expect(updateSets()).toEqual([{ status: "active" }]);
   });
 
   it("leaves the item broken and reports an error when the follow-up sync fails", async () => {
-    selectCapturingWhere([{ id: ITEM_ID, status: "error" }]);
+    itemIs([{ id: ITEM_ID, status: "error" }]);
     mockSync.mockRejectedValueOnce(new Error("ITEM_LOGIN_REQUIRED"));
 
     await expect(
       makeCaller().plaid.markItemRepaired({ plaidItemId: ITEM_ID }),
     ).rejects.toMatchObject({ code: "BAD_GATEWAY" });
-    expect(updateSets).toEqual([]);
+    expect(updateSets()).toEqual([]);
   });
 
   it("refuses a revoked item without syncing or writing", async () => {
-    selectCapturingWhere([{ id: ITEM_ID, status: "revoked" }]);
+    itemIs([{ id: ITEM_ID, status: "revoked" }]);
 
     await expect(
       makeCaller().plaid.markItemRepaired({ plaidItemId: ITEM_ID }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(mockSync).not.toHaveBeenCalled();
-    expect(updateSets).toEqual([]);
+    expect(updateSets()).toEqual([]);
   });
 
   it("rejects an item the caller doesn't own with NOT_FOUND, writing nothing", async () => {
-    selectCapturingWhere([]);
+    itemIs([]);
 
     await expect(
       makeCaller().plaid.markItemRepaired({ plaidItemId: ITEM_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(updateSets).toEqual([]);
+    expect(updateSets()).toEqual([]);
     expect(mockSync).not.toHaveBeenCalled();
   });
 });
@@ -236,7 +196,7 @@ function linkSucceeds() {
   mockPlaid.accountsGet.mockResolvedValueOnce({
     data: { item: { institution_id: "ins_109508" }, accounts: [] },
   });
-  mockDb.select.mockReturnValueOnce(makeChain([{ id: ITEM_ID }]));
+  itemIs([{ id: ITEM_ID }]);
 }
 
 describe("plaid.exchangePublicToken institution name", () => {
@@ -252,7 +212,7 @@ describe("plaid.exchangePublicToken institution name", () => {
     expect(mockPlaid.institutionsGetById).toHaveBeenCalledWith(
       expect.objectContaining({ institution_id: "ins_109508" }),
     );
-    expect(insertValues[0]).toMatchObject({
+    expect(insertValues()[0]).toMatchObject({
       institutionId: "ins_109508",
       institutionName: "First Platypus Bank",
       plaidEnv: env.PLAID_ENV,
@@ -268,19 +228,19 @@ describe("plaid.exchangePublicToken institution name", () => {
     ).resolves.toEqual({ itemId: ITEM_ID, accountCount: 0 });
     await flush();
 
-    expect(insertValues[0]).toMatchObject({ institutionName: null });
+    expect(insertValues()[0]).toMatchObject({ institutionName: null });
   });
 });
 
 describe("plaid.removeItem", () => {
   it("rejects an item the caller doesn't own with NOT_FOUND, revoking and deleting nothing", async () => {
-    const query = selectCapturingWhere([]);
+    itemIs([]);
 
     await expect(
       makeCaller().plaid.removeItem({ plaidItemId: ITEM_ID, force: true }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(query.params()).toEqual([ITEM_ID, USER_ID]);
+    expect(mockDb.selected(plaidItem)).toEqual([[ITEM_ID, USER_ID]]);
     expect(mockPlaid.itemRemove).not.toHaveBeenCalled();
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(mockDb.deleted(plaidItem)).toEqual([]);
   });
 });

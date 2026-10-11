@@ -13,40 +13,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockPlaid } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = [], calls?: Array<[string, unknown[]]>) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          if (prop === "catch") return (err: any) => Promise.resolve(resolveWith).catch(err);
-          if (prop === "finally") return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          return (...args: unknown[]) => {
-            calls?.push([prop, args]);
-            return proxy;
-          };
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockPlaid } = vi.hoisted(() => ({
+  mockPlaid: { accountsGet: vi.fn(), accountsBalanceGet: vi.fn() },
+}));
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockPlaid = {
-    accountsGet: vi.fn(),
-    accountsBalanceGet: vi.fn(),
-  };
-
-  return { mockDb, makeChain, mockPlaid };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/token-encryption", () => ({
   decryptToken: (enc: string) => `access-${enc}`,
 }));
@@ -57,12 +28,10 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 }));
 
-import { PgDialect } from "drizzle-orm/pg-core";
-import type { SQL } from "drizzle-orm";
-
-import { balanceSnapshot } from "@life-tracker/db/schema/index";
+import { balanceSnapshot, financialAccount, plaidItem } from "@life-tracker/db/schema/index";
 
 import { snapshotAllPlaidBalances } from "../lib/plaid-balance-snapshot";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -79,46 +48,27 @@ function plaidAccount(accountId: string, current: number | null) {
   return { account_id: accountId, balances: { current, available: null, iso_currency_code: "USD" } };
 }
 
-/** Next db.select() resolves to these rows. */
-function selectReturns(rows: unknown[]) {
-  mockDb.select.mockReturnValueOnce(makeChain(rows));
+/** The non-revoked plaid_item rows the job reads. */
+function itemsAre(rows: unknown[]) {
+  mockDb.onSelect(plaidItem, rows);
 }
 
-/** Next db.select() resolves to these rows and records its WHERE clause. */
-function selectCapturingWhere(rows: unknown[]): { params: () => unknown[] } {
-  let where: SQL | undefined;
-  const chain = makeChain(rows);
-  mockDb.select.mockReturnValueOnce({
-    from: () => ({
-      where: (clause: SQL) => {
-        where = clause;
-        return chain;
-      },
-    }),
-  });
-  return { params: () => (where ? new PgDialect().sqlToQuery(where).params : []) };
+/** The next item's linked financial_account rows. */
+function linkedAccounts(rows: unknown[]) {
+  mockDb.onSelect(financialAccount, rows);
 }
-
-let insertCalls: Array<Array<[string, unknown[]]>>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
-  insertCalls = [];
-  mockDb.insert.mockImplementation(() => {
-    const calls: Array<[string, unknown[]]> = [];
-    insertCalls.push(calls);
-    return makeChain([], calls);
-  });
-  mockDb.update.mockImplementation(() => makeChain());
 });
 
 /** The `values` and `onConflictDoUpdate` args of each snapshot insert. */
 function snapshotUpserts() {
-  return insertCalls.map((calls) => ({
-    values: calls.find(([m]) => m === "values")?.[1][0] as Record<string, unknown>,
-    onConflict: calls.find(([m]) => m === "onConflictDoUpdate")?.[1][0] as {
+  return mockDb.opsOn(balanceSnapshot).map((op) => ({
+    values: op.arg("values") as Record<string, unknown>,
+    onConflict: op.arg("onConflictDoUpdate") as {
       target: unknown[];
       set: Record<string, unknown>;
     },
@@ -130,11 +80,11 @@ function snapshotUpserts() {
 // ────────────────────────────────────────────────────────────────────────────
 describe("snapshotAllPlaidBalances", () => {
   it("upserts one snapshot per account for today via the free /accounts/get", async () => {
-    selectReturns([item(ITEM_A)]);
+    itemsAre([item(ITEM_A)]);
     mockPlaid.accountsGet.mockResolvedValueOnce({
       data: { accounts: [plaidAccount("p_chk", 1500), plaidAccount("p_cc", 420.5)] },
     });
-    selectReturns([
+    linkedAccounts([
       { id: "fa-chk", plaidAccountId: "p_chk" },
       { id: "fa-cc", plaidAccountId: "p_cc" },
     ]);
@@ -156,30 +106,31 @@ describe("snapshotAllPlaidBalances", () => {
       expect(u.onConflict.set).toEqual({ balance: u.values.balance });
     }
     // Current balances on financial_account are refreshed too.
-    expect(mockDb.update).toHaveBeenCalledTimes(2);
+    expect(mockDb.updated(financialAccount)).toHaveLength(2);
   });
 
   it("skips accounts Plaid reports that aren't linked locally", async () => {
-    selectReturns([item(ITEM_A)]);
+    itemsAre([item(ITEM_A)]);
     mockPlaid.accountsGet.mockResolvedValueOnce({
       data: { accounts: [plaidAccount("p_chk", 10), plaidAccount("p_unknown", 99)] },
     });
-    selectReturns([{ id: "fa-chk", plaidAccountId: "p_chk" }]);
+    linkedAccounts([{ id: "fa-chk", plaidAccountId: "p_chk" }]);
 
     await snapshotAllPlaidBalances(TODAY);
 
     expect(snapshotUpserts().map((u) => u.values.accountId)).toEqual(["fa-chk"]);
-    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.updated(financialAccount)).toHaveLength(1);
   });
 
   it("keeps snapshotting other items when one fails, counting the failure", async () => {
-    selectReturns([item(ITEM_A), item(ITEM_B, "user-2")]);
+    itemsAre([item(ITEM_A), item(ITEM_B, "user-2")]);
     mockPlaid.accountsGet
       .mockRejectedValueOnce({
         response: { data: { error_code: "ITEM_LOGIN_REQUIRED", error_message: "login required" } },
       })
       .mockResolvedValueOnce({ data: { accounts: [plaidAccount("p_sav", 8000)] } });
-    selectReturns([{ id: "fa-sav", plaidAccountId: "p_sav" }]);
+    // Item A fails before its account lookup, so this is item B's.
+    linkedAccounts([{ id: "fa-sav", plaidAccountId: "p_sav" }]);
 
     const result = await snapshotAllPlaidBalances(TODAY);
 
@@ -194,31 +145,28 @@ describe("snapshotAllPlaidBalances", () => {
   });
 
   it("only selects items that aren't revoked", async () => {
-    const query = selectCapturingWhere([]);
-
     const result = await snapshotAllPlaidBalances(TODAY);
 
-    expect(query.params()).toEqual(["revoked"]);
+    expect(mockDb.selected(plaidItem)).toEqual([["revoked"]]);
     expect(result).toEqual({ snapshotted: 0, failed: 0 });
     expect(mockPlaid.accountsGet).not.toHaveBeenCalled();
   });
 
   it("scopes the account lookup to the item being snapshotted", async () => {
-    selectReturns([item(ITEM_A)]);
+    itemsAre([item(ITEM_A)]);
     mockPlaid.accountsGet.mockResolvedValueOnce({ data: { accounts: [] } });
-    const accounts = selectCapturingWhere([]);
 
     await snapshotAllPlaidBalances(TODAY);
 
-    expect(accounts.params()).toEqual([ITEM_A]);
+    expect(mockDb.selected(financialAccount)).toEqual([[ITEM_A]]);
   });
 
   it("defaults the snapshot day to today (UTC)", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-03T10:00:00.000Z") });
     try {
-      selectReturns([item(ITEM_A)]);
+      itemsAre([item(ITEM_A)]);
       mockPlaid.accountsGet.mockResolvedValueOnce({ data: { accounts: [plaidAccount("p_chk", 1)] } });
-      selectReturns([{ id: "fa-chk", plaidAccountId: "p_chk" }]);
+      linkedAccounts([{ id: "fa-chk", plaidAccountId: "p_chk" }]);
 
       await snapshotAllPlaidBalances();
 

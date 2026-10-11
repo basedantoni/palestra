@@ -15,45 +15,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockRecalcPO, mockRecalcMGV } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockRecalcPO, mockRecalcMGV } = vi.hoisted(() => ({
+  mockRecalcPO: vi.fn(),
+  mockRecalcMGV: vi.fn(),
+}));
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    execute: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockRecalcPO = vi.fn();
-  const mockRecalcMGV = vi.fn();
-
-  return { mockDb, makeChain, mockRecalcPO, mockRecalcMGV };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/progressive-overload-db", () => ({
   recalculateProgressiveOverload: mockRecalcPO,
 }));
@@ -68,13 +35,14 @@ import {
   enqueueRecalcs,
 } from "../lib/recalc-queue";
 import { getInFlightPromises } from "../lib/whoop-inflight";
+import { recalcJob } from "@life-tracker/db/schema/index";
+import { type MockDbOp, mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Test harness — captured insert rows + update set() payloads
+// Test harness — inserted job rows + update set() payloads, from the mocked db
 // ────────────────────────────────────────────────────────────────────────────
-let capturedInsertRows: any[];
-let updateSets: any[];
-let claimResolve: { rowCount: number };
+const insertedJobs = () => mockDb.inserted(recalcJob) as any[];
+const updateSets = () => mockDb.updated(recalcJob).map((u) => u.set as any);
 
 async function flushInFlight() {
   await Promise.allSettled(getInFlightPromises());
@@ -82,30 +50,17 @@ async function flushInFlight() {
   await Promise.resolve();
 }
 
+/** The next dispatch's atomic claim; later updates (done/failed) ignore rowCount. */
+function claimResult(rowCount: number) {
+  mockDb.onUpdate(recalcJob, { rowCount });
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  capturedInsertRows = [];
-  updateSets = [];
-  claimResolve = { rowCount: 1 };
-
-  mockDb.insert.mockImplementation(() => ({
-    values: (rows: any[]) => {
-      capturedInsertRows = rows;
-      return {
-        returning: () =>
-          Promise.resolve(rows.map((r, i) => ({ ...r, id: `job-${i}` }))),
-      };
-    },
-  }));
-
-  mockDb.update.mockImplementation(() => ({
-    set: (vals: any) => {
-      updateSets.push(vals);
-      // First update per dispatch is the atomic claim (its rowCount decides
-      // whether work proceeds); later updates (done/failed) ignore rowCount.
-      return makeChain(claimResolve);
-    },
-  }));
+  // `.returning()` echoes the inserted jobs back with ids.
+  mockDb.onInsert(recalcJob, (op: MockDbOp) =>
+    (op.arg("values") as any[]).map((r, i) => ({ ...r, id: `job-${i}` })),
+  );
 
   mockRecalcPO.mockResolvedValue(undefined);
   mockRecalcMGV.mockResolvedValue(undefined);
@@ -122,20 +77,20 @@ describe("enqueueRecalcs", () => {
       weekDates: [new Date("2025-01-08T12:00:00.000Z")],
     });
 
-    expect(capturedInsertRows).toHaveLength(2);
-    expect(capturedInsertRows.map((r) => r.kind).sort()).toEqual([
+    expect(insertedJobs()).toHaveLength(2);
+    expect(insertedJobs().map((r) => r.kind).sort()).toEqual([
       "muscle_group_volume",
       "progressive_overload",
     ]);
 
-    const po = capturedInsertRows.find(
+    const po = insertedJobs().find(
       (r) => r.kind === "progressive_overload",
     );
     expect(po.userId).toBe("user-1");
     // dedups exercise ids
     expect(po.payload).toEqual({ exerciseIds: ["ex-1", "ex-2"] });
 
-    const mgv = capturedInsertRows.find(
+    const mgv = insertedJobs().find(
       (r) => r.kind === "muscle_group_volume",
     );
     expect(mgv.payload).toEqual({
@@ -154,8 +109,8 @@ describe("enqueueRecalcs", () => {
       ],
     });
 
-    expect(capturedInsertRows).toHaveLength(1);
-    expect(capturedInsertRows[0].kind).toBe("muscle_group_volume");
+    expect(insertedJobs()).toHaveLength(1);
+    expect(insertedJobs()[0].kind).toBe("muscle_group_volume");
 
     await flushInFlight();
   });
@@ -167,7 +122,7 @@ describe("enqueueRecalcs", () => {
 
 describe("dispatchRecalcJob", () => {
   it("3. success — claims, runs recalc, marks done", async () => {
-    claimResolve = { rowCount: 1 };
+    claimResult(1);
 
     await dispatchRecalcJob({
       id: "job-x",
@@ -177,13 +132,13 @@ describe("dispatchRecalcJob", () => {
     });
 
     expect(mockRecalcPO).toHaveBeenCalledWith("u1", ["e1"]);
-    expect(updateSets[0]).toMatchObject({ status: "processing" });
-    expect(updateSets[1]).toMatchObject({ status: "done" });
-    expect(updateSets[1].processedAt).toBeInstanceOf(Date);
+    expect(updateSets()[0]).toMatchObject({ status: "processing" });
+    expect(updateSets()[1]).toMatchObject({ status: "done" });
+    expect(updateSets()[1].processedAt).toBeInstanceOf(Date);
   });
 
   it("4. failure — recalc throws → marks failed, resolves without rejection", async () => {
-    claimResolve = { rowCount: 1 };
+    claimResult(1);
     mockRecalcMGV.mockRejectedValue(new Error("boom"));
 
     await expect(
@@ -195,7 +150,7 @@ describe("dispatchRecalcJob", () => {
       }),
     ).resolves.toBeUndefined();
 
-    const failed = updateSets.find((s) => s.status === "failed");
+    const failed = updateSets().find((s) => s.status === "failed");
     expect(failed).toMatchObject({
       status: "failed",
       errorMessage: "boom",
@@ -204,7 +159,7 @@ describe("dispatchRecalcJob", () => {
   });
 
   it("5. claim race — claim loses (rowCount 0) → no recalc, no done/failed write", async () => {
-    claimResolve = { rowCount: 0 };
+    claimResult(0);
 
     await dispatchRecalcJob({
       id: "job-z",
@@ -215,8 +170,8 @@ describe("dispatchRecalcJob", () => {
 
     expect(mockRecalcPO).not.toHaveBeenCalled();
     // only the claim attempt — no terminal status write
-    expect(updateSets).toHaveLength(1);
-    expect(updateSets[0]).toMatchObject({ status: "processing" });
+    expect(updateSets()).toHaveLength(1);
+    expect(updateSets()[0]).toMatchObject({ status: "processing" });
   });
 });
 
@@ -226,7 +181,7 @@ describe("dispatchRecalcJob", () => {
 
 describe("drainPendingRecalcJobs", () => {
   it("6. dispatches CTE-claimed rows and marks them done", async () => {
-    mockDb.execute.mockResolvedValue({
+    mockDb.onExecute({
       rows: [
         {
           id: "j1",
@@ -255,7 +210,7 @@ describe("drainPendingRecalcJobs", () => {
     );
     expect(mockRecalcPO).toHaveBeenCalledWith("u2", ["ex-9"]);
     // rows already claimed by the CTE → drain only writes terminal status
-    expect(updateSets.filter((s) => s.status === "done")).toHaveLength(2);
-    expect(updateSets.some((s) => s.status === "processing")).toBe(false);
+    expect(updateSets().filter((s) => s.status === "done")).toHaveLength(2);
+    expect(updateSets().some((s) => s.status === "processing")).toBe(false);
   });
 });

@@ -7,7 +7,7 @@
   ],
   "type": "module",
   "scripts": {
-    "lint": "oxlint . --max-warnings 75",
+    "lint": "oxlint . --max-warnings 49",
     "lint:fix": "oxlint --fix .",
     "dev": "turbo dev",
     "build": "turbo build",

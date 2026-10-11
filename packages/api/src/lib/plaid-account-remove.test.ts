@@ -1,24 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, makeChain, mockItemRemove } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockItemRemove } = vi.hoisted(() => ({ mockItemRemove: vi.fn() }));
 
-  const mockDb = { select: vi.fn(), delete: vi.fn() };
-  return { mockDb, makeChain, mockItemRemove: vi.fn() };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("../__tests__/helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("@life-tracker/env/server", () => ({ env: { PLAID_ENV: "sandbox" } }));
 vi.mock("@life-tracker/db/schema/index", () => ({
   financialAccount: { _: "financialAccount" },
@@ -32,6 +16,7 @@ vi.mock("./plaid-client", () => ({
 }));
 
 import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
+import { mockDb } from "../__tests__/helpers/mock-db";
 import {
   isPlaidItemGoneError,
   removeFinancialAccount,
@@ -48,45 +33,47 @@ function plaidError(code: string) {
   return Object.assign(new Error(code), { response: { data: { error_code: code } } });
 }
 
-/** Queue the results of successive db.select() calls. */
-function selects(...results: unknown[][]) {
-  for (const r of results) mockDb.select.mockReturnValueOnce(makeChain(r));
+/** removeFinancialAccount's reads: the account, its siblings, then the item's token row. */
+function accountReads(account: unknown[], siblings: unknown[] = [], tokenRow: unknown[] = []) {
+  mockDb.onSelect(financialAccount, account, siblings);
+  mockDb.onSelect(plaidItem, tokenRow);
 }
 
-let deletedTables: unknown[];
+/** removePlaidItem's reads: the owned item, then its token row. */
+function itemReads(owned: unknown[], tokenRow: unknown[] = []) {
+  mockDb.onSelect(plaidItem, owned, tokenRow);
+}
+
+/** Tables deleted from, in order. */
+const deletedTables = () => mockDb.opsOf("delete").map((op) => op.table);
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
-  deletedTables = [];
-  mockDb.delete.mockImplementation((table: unknown) => {
-    deletedTables.push(table);
-    return makeChain();
-  });
 });
 
 describe("removeFinancialAccount", () => {
   it("returns removed:false and touches nothing when the account isn't the user's", async () => {
-    selects([]);
+    accountReads([]);
 
     await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({ removed: false });
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(deletedTables()).toEqual([]);
     expect(mockItemRemove).not.toHaveBeenCalled();
   });
 
   it("deletes only the account when the item has other accounts", async () => {
-    selects([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }, { id: "other" }]);
+    accountReads([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }, { id: "other" }]);
 
     await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
       removed: true,
       itemRemoved: false,
     });
     expect(mockItemRemove).not.toHaveBeenCalled();
-    expect(deletedTables).toEqual([financialAccount]);
+    expect(deletedTables()).toEqual([financialAccount]);
   });
 
   it("revokes and deletes the item when removing its last account", async () => {
-    selects([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
+    accountReads([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
     mockItemRemove.mockResolvedValueOnce({});
 
     await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
@@ -94,46 +81,46 @@ describe("removeFinancialAccount", () => {
       itemRemoved: true,
     });
     expect(mockItemRemove).toHaveBeenCalledWith({ access_token: "access-token" });
-    expect(deletedTables).toEqual([plaidItem]);
+    expect(deletedTables()).toEqual([plaidItem]);
   });
 
   it("still deletes the item when Plaid reports it already gone", async () => {
-    selects([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
+    accountReads([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
     mockItemRemove.mockRejectedValueOnce(plaidError("ITEM_NOT_FOUND"));
 
     await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
       removed: true,
       itemRemoved: true,
     });
-    expect(deletedTables).toEqual([plaidItem]);
+    expect(deletedTables()).toEqual([plaidItem]);
   });
 
   it("keeps the item (and its token) when Plaid revoke fails, deleting only the account", async () => {
-    selects([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
+    accountReads([{ id: ACCOUNT, plaidItemId: ITEM }], [{ id: ACCOUNT }], [TOKEN_ROW]);
     mockItemRemove.mockRejectedValueOnce(plaidError("INTERNAL_SERVER_ERROR"));
 
     await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
       removed: true,
       itemRemoved: false,
     });
-    expect(deletedTables).toEqual([financialAccount]);
+    expect(deletedTables()).toEqual([financialAccount]);
   });
 });
 
 describe("removePlaidItem", () => {
   it("returns notFound and touches nothing for an item the user doesn't own", async () => {
-    selects([]);
+    itemReads([]);
 
     await expect(removePlaidItem(USER, ITEM, true)).resolves.toEqual({
       removed: false,
       notFound: true,
     });
     expect(mockItemRemove).not.toHaveBeenCalled();
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(deletedTables()).toEqual([]);
   });
 
   it("revokes at Plaid, then deletes the item", async () => {
-    selects([{ id: ITEM }], [TOKEN_ROW]);
+    itemReads([{ id: ITEM }], [TOKEN_ROW]);
     mockItemRemove.mockResolvedValueOnce({});
 
     await expect(removePlaidItem(USER, ITEM, false)).resolves.toEqual({
@@ -141,44 +128,44 @@ describe("removePlaidItem", () => {
       revoked: true,
     });
     expect(mockItemRemove).toHaveBeenCalledWith({ access_token: "access-token" });
-    expect(deletedTables).toEqual([plaidItem]);
+    expect(deletedTables()).toEqual([plaidItem]);
   });
 
   it("deletes the item when Plaid reports it already gone", async () => {
-    selects([{ id: ITEM }], [TOKEN_ROW]);
+    itemReads([{ id: ITEM }], [TOKEN_ROW]);
     mockItemRemove.mockRejectedValueOnce(plaidError("ITEM_NOT_FOUND"));
 
     await expect(removePlaidItem(USER, ITEM, false)).resolves.toEqual({
       removed: true,
       revoked: true,
     });
-    expect(deletedTables).toEqual([plaidItem]);
+    expect(deletedTables()).toEqual([plaidItem]);
   });
 
   it("keeps the item and returns the error when revoke fails without force", async () => {
-    selects([{ id: ITEM }], [TOKEN_ROW]);
+    itemReads([{ id: ITEM }], [TOKEN_ROW]);
     mockItemRemove.mockRejectedValueOnce(plaidError("INVALID_ACCESS_TOKEN"));
 
     const result = await removePlaidItem(USER, ITEM, false);
 
     expect(result).toMatchObject({ removed: false, notFound: false });
     expect(result).toHaveProperty("error", expect.stringContaining("INVALID_ACCESS_TOKEN"));
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(deletedTables()).toEqual([]);
   });
 
   it("deletes the item anyway when revoke fails with force", async () => {
-    selects([{ id: ITEM }], [TOKEN_ROW]);
+    itemReads([{ id: ITEM }], [TOKEN_ROW]);
     mockItemRemove.mockRejectedValueOnce(plaidError("INVALID_ACCESS_TOKEN"));
 
     await expect(removePlaidItem(USER, ITEM, true)).resolves.toEqual({
       removed: true,
       revoked: false,
     });
-    expect(deletedTables).toEqual([plaidItem]);
+    expect(deletedTables()).toEqual([plaidItem]);
   });
 
   it("never sends a foreign-environment token to Plaid", async () => {
-    selects([{ id: ITEM }], [{ ...TOKEN_ROW, plaidEnv: "production" }]);
+    itemReads([{ id: ITEM }], [{ ...TOKEN_ROW, plaidEnv: "production" }]);
 
     await expect(removePlaidItem(USER, ITEM, false)).resolves.toEqual({
       removed: false,
@@ -186,7 +173,7 @@ describe("removePlaidItem", () => {
       error: "Linked in production — switch PLAID_ENV to manage",
     });
     expect(mockItemRemove).not.toHaveBeenCalled();
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(deletedTables()).toEqual([]);
   });
 });
 

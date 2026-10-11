@@ -57,6 +57,10 @@ Before you write QA steps for the user, run the app and check the change yoursel
 
 Vitest. Co-located `*.test.ts` in `packages/api/src/lib/` (and `src/__tests__/` for cross-cutting suites like auth). Setup in `packages/api/.../setup.ts` seeds test env (e.g. `ADMIN_EMAILS`). Prefer testing pure lib functions over routers; run single files while iterating, full `pnpm test` before done.
 
+Mock the database with `packages/api/src/__tests__/helpers/mock-db.ts`: queue results per table (`mockDb.onSelect(categoryRule, rows)`) and assert writes per table (`mockDb.inserted(table)`, `updated`, `deleted`). Don't hand-roll a `makeChain` or queue `db.select` results by call order; an added query then breaks unrelated tests. Order still matters within one table (successive selects from it take its queue in turn), and an unqueued table answers `[]`.
+
+When a test needs real Postgres behaviour (constraints, indexes, cascades, SQL that a mock can only assume), use the PGlite harness in `packages/api/src/__tests__/helpers/pglite.ts`: an in-process database per test file with every migration applied, no Docker. See `category-rules-db.test.ts`.
+
 ## Deploy
 
 Server deploys to Fly.io (`fly.toml`, app `palestra`, region `dfw`, internal port 3000) from the root `Dockerfile`. Release runs `scripts/fly-release.sh` (DB migration step). `NODE_ENV=production` and `PORT=3000` set in `fly.toml`.
