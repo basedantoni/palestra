@@ -117,6 +117,7 @@ export function CategoryList() {
           Add
         </Button>
       </form>
+      {create.error && <p className="text-xs text-destructive">{create.error.message}</p>}
       <p className="text-xs text-muted-foreground">
         Built-in categories come from your bank's data and are matched by name during sync, so they can't be renamed or deleted.
       </p>

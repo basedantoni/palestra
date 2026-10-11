@@ -250,6 +250,23 @@ describe("categories rename/delete", () => {
     expect(updates).toEqual([{ set: { name: "Bouldering" }, where: [FUN, USER_ID] }]);
   });
 
+  // Uncategorized means no category; a real category of that name would be a second one (KOI-301).
+  it("refuses to create a category named Uncategorized, in any case", async () => {
+    await expect(makeCaller().categories.create({ name: " uncategorized " })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: '"Uncategorized" is reserved for transactions with no category',
+    });
+    expect(inserted).toEqual([]);
+  });
+
+  it("refuses to rename a category to Uncategorized", async () => {
+    // Rejected by the reserved-name check before any query: queue no select.
+    await expect(makeCaller().categories.rename({ id: FUN, name: "Uncategorized" })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+    expect(updates).toEqual([]);
+  });
+
   it("refuses to delete a built-in category", async () => {
     selectReturning([BUILT_IN]);
 

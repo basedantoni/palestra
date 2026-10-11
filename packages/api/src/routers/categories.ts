@@ -8,6 +8,7 @@ import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { UNCATEGORIZED } from "../lib/category-spend";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -29,6 +30,22 @@ async function ownedCustomCategory(conn: Db | Tx, userId: string, id: string): P
   }
 }
 
+const categoryName = z.string().trim().min(1).max(60);
+
+/**
+ * "Uncategorized" means no category, so a real category of that name would
+ * show up as a second Uncategorized (KOI-301). A plain TRPCError, not a zod
+ * refine, so the client gets a readable message.
+ */
+function assertNameNotReserved(name: string): void {
+  if (name.toLowerCase() === UNCATEGORIZED.toLowerCase()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `"${UNCATEGORIZED}" is reserved for transactions with no category`,
+    });
+  }
+}
+
 export const categoriesRouter = router({
   /** The user's categories, with how many transactions each holds. */
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -47,8 +64,9 @@ export const categoriesRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().min(1).max(60) }))
+    .input(z.object({ name: categoryName }))
     .mutation(async ({ ctx, input }) => {
+      assertNameNotReserved(input.name);
       const id = randomUUID();
       await db
         .insert(category)
@@ -59,8 +77,9 @@ export const categoriesRouter = router({
 
   /** Rename a custom category. Built-ins are locked (see `ownedCustomCategory`). */
   rename: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), name: z.string().trim().min(1).max(60) }))
+    .input(z.object({ id: z.string().uuid(), name: categoryName }))
     .mutation(async ({ ctx, input }) => {
+      assertNameNotReserved(input.name);
       const userId = ctx.session.user.id;
       await ownedCustomCategory(db, userId, input.id);
       await db

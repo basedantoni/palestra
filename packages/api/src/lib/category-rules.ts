@@ -5,12 +5,16 @@
  */
 import { categoryNameForPfc } from "./category-seed";
 
-/** The Default Category: the user's seeded category for the Plaid primary category. */
+/**
+ * The Default Category: the user's seeded category for the Plaid primary
+ * category, or null (Uncategorized) when the primary can't be mapped.
+ */
 export function defaultCategoryId(
   plaidCategoryPrimary: string | null | undefined,
   categoryByName: ReadonlyMap<string, string>,
 ): string | null {
-  return categoryByName.get(categoryNameForPfc(plaidCategoryPrimary)) ?? null;
+  const name = categoryNameForPfc(plaidCategoryPrimary);
+  return name === null ? null : (categoryByName.get(name) ?? null);
 }
 
 /**
