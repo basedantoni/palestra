@@ -7,6 +7,8 @@
  * - deleting a category cascades to its rules, while its transactions become
  *   Uncategorized (or move to the target category first)
  */
+import { randomUUID } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
@@ -16,7 +18,7 @@ import { category, categoryRule, transaction } from "@life-tracker/db/schema/ind
 import { eq } from "drizzle-orm";
 
 import { appRouter } from "../routers/index";
-import { seedFinanceUser, truncateAll } from "./helpers/pglite";
+import { PG_UNIQUE_VIOLATION, seedFinanceUser, truncateAll } from "./helpers/pglite";
 
 const USER = "user-pglite-rules";
 const OTHER_USER = "user-pglite-other";
@@ -33,6 +35,9 @@ async function pgErrorCode(promise: Promise<unknown>): Promise<string | undefine
   }
 }
 
+const insertRule = (userId: string, pattern: string, categoryId: string) =>
+  db.insert(categoryRule).values({ id: randomUUID(), userId, pattern, categoryId });
+
 beforeEach(async () => {
   await truncateAll(db);
 });
@@ -40,25 +45,16 @@ beforeEach(async () => {
 describe("category_rule unique index (user_id, lower(pattern))", () => {
   it("rejects a second rule whose pattern differs only in case", async () => {
     const { categoryId } = await seedFinanceUser(db, USER);
-    await db.insert(categoryRule).values({ id: crypto.randomUUID(), userId: USER, pattern: "Starbucks", categoryId });
+    await insertRule(USER, "Starbucks", categoryId);
 
-    const duplicate = db
-      .insert(categoryRule)
-      .values({ id: crypto.randomUUID(), userId: USER, pattern: "STARBUCKS", categoryId });
-
-    expect(await pgErrorCode(duplicate)).toBe("23505"); // unique_violation
+    expect(await pgErrorCode(insertRule(USER, "STARBUCKS", categoryId))).toBe(PG_UNIQUE_VIOLATION);
   });
 
   it("allows the same pattern for a different user", async () => {
     const mine = await seedFinanceUser(db, USER);
     const theirs = await seedFinanceUser(db, OTHER_USER);
-    await db
-      .insert(categoryRule)
-      .values({ id: crypto.randomUUID(), userId: USER, pattern: "starbucks", categoryId: mine.categoryId });
-
-    await db
-      .insert(categoryRule)
-      .values({ id: crypto.randomUUID(), userId: OTHER_USER, pattern: "starbucks", categoryId: theirs.categoryId });
+    await insertRule(USER, "starbucks", mine.categoryId);
+    await insertRule(OTHER_USER, "starbucks", theirs.categoryId);
 
     expect(await db.select().from(categoryRule)).toHaveLength(2);
   });
@@ -67,7 +63,7 @@ describe("category_rule unique index (user_id, lower(pattern))", () => {
 describe("categories.remove", () => {
   it("deletes the category's rules and leaves its transactions Uncategorized", async () => {
     const { categoryId, transactionId } = await seedFinanceUser(db, USER);
-    await db.insert(categoryRule).values({ id: crypto.randomUUID(), userId: USER, pattern: "climb", categoryId });
+    await insertRule(USER, "climb", categoryId);
 
     await makeCaller().categories.remove({ id: categoryId });
 
@@ -79,9 +75,9 @@ describe("categories.remove", () => {
 
   it("moves transactions to the target, but the deleted category's rules still go", async () => {
     const { categoryId, transactionId } = await seedFinanceUser(db, USER);
-    const targetId = crypto.randomUUID();
+    const targetId = randomUUID();
     await db.insert(category).values({ id: targetId, userId: USER, name: "Bouldering" });
-    await db.insert(categoryRule).values({ id: crypto.randomUUID(), userId: USER, pattern: "climb", categoryId });
+    await insertRule(USER, "climb", categoryId);
 
     await makeCaller().categories.remove({ id: categoryId, moveToCategoryId: targetId });
 

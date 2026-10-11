@@ -9,22 +9,25 @@
  *   import { db } from "@life-tracker/db";
  *
  * Call `truncateAll(db)` in `beforeEach` to isolate tests within the file.
+ * Reference data from `db:seed` (exercises, templates) is not loaded: seed what
+ * a test needs.
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pglite";
 
+import { MIGRATIONS_DIR } from "@life-tracker/db/migrations-dir";
 import * as schema from "@life-tracker/db/schema/index";
 
 type TestDb = PgDatabase<PgQueryResultHKT, typeof schema>;
 
-const MIGRATIONS = fileURLToPath(new URL("../../../../db/src/migrations", import.meta.url));
+/** Postgres SQLSTATE for a unique-constraint violation. */
+export const PG_UNIQUE_VIOLATION = "23505";
 
 /**
  * Apply every migration in journal order. Not drizzle's pglite migrator: that
@@ -33,11 +36,11 @@ const MIGRATIONS = fileURLToPath(new URL("../../../../db/src/migrations", import
  * real deploy uses). `exec` runs them through the simple query protocol.
  */
 async function applyMigrations(client: PGlite): Promise<void> {
-  const journal = JSON.parse(readFileSync(join(MIGRATIONS, "meta/_journal.json"), "utf8")) as {
+  const journal = JSON.parse(readFileSync(join(MIGRATIONS_DIR, "meta/_journal.json"), "utf8")) as {
     entries: Array<{ tag: string }>;
   };
   for (const { tag } of journal.entries) {
-    await client.exec(readFileSync(join(MIGRATIONS, `${tag}.sql`), "utf8"));
+    await client.exec(readFileSync(join(MIGRATIONS_DIR, `${tag}.sql`), "utf8"));
   }
 }
 
@@ -97,5 +100,5 @@ export async function seedFinanceUser(db: TestDb, userId: string) {
     categoryId,
   });
 
-  return { plaidItemId, accountId, categoryId, transactionId };
+  return { categoryId, transactionId };
 }
