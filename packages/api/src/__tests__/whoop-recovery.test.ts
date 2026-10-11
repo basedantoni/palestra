@@ -18,50 +18,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before any imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockGetValidToken } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") {
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          }
-          if (prop === "catch") {
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          }
-          if (prop === "finally") {
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          }
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockGetValidToken } = vi.hoisted(() => ({
+  mockGetValidToken: vi.fn().mockResolvedValue("mock-access-token"),
+}));
 
-  const mockTx = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-    transaction: vi.fn(),
-    query: {},
-  };
-
-  const mockGetValidToken = vi.fn().mockResolvedValue("mock-access-token");
-
-  return { mockDb, mockTx, makeChain, mockGetValidToken };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -88,6 +49,8 @@ import {
   recoveryDeleteProcessor,
 } from "../lib/whoop-webhook";
 import { appRouter } from "../routers/index";
+import { whoopConnection, whoopRecovery, whoopWebhookEvent } from "@life-tracker/db/schema/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test constants
@@ -145,19 +108,16 @@ function mockFetch(responseBody: unknown, ok = true, status = 200) {
   } as unknown as Response);
 }
 
-function mockDbUpdate() {
-  mockDb.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    }),
-  });
+function mockAutoImportCheck(enabled: boolean) {
+  mockDb.onSelect(whoopConnection, [{ autoImportEnabled: enabled }]);
 }
 
-function mockAutoImportCheck(enabled: boolean) {
-  mockDb.select.mockReturnValueOnce(
-    makeChain([{ autoImportEnabled: enabled }]),
-  );
-}
+/** The .set() payload of each webhook-event status update. */
+const eventUpdates = () =>
+  mockDb.updated(whoopWebhookEvent).map((u) => u.set as Record<string, unknown>);
+
+/** The upserted whoop_recovery rows. */
+const upsertedValues = () => mockDb.inserted(whoopRecovery) as Array<Record<string, unknown>>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests: recoveryProcessor
@@ -166,22 +126,12 @@ function mockAutoImportCheck(enabled: boolean) {
 describe("recoveryProcessor — new recovery record (recovery.created)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("1. creates new whoop_recovery row with correct fields from Whoop API response", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_RECOVERY);
 
-    const upsertedValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        upsertedValues.push(val as Record<string, unknown>);
-        return {
-          onConflictDoUpdate: vi.fn().mockResolvedValue([]),
-        };
-      }),
-    }));
 
     await recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
@@ -193,8 +143,8 @@ describe("recoveryProcessor — new recovery record (recovery.created)", () => {
     );
 
     // Insert/upsert was called
-    expect(mockDb.insert).toHaveBeenCalledOnce();
-    const row = upsertedValues[0]!;
+    expect(upsertedValues()).toHaveLength(1);
+    const row = upsertedValues()[0]!;
 
     // Core fields
     expect(row.userId).toBe(USER_ID);
@@ -215,67 +165,44 @@ describe("recoveryProcessor — new recovery record (recovery.created)", () => {
     expect(row.updatedAt).toBeInstanceOf(Date);
 
     // Event marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(eventUpdates()).toContainEqual(expect.objectContaining({ status: "processed" }));
   });
 });
 
 describe("recoveryProcessor — update existing row (recovery.updated)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("2. updates existing row in place — no duplicate created", async () => {
     mockAutoImportCheck(true);
     mockFetch(SCORED_RECOVERY_UPDATED);
 
-    let onConflictDoUpdateCalled = false;
-    const upsertedValues: Array<Record<string, unknown>> = [];
-
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        upsertedValues.push(val as Record<string, unknown>);
-        return {
-          onConflictDoUpdate: vi.fn(() => {
-            onConflictDoUpdateCalled = true;
-            return Promise.resolve([]);
-          }),
-        };
-      }),
-    }));
 
     await recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
     // Single insert with onConflictDoUpdate (upsert — no duplicate)
-    expect(mockDb.insert).toHaveBeenCalledOnce();
-    expect(onConflictDoUpdateCalled).toBe(true);
+    expect(upsertedValues()).toHaveLength(1);
+    expect(mockDb.opsOn(whoopRecovery)[0]!.arg("onConflictDoUpdate")).toBeDefined();
 
     // Verify upserted value has updated score
-    const row = upsertedValues[0]!;
+    const row = upsertedValues()[0]!;
     expect(row.recoveryScore).toBe(85);
     expect(row.hrv).toBeCloseTo(75.2);
 
     // Event marked processed
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(eventUpdates()).toContainEqual(expect.objectContaining({ status: "processed" }));
   });
 });
 
 describe("recoveryProcessor — autoImportEnabled = false", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("5. marks event skipped without fetching from Whoop when autoImport is disabled", async () => {
     mockAutoImportCheck(false);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
@@ -284,10 +211,10 @@ describe("recoveryProcessor — autoImportEnabled = false", () => {
     expect(global.fetch).not.toHaveBeenCalled();
 
     // No DB insert
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.insert).not.toHaveBeenCalled();
 
     // Event marked skipped
-    const skippedUpdate = capturedUpdateSets.find(
+    const skippedUpdate = eventUpdates().find(
       (s) => s.status === "skipped",
     );
     expect(skippedUpdate).toBeDefined();
@@ -297,26 +224,16 @@ describe("recoveryProcessor — autoImportEnabled = false", () => {
 describe("recoveryProcessor — calibrating flag", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("stores userCalibrating = true when Whoop returns calibrating flag", async () => {
     mockAutoImportCheck(true);
     mockFetch(CALIBRATING_RECOVERY);
 
-    const upsertedValues: Array<Record<string, unknown>> = [];
-    mockDb.insert.mockImplementation(() => ({
-      values: vi.fn((val: unknown) => {
-        upsertedValues.push(val as Record<string, unknown>);
-        return {
-          onConflictDoUpdate: vi.fn().mockResolvedValue([]),
-        };
-      }),
-    }));
 
     await recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
-    const row = upsertedValues[0]!;
+    const row = upsertedValues()[0]!;
     expect(row.userCalibrating).toBe(true);
   });
 });
@@ -330,19 +247,12 @@ describe("recoveryProcessor — error handling", () => {
     mockAutoImportCheck(true);
     global.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await expect(
       recoveryProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID),
     ).resolves.not.toThrow();
 
-    const failedUpdate = capturedUpdateSets.find((s) => s.status === "failed");
+    const failedUpdate = eventUpdates().find((s) => s.status === "failed");
     expect(failedUpdate).toBeDefined();
     expect(typeof failedUpdate!.errorMessage).toBe("string");
   });
@@ -355,55 +265,36 @@ describe("recoveryProcessor — error handling", () => {
 describe("recoveryDeleteProcessor", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("3. deletes whoop_recovery row when found and marks event processed", async () => {
     // recovery row found
-    mockDb.select.mockReturnValueOnce(makeChain([{ id: "recovery-row-abc" }]));
+    mockDb.onSelect(whoopRecovery, [{ id: "recovery-row-abc" }]);
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
-    mockDb.delete.mockReturnValue({
-      where: vi.fn().mockResolvedValue([]),
-    });
 
     await recoveryDeleteProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
     // Delete was called
-    expect(mockDb.delete).toHaveBeenCalledOnce();
+    expect(mockDb.deleted(whoopRecovery)).toHaveLength(1);
 
     // Event marked processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = eventUpdates().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
   });
 
   it("4. marks event processed even when no recovery row found (idempotent)", async () => {
-    // recovery row NOT found
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    // recovery row NOT found: nothing queued
 
-    const capturedUpdateSets: Array<Record<string, unknown>> = [];
-    mockDb.update.mockImplementation(() => ({
-      set: vi.fn((val: unknown) => {
-        capturedUpdateSets.push(val as Record<string, unknown>);
-        return { where: vi.fn().mockResolvedValue([]) };
-      }),
-    }));
 
     await recoveryDeleteProcessor(EVENT_ID, USER_ID, WHOOP_CYCLE_ID);
 
     // Delete should NOT have been called
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(mockDb.deleted(whoopRecovery)).toEqual([]);
 
     // Still marks event processed
-    const processedUpdate = capturedUpdateSets.find(
+    const processedUpdate = eventUpdates().find(
       (s) => s.status === "processed",
     );
     expect(processedUpdate).toBeDefined();
@@ -462,15 +353,7 @@ describe("whoopRecovery.list", () => {
   });
 
   it("6a. returns rows ordered by createdAt desc with correct pagination shape", async () => {
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue([RECOVERY_ROW_1, RECOVERY_ROW_2]),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, [RECOVERY_ROW_1, RECOVERY_ROW_2]);
 
     const result = await userCaller.whoopRecovery.list({});
 
@@ -488,15 +371,7 @@ describe("whoopRecovery.list", () => {
       { ...RECOVERY_ROW_2, id: "recovery-row-3", whoopCycleId: "93843" },
     ];
 
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, rows);
 
     const result = await userCaller.whoopRecovery.list({ limit: 2 });
 
@@ -517,15 +392,7 @@ describe("whoopRecovery.list", () => {
       ),
     }));
 
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, rows);
 
     const result = await userCaller.whoopRecovery.list({});
 
@@ -546,15 +413,7 @@ describe("whoopRecovery.list", () => {
       ),
     }));
 
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, rows);
 
     const result = await userCaller.whoopRecovery.list({
       from: "2026-05-01",
@@ -572,15 +431,7 @@ describe("whoopRecovery.latest", () => {
   });
 
   it("7. returns the most recent recovery row", async () => {
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue([RECOVERY_ROW_1]),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, [RECOVERY_ROW_1]);
 
     const result = await userCaller.whoopRecovery.latest();
 
@@ -591,15 +442,7 @@ describe("whoopRecovery.latest", () => {
   });
 
   it("8. returns null when no recovery rows exist", async () => {
-    mockDb.select.mockReturnValueOnce({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue([]),
-          }),
-        }),
-      }),
-    });
+    mockDb.onSelect(whoopRecovery, []);
 
     const result = await userCaller.whoopRecovery.latest();
 
@@ -614,17 +457,13 @@ describe("whoopRecovery.latest", () => {
 describe("Cross-phase regression: workout.updated still imports (Phase 3 unchanged)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockDbUpdate();
   });
 
   it("9. signed workout.updated payload still triggers workout row creation", async () => {
     // autoImportEnabled = true
-    mockDb.select.mockReturnValueOnce(
-      makeChain([{ autoImportEnabled: true, notifyOnAutoImport: false }]),
-    );
+    mockDb.onSelect(whoopConnection, [{ autoImportEnabled: true, notifyOnAutoImport: false }]);
 
-    // No existing workout row
-    mockDb.select.mockReturnValueOnce(makeChain([]));
+    // No existing workout row: nothing queued
 
     // Mock Whoop activity API response
     const mockActivity = {
@@ -652,32 +491,13 @@ describe("Cross-phase regression: workout.updated still imports (Phase 3 unchang
 
     mockFetch(mockActivity);
 
-    // Transaction mock: insert workout + exercise log
-    let transactionCalled = false;
-    mockDb.transaction.mockImplementation(
-      async (fn: (tx: any) => Promise<void>) => {
-        transactionCalled = true;
-        const tx = {
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockResolvedValue([]),
-          }),
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue([]),
-            }),
-          }),
-        };
-        await fn(tx);
-      },
-    );
-
     // Import workoutProcessor
     const { workoutProcessor } = await import("../lib/whoop-webhook");
 
     await workoutProcessor("evt-regression-001", USER_ID, "act-regression-001");
 
     // Transaction was called (workout + exercise log created)
-    expect(transactionCalled).toBe(true);
+    expect(mockDb.db.transaction).toHaveBeenCalled();
 
     // Whoop API was fetched
     expect(global.fetch).toHaveBeenCalledWith(
