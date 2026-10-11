@@ -78,34 +78,40 @@ _Avoid_: Total balance, wealth
 
 ### TCG — cards
 
-The One Piece Card Game collection. Collected for artwork, not play or investment.
+The One Piece Card Game collection, Japanese and English mixed. Collected for artwork, not play or investment.
 
 **Card**:
-A game card identified by its card number (e.g. `OP05-069`) and character. Several artworks can share one card number.
+A game card identified by its card number (e.g. `OP05-069`) and character. Several Artworks can share one card number.
 _Avoid_: Using "card" for a physical card or a specific artwork
 
+**Artwork**:
+One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language.
+_Avoid_: Variant (as a noun), art, illustration
+
 **Printing**:
-One release of a Card: a specific artwork, artist, variant (base, parallel, manga, reprint), language, and set. Identified by Bandai's variant ID plus language (e.g. `OP05-069_p1`, Japanese).
-_Avoid_: Variant (as a noun), version, edition
+An Artwork released in one language (Japanese or English), with its set. What a seller sells and what a Copy is of.
+_Avoid_: Version, edition
 
 **Copy**:
-One physical card the user holds, of a known Printing and condition.
+One physical card the user holds, of a known Printing and condition. May exist without a Want (cards already owned, gifts, pack pulls).
 _Avoid_: Card, item, owned card
 
-**Want**:
-The user's intent to acquire one Copy of a specific Printing, bounded by a maximum delivered price and a minimum acceptable condition. It is open, ordered, fulfilled (a Copy arrived), or dropped.
-_Avoid_: Wishlist item, target
-
 **Art Rating**:
-The user's 0–5 judgement of a Printing's artwork. The only preference score the app keeps; buying rules stay the user's judgement.
+The user's 0–5 judgement of an Artwork, shared by all its Printings. The only preference score the app keeps; buying rules stay the user's judgement.
 _Avoid_: Score, preference score
 
 **Theme**:
-A user-defined tag grouping Printings across characters, such as D Clan. What a theme covers is decided when tagging, not by the app.
+A user-defined tag grouping Artworks across characters, such as D Clan. What a theme covers is decided when tagging, not by the app.
 _Avoid_: Category (finance owns that word), collection
 
+### TCG — buying
+
+**Want**:
+The user's intent to acquire one Copy of an Artwork in an accepted language (Japanese, English, or either), bounded by a maximum delivered price and a minimum acceptable condition. It is open, ordered, fulfilled (a Copy arrived), or dropped.
+_Avoid_: Wishlist item, target
+
 **Offer**:
-A seller's price for a Printing, as seen by the user on a given date, recorded against a Want. Its delivered price includes item, shipping, and tax as one amount. Offers go stale; the date seen is part of the fact.
+A seller's price for a specific Printing, as seen by the user on a given date, recorded against a Want. Its delivered price, in USD, includes item, shipping, and tax as one amount. Offers go stale; the date seen is part of the fact.
 _Avoid_: Listing, quote, price
 
 **Condition**:
