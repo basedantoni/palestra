@@ -22,40 +22,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockDb, makeChain, mockSync, mockVerify } = vi.hoisted(() => {
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then") return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          if (prop === "catch") return (err: any) => Promise.resolve(resolveWith).catch(err);
-          if (prop === "finally") return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          return () => proxy;
-        },
-      },
-    );
-    return proxy;
-  }
+const { mockSync, mockVerify } = vi.hoisted(() => ({ mockSync: vi.fn(), mockVerify: vi.fn() }));
 
-  const mockDb = {
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    select: vi.fn(),
-  };
-
-  return { mockDb, makeChain, mockSync: vi.fn(), mockVerify: vi.fn() };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/plaid-sync-db", () => ({ syncPlaidItem: mockSync }));
 vi.mock("../lib/plaid-webhook-verify", () => ({ verifyPlaidWebhook: mockVerify }));
 
 // Import after mocks are set up
 import { env } from "@life-tracker/env/server";
 import { otherPlaidEnv } from "../lib/plaid-env";
+import { plaidItem, plaidWebhookEvent } from "@life-tracker/db/schema/index";
 import { drainPendingPlaidEvents, plaidWebhookApp } from "../lib/plaid-webhook";
+import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -63,7 +41,9 @@ import { drainPendingPlaidEvents, plaidWebhookApp } from "../lib/plaid-webhook";
 const ITEM_ID = "item-sandbox-123";
 const ITEM_ROW_ID = "00000000-0000-4000-8000-0000000000aa";
 
-let updateSets: Array<Record<string, unknown>>;
+/** Every update's .set() payload, item status and event status alike, in order. */
+const updateSets = () =>
+  mockDb.ops.filter((op) => op.kind === "update").map((op) => op.arg("set") as Record<string, unknown>);
 
 async function post(body: unknown): Promise<Response> {
   return plaidWebhookApp.fetch(
@@ -75,13 +55,12 @@ async function post(body: unknown): Promise<Response> {
   );
 }
 
-/** Next db.select() resolves to a found plaid_item row (in the running PLAID_ENV by default). */
+/** The plaid_item lookup finds the row (in the running PLAID_ENV by default). */
 function itemFound(plaidEnv = env.PLAID_ENV) {
-  mockDb.select.mockReturnValueOnce(makeChain([{ id: ITEM_ROW_ID, plaidEnv }]));
+  mockDb.onSelect(plaidItem, [{ id: ITEM_ROW_ID, plaidEnv }]);
 }
-function itemNotFound() {
-  mockDb.select.mockReturnValueOnce(makeChain([]));
-}
+/** Nothing queued: the plaid_item lookup finds nothing. */
+function itemNotFound() {}
 
 /** Flush fire-and-forget processEvent continuations. */
 async function flush() {
@@ -91,15 +70,6 @@ async function flush() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  updateSets = [];
-  mockDb.insert.mockReturnValue(makeChain());
-  // Capture every .set() payload; .where() resolves.
-  mockDb.update.mockImplementation(() => ({
-    set: (val: Record<string, unknown>) => {
-      updateSets.push(val);
-      return { where: () => makeChain() };
-    },
-  }));
   mockSync.mockResolvedValue({ added: 1, modified: 0, removed: 0 });
   mockVerify.mockResolvedValue(true);
 });
@@ -116,7 +86,7 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
       item_id: ITEM_ID,
     });
     expect(res.status).toBe(200);
-    expect(mockDb.insert).toHaveBeenCalledOnce();
+    expect(mockDb.inserted(plaidWebhookEvent)).toHaveLength(1);
 
     await flush();
     expect(mockSync).toHaveBeenCalledOnce();
@@ -131,16 +101,16 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
       item_id: ITEM_ID,
     });
     expect(res.status).toBe(401);
-    expect(mockDb.select).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.select).not.toHaveBeenCalled();
+    expect(mockDb.inserted(plaidWebhookEvent)).toEqual([]);
     expect(mockSync).not.toHaveBeenCalled();
   });
 
   it("missing item_id → 400, nothing written", async () => {
     const res = await post({ webhook_type: "TRANSACTIONS", webhook_code: "SYNC_UPDATES_AVAILABLE" });
     expect(res.status).toBe(400);
-    expect(mockDb.select).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.db.select).not.toHaveBeenCalled();
+    expect(mockDb.inserted(plaidWebhookEvent)).toEqual([]);
     expect(mockSync).not.toHaveBeenCalled();
   });
 
@@ -152,7 +122,7 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
       item_id: "nope",
     });
     expect(res.status).toBe(200);
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.inserted(plaidWebhookEvent)).toEqual([]);
     await flush();
     expect(mockSync).not.toHaveBeenCalled();
   });
@@ -161,8 +131,8 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     itemFound();
     const res = await post({ webhook_type: "ITEM", webhook_code: "ERROR", item_id: ITEM_ID });
     expect(res.status).toBe(200);
-    expect(mockDb.insert).toHaveBeenCalledOnce();
-    expect(updateSets).toContainEqual({ status: "error" });
+    expect(mockDb.inserted(plaidWebhookEvent)).toHaveLength(1);
+    expect(updateSets()).toContainEqual({ status: "error" });
     await flush();
     expect(mockSync).not.toHaveBeenCalled();
   });
@@ -171,7 +141,7 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     itemFound();
     const res = await post({ webhook_type: "ITEM", webhook_code: "LOGIN_REPAIRED", item_id: ITEM_ID });
     expect(res.status).toBe(200);
-    expect(updateSets).toContainEqual({ status: "active" });
+    expect(updateSets()).toContainEqual({ status: "active" });
   });
 
   it("benign ITEM code (NEW_ACCOUNTS_AVAILABLE) → 200, does NOT change status", async () => {
@@ -183,8 +153,8 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     });
     expect(res.status).toBe(200);
     // Only the event-done update happens; the item's status is left untouched.
-    expect(updateSets).toHaveLength(1);
-    expect(updateSets[0]).toMatchObject({ status: "done" });
+    expect(updateSets()).toHaveLength(1);
+    expect(updateSets()[0]).toMatchObject({ status: "done" });
   });
 
   it("sync code on an item from another PLAID_ENV → 200, event skipped quietly, no sync", async () => {
@@ -198,7 +168,7 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
     expect(res.status).toBe(200);
     await flush();
     expect(mockSync).not.toHaveBeenCalled();
-    expect(updateSets).toEqual([
+    expect(updateSets()).toEqual([
       expect.objectContaining({
         status: "skipped",
         errorMessage: `Linked in ${otherPlaidEnv()} — switch PLAID_ENV to manage`,
@@ -215,7 +185,7 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
       item_id: ITEM_ID,
     });
     expect(res.status).toBe(200);
-    expect(mockDb.insert).toHaveBeenCalledOnce();
+    expect(mockDb.inserted(plaidWebhookEvent)).toHaveLength(1);
     await flush();
     expect(mockSync).not.toHaveBeenCalled();
   });
@@ -223,8 +193,8 @@ describe("POST /webhook — Plaid webhook endpoint", () => {
 
 describe("drainPendingPlaidEvents", () => {
   it("re-runs a pending event and triggers sync", async () => {
-    // 1st select: pending events; 2nd select: resolve item row for that event.
-    mockDb.select.mockReturnValueOnce(makeChain([{ id: "evt-1", itemId: ITEM_ID }]));
+    // The pending events, then the plaid_item row each one resolves to.
+    mockDb.onSelect(plaidWebhookEvent, [{ id: "evt-1", itemId: ITEM_ID }]);
     itemFound();
 
     await drainPendingPlaidEvents();
@@ -234,12 +204,12 @@ describe("drainPendingPlaidEvents", () => {
   });
 
   it("marks a pending event for a foreign-environment item skipped without syncing", async () => {
-    mockDb.select.mockReturnValueOnce(makeChain([{ id: "evt-1", itemId: ITEM_ID }]));
+    mockDb.onSelect(plaidWebhookEvent, [{ id: "evt-1", itemId: ITEM_ID }]);
     itemFound(otherPlaidEnv());
 
     await drainPendingPlaidEvents();
 
     expect(mockSync).not.toHaveBeenCalled();
-    expect(updateSets).toEqual([expect.objectContaining({ status: "skipped" })]);
+    expect(updateSets()).toEqual([expect.objectContaining({ status: "skipped" })]);
   });
 });

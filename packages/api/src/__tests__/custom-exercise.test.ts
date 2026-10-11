@@ -8,52 +8,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
-// Hoisted mocks — vi.hoisted runs before any module imports, making these
-// values available inside vi.mock factories AND in test bodies.
+// Mocks — the shared mocked db (helpers/mock-db) answers queries per table.
 // ---------------------------------------------------------------------------
-const { mockDb, mockTx, makeChain } = vi.hoisted(() => {
-  /**
-   * Creates a Drizzle-style chainable query builder.
-   * Any method call (from, where, set, returning, etc.) returns the same
-   * proxy, and the proxy itself is thenable — it resolves with `resolveWith`.
-   */
-  function makeChain(resolveWith: unknown = []) {
-    const proxy: any = new Proxy(
-      {},
-      {
-        get(_, prop: string) {
-          if (prop === "then")
-            return (ok: any) => Promise.resolve(resolveWith).then(ok);
-          if (prop === "catch")
-            return (err: any) => Promise.resolve(resolveWith).catch(err);
-          if (prop === "finally")
-            return (fin: any) => Promise.resolve(resolveWith).finally(fin);
-          return vi.fn(() => proxy);
-        },
-      },
-    );
-    return proxy;
-  }
-
-  // Separate tx mock so approve/reject tests can assert on tx.insert calls
-  const mockTx = {
-    update: vi.fn(),
-    insert: vi.fn(),
-    select: vi.fn(),
-  };
-
-  const mockDb = {
-    select: vi.fn(),
-    insert: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    transaction: vi.fn(),
-  };
-
-  return { mockDb, mockTx, makeChain };
-});
-
-vi.mock("@life-tracker/db", () => ({ db: mockDb }));
+vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
 vi.mock("@life-tracker/env/server", () => ({
   env: {
@@ -69,7 +26,10 @@ vi.mock("@life-tracker/env/server", () => ({
 // ---------------------------------------------------------------------------
 // Router import — after mocks are registered
 // ---------------------------------------------------------------------------
+import { exercise, notification } from "@life-tracker/db/schema/index";
+
 import { appRouter } from "../routers/index";
+import { mockDb } from "./helpers/mock-db";
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures
@@ -110,7 +70,6 @@ const unauthCaller = appRouter.createCaller({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockDb.transaction.mockImplementation(async (fn: any) => fn(mockTx));
 });
 
 // ---------------------------------------------------------------------------
@@ -129,7 +88,7 @@ describe("exercises.createCustom", () => {
       createdByUserId: USER_ID,
       createdAt: new Date(),
     };
-    mockDb.insert.mockReturnValue(makeChain([created]));
+    mockDb.onInsert(exercise, [created]);
 
     const result = await userCaller.exercises.createCustom({
       name: "Zercher Squat",
@@ -170,7 +129,7 @@ describe("exercises.myCustomExercises", () => {
         createdByUserId: USER_ID,
       },
     ];
-    mockDb.select.mockReturnValue(makeChain(exercises));
+    mockDb.onSelect(exercise, exercises);
 
     const result = await userCaller.exercises.myCustomExercises();
 
@@ -207,8 +166,7 @@ describe("admin.approveExercise", () => {
       approvedAt: new Date(),
       approvedByUserId: ADMIN_ID,
     };
-    mockTx.update.mockReturnValue(makeChain([approved]));
-    mockTx.insert.mockReturnValue(makeChain([]));
+    mockDb.onUpdate(exercise, [approved]);
 
     const result = await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
 
@@ -224,12 +182,11 @@ describe("admin.approveExercise", () => {
       status: "approved",
       createdByUserId: USER_ID, // has a submitter
     };
-    mockTx.update.mockReturnValue(makeChain([approved]));
-    mockTx.insert.mockReturnValue(makeChain([]));
+    mockDb.onUpdate(exercise, [approved]);
 
     await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
 
-    expect(mockTx.insert).toHaveBeenCalledTimes(1);
+    expect(mockDb.inserted(notification)).toHaveLength(1);
   });
 
   it("does not create a notification when exercise has no submitter", async () => {
@@ -240,15 +197,15 @@ describe("admin.approveExercise", () => {
       status: "approved",
       createdByUserId: null, // admin-seeded exercise, no user to notify
     };
-    mockTx.update.mockReturnValue(makeChain([approved]));
+    mockDb.onUpdate(exercise, [approved]);
 
     await adminCaller.admin.approveExercise({ id: EXERCISE_ID });
 
-    expect(mockTx.insert).not.toHaveBeenCalled();
+    expect(mockDb.inserted(notification)).toEqual([]);
   });
 
   it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
-    mockTx.update.mockReturnValue(makeChain([])); // 0 rows updated
+    // Nothing queued: the update returns no rows.
 
     await expect(
       adminCaller.admin.approveExercise({ id: EXERCISE_ID }),
@@ -274,7 +231,7 @@ describe("admin.rejectExercise", () => {
       status: "rejected",
       rejectedReason: "Duplicate of existing exercise",
     };
-    mockDb.update.mockReturnValue(makeChain([rejected]));
+    mockDb.onUpdate(exercise, [rejected]);
 
     const result = await adminCaller.admin.rejectExercise({
       id: EXERCISE_ID,
@@ -287,15 +244,14 @@ describe("admin.rejectExercise", () => {
 
   it("does not create a notification on rejection", async () => {
     const rejected = { id: EXERCISE_ID, isCustom: true, status: "rejected" };
-    mockDb.update.mockReturnValue(makeChain([rejected]));
+    mockDb.onUpdate(exercise, [rejected]);
 
     await adminCaller.admin.rejectExercise({ id: EXERCISE_ID });
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.inserted(notification)).toEqual([]);
   });
 
   it("throws NOT_FOUND when the exercise does not exist or is not pending", async () => {
-    mockDb.update.mockReturnValue(makeChain([]));
 
     await expect(
       adminCaller.admin.rejectExercise({ id: EXERCISE_ID }),
@@ -317,7 +273,7 @@ describe("notifications.list", () => {
         createdAt: new Date(),
       },
     ];
-    mockDb.select.mockReturnValue(makeChain(notifs));
+    mockDb.onSelect(notification, notifs);
 
     const result = await userCaller.notifications.list();
 
@@ -330,13 +286,13 @@ describe("notifications.list", () => {
 // ---------------------------------------------------------------------------
 describe("notifications.unreadCount", () => {
   it("returns the number of unread notifications", async () => {
-    mockDb.select.mockReturnValue(makeChain([{ count: 3 }]));
+    mockDb.onSelect(notification, [{ count: 3 }]);
 
     expect(await userCaller.notifications.unreadCount()).toBe(3);
   });
 
   it("returns 0 when there are no unread notifications", async () => {
-    mockDb.select.mockReturnValue(makeChain([])); // empty result → fallback to 0
+    // Nothing queued: empty result → fallback to 0.
 
     expect(await userCaller.notifications.unreadCount()).toBe(0);
   });
@@ -348,7 +304,7 @@ describe("notifications.unreadCount", () => {
 describe("notifications.markRead", () => {
   it("returns the notification with readAt populated", async () => {
     const updated = { id: NOTIF_ID, userId: USER_ID, readAt: new Date() };
-    mockDb.update.mockReturnValue(makeChain([updated]));
+    mockDb.onUpdate(notification, [updated]);
 
     const result = await userCaller.notifications.markRead({ id: NOTIF_ID });
 
@@ -356,7 +312,6 @@ describe("notifications.markRead", () => {
   });
 
   it("returns null when notification is not found", async () => {
-    mockDb.update.mockReturnValue(makeChain([]));
 
     const result = await userCaller.notifications.markRead({ id: NOTIF_ID });
 
@@ -369,7 +324,6 @@ describe("notifications.markRead", () => {
 // ---------------------------------------------------------------------------
 describe("notifications.markAllRead", () => {
   it("returns success", async () => {
-    mockDb.update.mockReturnValue(makeChain([]));
 
     const result = await userCaller.notifications.markAllRead();
 
@@ -377,10 +331,9 @@ describe("notifications.markAllRead", () => {
   });
 
   it("only touches the DB once (single update, not per-notification)", async () => {
-    mockDb.update.mockReturnValue(makeChain([]));
 
     await userCaller.notifications.markAllRead();
 
-    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.updated(notification)).toHaveLength(1);
   });
 });

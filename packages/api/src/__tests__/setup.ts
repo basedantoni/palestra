@@ -13,3 +13,9 @@ process.env.BETTER_AUTH_URL ??= "http://localhost:3000";
 process.env.CORS_ORIGIN ??= "http://localhost:3001";
 // Required by adminProcedure — must include the test admin email used in tests
 process.env.ADMIN_EMAILS ??= "admin@test.internal";
+
+// Shared mocked db (KOI-303): nothing queued or recorded leaks between tests.
+import { beforeEach } from "vitest";
+import { mockDb } from "./helpers/mock-db";
+
+beforeEach(() => mockDb.reset());
