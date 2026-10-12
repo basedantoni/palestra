@@ -229,8 +229,22 @@
     {
       "idx": 32,
       "version": "7",
-      "when": 1791764533786,
-      "tag": "0032_fine_queen_noir",
+      "when": 1791764519349,
+      "tag": "0032_legal_sage",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791764649014,
+      "tag": "0033_puzzling_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791764929670,
+      "tag": "0034_conscious_jimmy_woo",
       "breakpoints": true
     }
   ]
