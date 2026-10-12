@@ -218,6 +218,13 @@
       "when": 1791763182682,
       "tag": "0030_mushy_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791763994064,
+      "tag": "0031_illegal_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 
+import { ArtRatingSelect, ThemeTagMenu, ThemesDialog } from "./-components/art-taste";
+
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
 
@@ -22,6 +24,9 @@ const tcgSearchSchema = z.object({
   set: z.string().optional().catch(undefined),
   kind: z.enum(VARIANT_KINDS).optional().catch(undefined),
   limit: z.number().int().positive().optional().catch(undefined),
+  minRating: z.number().int().min(0).max(5).optional().catch(undefined),
+  theme: z.string().uuid().optional().catch(undefined),
+  sort: z.enum(["rating"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/tcg/")({
@@ -40,12 +45,16 @@ function TcgPage() {
   const navigate = Route.useNavigate();
   const limit = search.limit ?? PAGE;
   const { data: sets } = useQuery(trpc.tcg.sets.queryOptions());
+  const { data: themes } = useQuery(trpc.tcg.themes.queryOptions());
   const { data: artworks, isLoading } = useQuery({
     ...trpc.tcg.artworks.queryOptions({
       character: search.character,
       set: search.set,
       variantKind: search.kind,
       limit,
+      minRating: search.minRating,
+      themeId: search.theme,
+      sort: search.sort,
     }),
     placeholderData: keepPreviousData,
   });
@@ -90,6 +99,42 @@ function TcgPage() {
             </option>
           ))}
         </select>
+        <select
+          aria-label="Minimum Art Rating"
+          value={search.minRating ?? ""}
+          onChange={(e) => update({ minRating: e.target.value === "" ? undefined : Number(e.target.value) })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">Any rating</option>
+          {[0, 1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              ★ {n}+
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Theme"
+          value={search.theme ?? ""}
+          onChange={(e) => update({ theme: e.target.value || undefined })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">All Themes</option>
+          {(themes ?? []).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Sort"
+          value={search.sort ?? ""}
+          onChange={(e) => update({ sort: e.target.value === "rating" ? "rating" : undefined })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">Sort: card number</option>
+          <option value="rating">Sort: Art Rating</option>
+        </select>
+        <ThemesDialog />
       </div>
 
       {isLoading ? (
@@ -118,6 +163,15 @@ function TcgPage() {
                     {a.printings.map((p) => (
                       <Badge key={p.language} variant="outline" title={p.setName}>
                         {p.language.toUpperCase()}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <ArtRatingSelect variantId={a.variantId} rating={a.rating} />
+                    <ThemeTagMenu variantId={a.variantId} tagged={a.themes} />
+                    {a.themes.map((t) => (
+                      <Badge key={t.id} variant="secondary">
+                        {t.name}
                       </Badge>
                     ))}
                   </div>

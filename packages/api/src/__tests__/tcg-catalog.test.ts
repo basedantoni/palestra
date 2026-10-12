@@ -77,6 +77,8 @@ describe("tcg.artworks", () => {
       nameEn: "Monkey.D.Luffy",
       nameJa: "モンキー・D・ルフィ",
       variantKind: "parallel",
+      rating: null,
+      themes: [],
       printings: [
         {
           language: "ja",
