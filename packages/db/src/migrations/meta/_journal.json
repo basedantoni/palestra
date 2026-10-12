@@ -225,6 +225,13 @@
       "when": 1791764006495,
       "tag": "0031_sharp_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791764533786,
+      "tag": "0032_fine_queen_noir",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -8,6 +8,7 @@ import {
   tcgCard,
   tcgConditionEnum,
   tcgLanguageEnum,
+  tcgOffer,
   tcgPrinting,
   tcgWant,
   tcgWantStatusEnum,
@@ -31,8 +32,8 @@ export const tcgWantsRouter = router({
   /** The caller's Wants in one status (open by default), newest first, with their Artwork. */
   list: protectedProcedure
     .input(z.object({ status: z.enum(tcgWantStatusEnum.enumValues).default("open") }).default({ status: "open" }))
-    .query(({ ctx, input }) =>
-      db
+    .query(async ({ ctx, input }) => {
+      const wants = await db
         .select({
           id: tcgWant.id,
           variantId: tcgWant.variantId,
@@ -52,8 +53,64 @@ export const tcgWantsRouter = router({
         .innerJoin(tcgArtwork, eq(tcgArtwork.variantId, tcgWant.variantId))
         .innerJoin(tcgCard, eq(tcgCard.number, tcgArtwork.cardNumber))
         .where(and(eq(tcgWant.userId, ctx.session.user.id), eq(tcgWant.status, input.status)))
-        .orderBy(desc(tcgWant.createdAt)),
-    ),
+        .orderBy(desc(tcgWant.createdAt));
+      if (wants.length === 0) return [];
+
+      // The Offers of these (the caller's) Wants, and their Artworks' Printings for adding more.
+      const [printings, offers] = await Promise.all([
+        db
+          .select({
+            id: tcgPrinting.id,
+            variantId: tcgPrinting.variantId,
+            language: tcgPrinting.language,
+            setName: tcgPrinting.setName,
+          })
+          .from(tcgPrinting)
+          .where(inArray(tcgPrinting.variantId, [...new Set(wants.map((w) => w.variantId))]))
+          .orderBy(asc(tcgPrinting.language)),
+        db
+          .select({
+            id: tcgOffer.id,
+            wantId: tcgOffer.wantId,
+            printingId: tcgOffer.printingId,
+            language: tcgPrinting.language,
+            setName: tcgPrinting.setName,
+            seller: tcgOffer.seller,
+            price: tcgOffer.price,
+            url: tcgOffer.url,
+            seenOn: tcgOffer.seenOn,
+          })
+          .from(tcgOffer)
+          .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgOffer.printingId))
+          .where(
+            inArray(
+              tcgOffer.wantId,
+              wants.map((w) => w.id),
+            ),
+          )
+          .orderBy(desc(tcgOffer.seenOn)),
+      ]);
+
+      const offersByWant = Map.groupBy(offers, (o) => o.wantId);
+      return wants.map((want) => {
+        const wantOffers = (offersByWant.get(want.id) ?? [])
+          .map(({ wantId: _wantId, ...o }) => o)
+          .toSorted((a, b) => a.price - b.price);
+        const cheapest = wantOffers[0] ?? null;
+        return {
+          ...want,
+          /** Printings an Offer may name: this Artwork, accepted languages. */
+          printings: printings
+            .filter((p) => p.variantId === want.variantId && want.languages.includes(p.language))
+            .map(({ variantId: _variantId, ...p }) => p),
+          /** Cheapest first; Japanese and English compete when both are accepted. */
+          offers: wantOffers,
+          cheapest,
+          /** An Offer at or under the maximum delivered price. */
+          buyable: cheapest !== null && cheapest.price <= want.maxPrice,
+        };
+      });
+    }),
 
   create: protectedProcedure
     .input(terms.extend({ variantId: z.string().min(1) }))

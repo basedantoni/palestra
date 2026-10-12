@@ -157,4 +157,43 @@ describe("Wants against the catalog (KOI-308)", () => {
     ]);
     expect(await other.tcg.wants.list({ status: "dropped" })).toEqual([]);
   });
+
+  it("compares Offers in both languages on the Wants list (KOI-310)", async () => {
+    const { id: wantId } = await caller.tcg.wants.create({ ...terms, variantId: "OP05-119_p1", languages: ["ja", "en"] });
+    const [listed] = await caller.tcg.wants.list();
+    const printing = Object.fromEntries(listed!.printings.map((p) => [p.language, p.id]));
+    expect(Object.keys(printing).toSorted()).toEqual(["en", "ja"]);
+
+    const offer = { wantId, seller: "Card Rush", seenOn: "2026-10-10" };
+    const { id: ja } = await caller.tcg.offers.create({ ...offer, printingId: printing.ja!, price: 26 });
+    await caller.tcg.offers.create({ ...offer, printingId: printing.en!, seller: "TCGplayer", price: 31 });
+    const [base] = await db
+      .select({ id: tcgPrinting.id })
+      .from(tcgPrinting)
+      .where(eq(tcgPrinting.variantId, "OP05-119"))
+      .limit(1);
+    await expect(caller.tcg.offers.create({ ...offer, printingId: base!.id, price: 5 })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+    await expect(other.tcg.offers.create({ ...offer, printingId: printing.ja!, price: 5 })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await expect(other.tcg.offers.delete({ id: ja })).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    let [row] = await caller.tcg.wants.list();
+    expect(row!.offers.map((o) => [o.seller, o.language, o.price, o.seenOn])).toEqual([
+      ["Card Rush", "ja", 26, "2026-10-10"],
+      ["TCGplayer", "en", 31, "2026-10-10"],
+    ]);
+    expect(row!.buyable).toBe(false); // max 25
+
+    await caller.tcg.offers.update({ ...offer, id: ja, printingId: printing.ja!, price: 24, url: "https://example.com/x" });
+    [row] = await caller.tcg.wants.list();
+    expect(row!.cheapest).toMatchObject({ id: ja, price: 24, url: "https://example.com/x" });
+    expect(row!.buyable).toBe(true);
+
+    await caller.tcg.offers.delete({ id: ja });
+    [row] = await caller.tcg.wants.list();
+    expect(row!.offers.map((o) => o.seller)).toEqual(["TCGplayer"]);
+  });
 });

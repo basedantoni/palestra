@@ -20,10 +20,12 @@ const caller = () => appRouter.createCaller({ session: { user: { id: USER_ID } }
 
 describe("tcg.wants.list", () => {
   it("lists the caller's Wants in one status, open by default", async () => {
-    const rows = [{ id: WANT_ID, variantId: "OP05-069_p1", status: "open" }];
-    mockDb.onSelect(tcgWant, rows, []);
+    const row = { id: WANT_ID, variantId: "OP05-069_p1", languages: ["ja"], maxPrice: 20, status: "open" };
+    mockDb.onSelect(tcgWant, [row], []);
 
-    await expect(caller().tcg.wants.list()).resolves.toEqual(rows);
+    await expect(caller().tcg.wants.list()).resolves.toEqual([
+      { ...row, printings: [], offers: [], cheapest: null, buyable: false },
+    ]);
     await expect(caller().tcg.wants.list({ status: "dropped" })).resolves.toEqual([]);
     expect(mockDb.selected(tcgWant)).toEqual([
       [USER_ID, "open"],

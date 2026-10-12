@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum, tcgWantStatusEnum } from "./enums";
@@ -79,4 +79,34 @@ export const tcgWant = pgTable(
       .notNull(),
   },
   (table) => [index("tcg_want_userId_status_idx").on(table.userId, table.status)],
+);
+
+/**
+ * A seller's delivered price for one Printing, seen on a date, recorded against
+ * a Want (KOI-310). Per user through its Want. The Printing must be of the
+ * Want's Artwork and in one of its accepted languages (checked by the router).
+ */
+export const tcgOffer = pgTable(
+  "tcg_offer",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    wantId: uuid("want_id")
+      .notNull()
+      .references(() => tcgWant.id, { onDelete: "cascade" }),
+    printingId: uuid("printing_id")
+      .notNull()
+      .references(() => tcgPrinting.id),
+    /** Free text: a shop, Mercari, a local store. */
+    seller: text("seller").notNull(),
+    /** Delivered price (item + shipping + tax), USD dollars; yen converted by hand. */
+    price: real("price").notNull(),
+    url: text("url"),
+    seenOn: date("seen_on").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("tcg_offer_wantId_idx").on(table.wantId)],
 );

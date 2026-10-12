@@ -5,6 +5,7 @@ import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCard, tcgPrinting, tcgVariantKindEnum, tcgWant } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { tcgOffersRouter } from "./tcg-offers";
 import { tcgWantsRouter } from "./tcg-wants";
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -78,6 +79,7 @@ export const tcgRouter = router({
     }),
 
   wants: tcgWantsRouter,
+  offers: tcgOffersRouter,
 
   /** Set names to filter by. */
   sets: protectedProcedure.query(async () => {
