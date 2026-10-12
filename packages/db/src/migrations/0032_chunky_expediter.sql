@@ -1,4 +1,3 @@
-CREATE TYPE "public"."tcg_condition" AS ENUM('NM', 'LP', 'MP', 'HP', 'DMG');--> statement-breakpoint
 CREATE TABLE "tcg_copy" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
