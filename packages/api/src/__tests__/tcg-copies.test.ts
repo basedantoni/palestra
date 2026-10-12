@@ -98,7 +98,7 @@ describe("tcg.copies.list", () => {
     ];
     mockDb.onSelect(tcgCopy, rows);
 
-    await expect(caller().tcg.copies.list()).resolves.toEqual(rows);
+    await expect(caller().tcg.copies.list()).resolves.toEqual([{ ...rows[0], belowMinimum: false }]);
     expect(mockDb.selected(tcgCopy)).toEqual([[USER_ID]]);
   });
 });

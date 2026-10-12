@@ -41,9 +41,9 @@ async function assertPrintingFits(want: Want, printingId: string) {
 }
 
 /** The caller's Offer (owned through its Want), with its Want's terms. */
-async function ownedOffer(userId: string, id: string): Promise<Want> {
+async function ownedOffer(userId: string, id: string): Promise<Want & { boughtOfferId: string | null }> {
   const [offer] = await db
-    .select({ variantId: tcgWant.variantId, languages: tcgWant.languages })
+    .select({ variantId: tcgWant.variantId, languages: tcgWant.languages, boughtOfferId: tcgWant.boughtOfferId })
     .from(tcgOffer)
     .innerJoin(tcgWant, eq(tcgWant.id, tcgOffer.wantId))
     .where(and(eq(tcgOffer.id, id), eq(tcgWant.userId, userId)))
@@ -83,7 +83,10 @@ export const tcgOffersRouter = router({
   }),
 
   delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
-    await ownedOffer(ctx.session.user.id, input.id);
+    const want = await ownedOffer(ctx.session.user.id, input.id);
+    if (want.boughtOfferId === input.id) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "This Offer was bought; cancel the order to delete it" });
+    }
     const [deleted] = await db.delete(tcgOffer).where(eq(tcgOffer.id, input.id)).returning({ id: tcgOffer.id });
     if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Offer not found" });
     return deleted;

@@ -7,6 +7,7 @@ import {
   tcgArtwork,
   tcgCard,
   tcgConditionEnum,
+  tcgCopy,
   tcgLanguageEnum,
   tcgOffer,
   tcgPrinting,
@@ -15,6 +16,8 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import type { Conn } from "../lib/category-rules-db";
+import { isBelowCondition } from "../lib/tcg-condition";
 
 const terms = z.object({
   /** Accepted languages: Japanese, English, or both. */
@@ -41,7 +44,12 @@ export const tcgWantsRouter = router({
           maxPrice: tcgWant.maxPrice,
           minCondition: tcgWant.minCondition,
           status: tcgWant.status,
+          boughtOfferId: tcgWant.boughtOfferId,
           createdAt: tcgWant.createdAt,
+          /** The Condition of the Copy this Want was fulfilled by. */
+          receivedCondition: sql<
+            (typeof tcgConditionEnum.enumValues)[number] | null
+          >`(select ${tcgCopy.condition} from ${tcgCopy} where ${tcgCopy.wantId} = ${tcgWant.id} limit 1)`,
           cardNumber: tcgArtwork.cardNumber,
           variantKind: tcgArtwork.variantKind,
           nameEn: tcgCard.nameEn,
@@ -108,6 +116,8 @@ export const tcgWantsRouter = router({
           cheapest,
           /** An Offer at or under the maximum delivered price. */
           buyable: cheapest !== null && cheapest.price <= want.maxPrice,
+          /** Received in a Condition worse than the minimum (allowed: the card is in hand). */
+          belowMinimum: !!want.receivedCondition && isBelowCondition(want.receivedCondition, want.minCondition),
         };
       });
     }),
@@ -151,30 +161,100 @@ export const tcgWantsRouter = router({
   /** open → dropped: abandon a Want without deleting it. */
   drop: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) => transition(ctx.session.user.id, input.id, "open", "dropped")),
+    .mutation(({ ctx, input }) => transition(db, ctx.session.user.id, input.id, "open", "dropped")),
 
   /** dropped → open. */
   reopen: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) => transition(ctx.session.user.id, input.id, "dropped", "open")),
+    .mutation(({ ctx, input }) => transition(db, ctx.session.user.id, input.id, "dropped", "open")),
+
+  /** open → ordered: one of this Want's Offers was bought. */
+  buy: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), offerId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const [offer] = await db
+        .select({ id: tcgOffer.id })
+        .from(tcgOffer)
+        .innerJoin(tcgWant, eq(tcgWant.id, tcgOffer.wantId))
+        .where(and(eq(tcgOffer.id, input.offerId), eq(tcgOffer.wantId, input.id), eq(tcgWant.userId, userId)))
+        .limit(1);
+      if (!offer) throw new TRPCError({ code: "NOT_FOUND", message: "Offer not found for this Want" });
+      return transition(db, userId, input.id, "open", "ordered", { boughtOfferId: offer.id });
+    }),
+
+  /** ordered → open: the order was cancelled or failed. */
+  cancelOrder: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      transition(db, ctx.session.user.id, input.id, "ordered", "open", { boughtOfferId: null }),
+    ),
+
+  /**
+   * ordered → fulfilled: the card arrived. Creates exactly one Copy of the bought
+   * Offer's Printing, in the same transaction. Price paid defaults to the Offer's.
+   * A Condition below the Want's minimum is accepted (the card is in hand).
+   */
+  receive: protectedProcedure
+    .input(
+      z.object({
+        id: z.uuid(),
+        condition: z.enum(tcgConditionEnum.enumValues),
+        pricePaid: z.number().nonnegative().nullish(),
+        acquiredOn: z.iso.date(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      db.transaction(async (tx) => {
+        const userId = ctx.session.user.id;
+        const want = await transition(tx, userId, input.id, "ordered", "fulfilled");
+        const [offer] = await tx
+          .select({ printingId: tcgOffer.printingId, price: tcgOffer.price })
+          .from(tcgOffer)
+          .where(eq(tcgOffer.id, want.boughtOfferId!))
+          .limit(1);
+        const [copy] = await tx
+          .insert(tcgCopy)
+          .values({
+            userId,
+            printingId: offer!.printingId,
+            condition: input.condition,
+            pricePaid: input.pricePaid === undefined ? offer!.price : input.pricePaid,
+            acquiredOn: input.acquiredOn,
+            wantId: want.id,
+          })
+          .returning({ id: tcgCopy.id });
+        return { id: want.id, copyId: copy!.id };
+      }),
+    ),
 });
 
 type WantStatus = (typeof tcgWantStatusEnum.enumValues)[number];
 
-/** Move the caller's Want from `from` to `to`; any other current status is rejected. */
-async function transition(userId: string, id: string, from: WantStatus, to: WantStatus) {
+/**
+ * Move the caller's Want from `from` to `to` (plus `set`); any other current
+ * status is rejected. Returns the Want's id and bought Offer after the move.
+ */
+async function transition(
+  conn: Conn,
+  userId: string,
+  id: string,
+  from: WantStatus,
+  to: WantStatus,
+  set: { boughtOfferId?: string | null } = {},
+) {
   const owned = and(eq(tcgWant.id, id), eq(tcgWant.userId, userId));
-  const [want] = await db.select({ status: tcgWant.status }).from(tcgWant).where(owned).limit(1);
+  const [want] = await conn.select({ status: tcgWant.status }).from(tcgWant).where(owned).limit(1);
   if (!want) throw new TRPCError({ code: "NOT_FOUND", message: "Want not found" });
   if (want.status !== from) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `A ${want.status} Want can't become ${to}` });
   }
   // The status guard keeps a concurrent change from being overwritten.
-  const [updated] = await db
+  const [updated] = await conn
     .update(tcgWant)
-    .set({ status: to })
+    .set({ status: to, ...set })
     .where(and(owned, eq(tcgWant.status, from)))
-    .returning({ id: tcgWant.id });
+    .returning({ id: tcgWant.id, boughtOfferId: tcgWant.boughtOfferId });
   if (!updated) throw new TRPCError({ code: "CONFLICT", message: "Want changed; reload and try again" });
   return updated;
 }

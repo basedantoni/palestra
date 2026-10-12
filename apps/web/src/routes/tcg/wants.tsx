@@ -11,6 +11,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { cardImage } from "./-components/card-image";
+import { CopyDialog } from "./-components/copy-dialog";
 import { OfferDialog } from "./-components/offer-dialog";
 import { WantDialog } from "./-components/want-dialog";
 
@@ -18,8 +19,15 @@ type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 type Offer = Want["offers"][number];
 
 const wantsSearchSchema = z.object({
-  status: z.enum(["dropped"]).optional().catch(undefined),
+  status: z.enum(["ordered", "fulfilled", "dropped"]).optional().catch(undefined),
 });
+
+const EMPTY = {
+  open: "No open Wants. Add one from an Artwork on the Cards page.",
+  ordered: "Nothing on order. Mark an Offer bought on an open Want.",
+  fulfilled: "No fulfilled Wants yet.",
+  dropped: "No dropped Wants.",
+} as const;
 
 export const Route = createFileRoute("/tcg/wants")({
   validateSearch: (search) => wantsSearchSchema.parse(search),
@@ -48,11 +56,22 @@ function WantsPage() {
   const { data: wants, isLoading } = useQuery(trpc.tcg.wants.list.queryOptions({ status }));
   const [editing, setEditing] = useState<Want | null>(null);
   const [offering, setOffering] = useState<{ want: Want; offer?: Offer } | null>(null);
+  const [receiving, setReceiving] = useState<{ want: Want; offer: Offer } | null>(null);
   const today = useFinanceToday();
 
   const options = { onSuccess: () => queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() }) };
   const drop = useMutation(trpc.tcg.wants.drop.mutationOptions(options));
   const reopen = useMutation(trpc.tcg.wants.reopen.mutationOptions(options));
+  const buy = useMutation(trpc.tcg.wants.buy.mutationOptions(options));
+  const cancelOrder = useMutation(trpc.tcg.wants.cancelOrder.mutationOptions(options));
+  const receive = useMutation(
+    trpc.tcg.wants.receive.mutationOptions({
+      onSuccess: () => {
+        setReceiving(null);
+        return options.onSuccess();
+      },
+    }),
+  );
   const deleteOffer = useMutation(trpc.tcg.offers.delete.mutationOptions(options));
 
   return (
@@ -66,11 +85,13 @@ function WantsPage() {
       <Tabs
         value={status}
         onValueChange={(next) =>
-          navigate({ search: { status: next === "dropped" ? "dropped" : undefined }, replace: true })
+          navigate({ search: { status: next === "open" ? undefined : (next as Exclude<typeof status, "open">) }, replace: true })
         }
       >
         <TabsList>
           <TabsTrigger value="open">Open</TabsTrigger>
+          <TabsTrigger value="ordered">Ordered</TabsTrigger>
+          <TabsTrigger value="fulfilled">Fulfilled</TabsTrigger>
           <TabsTrigger value="dropped">Dropped</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -78,12 +99,12 @@ function WantsPage() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !wants?.length ? (
-        <p className="text-sm text-muted-foreground">
-          {status === "open" ? "No open Wants. Add one from an Artwork on the Cards page." : "No dropped Wants."}
-        </p>
+        <p className="text-sm text-muted-foreground">{EMPTY[status]}</p>
       ) : (
         <ul className="divide-y divide-border border border-border">
-          {wants.map((w) => (
+          {wants.map((w) => {
+            const bought = w.offers.find((o) => o.id === w.boughtOfferId);
+            return (
             <li key={w.id} className="space-y-2 p-2">
               <div className="flex items-center gap-3">
                 {w.imageUrl && (
@@ -101,27 +122,38 @@ function WantsPage() {
                     {w.minCondition} or better
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    {w.cheapest ? (
+                    {bought ? (
+                      <span>
+                        Bought {price(bought.price)} ({LANGUAGE_LABEL[bought.language]}, {bought.seller})
+                        {w.receivedCondition && <> · received {w.receivedCondition}</>}
+                      </span>
+                    ) : w.cheapest ? (
                       <span>
                         Cheapest {price(w.cheapest.price)} ({LANGUAGE_LABEL[w.cheapest.language]}, {w.cheapest.seller})
                       </span>
                     ) : (
                       <span className="text-muted-foreground">No Offers yet</span>
                     )}
-                    {w.buyable && <Badge>Buyable</Badge>}
+                    {status === "open" && w.buyable && <Badge>Buyable</Badge>}
+                    {w.belowMinimum && <Badge variant="destructive">Below {w.minCondition}</Badge>}
                   </div>
                 </div>
-                <Button size="xs" variant="outline" onClick={() => setOffering({ want: w })}>
-                  Add Offer
-                </Button>
-                <Button size="xs" variant="outline" onClick={() => setEditing(w)}>
-                  Edit
-                </Button>
-                {status === "open" ? (
+                {status !== "fulfilled" && (
+                  <>
+                    <Button size="xs" variant="outline" onClick={() => setOffering({ want: w })}>
+                      Add Offer
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => setEditing(w)}>
+                      Edit
+                    </Button>
+                  </>
+                )}
+                {status === "open" && (
                   <Button size="xs" variant="outline" disabled={drop.isPending} onClick={() => drop.mutate({ id: w.id })}>
                     Drop
                   </Button>
-                ) : (
+                )}
+                {status === "dropped" && (
                   <Button
                     size="xs"
                     variant="outline"
@@ -130,6 +162,21 @@ function WantsPage() {
                   >
                     Reopen
                   </Button>
+                )}
+                {status === "ordered" && bought && (
+                  <>
+                    <Button size="xs" onClick={() => setReceiving({ want: w, offer: bought })}>
+                      Received
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={cancelOrder.isPending}
+                      onClick={() => cancelOrder.mutate({ id: w.id })}
+                    >
+                      Cancel order
+                    </Button>
+                  </>
                 )}
               </div>
               {w.offers.length > 0 && (
@@ -151,24 +198,60 @@ function WantsPage() {
                       <span className="w-20 text-right text-muted-foreground" title={o.seenOn}>
                         {age(o.seenOn, today)}
                       </span>
-                      <Button size="xs" variant="ghost" onClick={() => setOffering({ want: w, offer: o })}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={deleteOffer.isPending}
-                        onClick={() => deleteOffer.mutate({ id: o.id })}
-                      >
-                        Delete
-                      </Button>
+                      {o.id === w.boughtOfferId && <Badge variant="secondary">Bought</Badge>}
+                      {status === "open" && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={buy.isPending}
+                          onClick={() => buy.mutate({ id: w.id, offerId: o.id })}
+                        >
+                          Mark bought
+                        </Button>
+                      )}
+                      {status !== "fulfilled" && (
+                        <Button size="xs" variant="ghost" onClick={() => setOffering({ want: w, offer: o })}>
+                          Edit
+                        </Button>
+                      )}
+                      {o.id !== w.boughtOfferId && (
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          disabled={deleteOffer.isPending}
+                          onClick={() => deleteOffer.mutate({ id: o.id })}
+                        >
+                          Delete
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
+      )}
+      {receiving && (
+        <CopyDialog
+          title={`Received ${receiving.want.variantId} (${LANGUAGE_LABEL[receiving.offer.language]})`}
+          initial={{
+            printingId: receiving.offer.printingId,
+            condition: receiving.want.minCondition,
+            pricePaid: receiving.offer.price,
+            acquiredOn: today,
+          }}
+          pending={receive.isPending}
+          error={receive.error?.message}
+          onSubmit={({ condition, pricePaid, acquiredOn }) =>
+            receive.mutate({ id: receiving.want.id, condition, pricePaid, acquiredOn })
+          }
+          onClose={() => {
+            receive.reset();
+            setReceiving(null);
+          }}
+        />
       )}
       {editing && (
         <WantDialog

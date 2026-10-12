@@ -3,9 +3,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgConditionEnum, tcgCopy, tcgPrinting } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCard, tcgConditionEnum, tcgCopy, tcgPrinting, tcgWant } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { isBelowCondition } from "../lib/tcg-condition";
 
 async function assertPrintingExists(printingId: string) {
   const [found] = await db.select({ id: tcgPrinting.id }).from(tcgPrinting).where(eq(tcgPrinting.id, printingId)).limit(1);
@@ -63,9 +64,12 @@ export const tcgCopiesRouter = router({
     return deleted;
   }),
 
-  /** The caller's Copies with their Printing and character, newest first. */
-  list: protectedProcedure.query(({ ctx }) =>
-    db
+  /**
+   * The caller's Copies with their Printing and character, newest first.
+   * `belowMinimum`: received through a Want in a Condition worse than its minimum.
+   */
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db
       .select({
         id: tcgCopy.id,
         printingId: tcgCopy.printingId,
@@ -78,12 +82,18 @@ export const tcgCopiesRouter = router({
         condition: tcgCopy.condition,
         pricePaid: tcgCopy.pricePaid,
         acquiredOn: tcgCopy.acquiredOn,
+        minCondition: tcgWant.minCondition,
       })
       .from(tcgCopy)
       .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
       .innerJoin(tcgArtwork, eq(tcgArtwork.variantId, tcgPrinting.variantId))
       .innerJoin(tcgCard, eq(tcgCard.number, tcgArtwork.cardNumber))
+      .leftJoin(tcgWant, eq(tcgWant.id, tcgCopy.wantId))
       .where(eq(tcgCopy.userId, ctx.session.user.id))
-      .orderBy(desc(tcgCopy.acquiredOn), desc(tcgCopy.createdAt)),
-  ),
+      .orderBy(desc(tcgCopy.acquiredOn), desc(tcgCopy.createdAt));
+    return rows.map(({ minCondition, ...copy }) => ({
+      ...copy,
+      belowMinimum: !!minCondition && isBelowCondition(copy.condition, minCondition),
+    }));
+  }),
 });

@@ -60,6 +60,7 @@ function CopiesPage() {
               <Badge variant="outline">{c.language.toUpperCase()}</Badge>
               <span className="text-xs text-muted-foreground">{c.setName}</span>
               <Badge variant="secondary">{c.condition}</Badge>
+              {c.belowMinimum && <Badge variant="destructive">Below Want minimum</Badge>}
               <span className="text-xs">{c.pricePaid == null ? "No price" : c.pricePaid.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span>
               <span className="text-xs text-muted-foreground">{c.acquiredOn}</span>
               <span className="ml-auto flex gap-1">

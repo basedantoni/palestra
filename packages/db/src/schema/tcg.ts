@@ -1,5 +1,19 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum, tcgWantStatusEnum } from "./enums";
@@ -54,8 +68,9 @@ export const tcgPrinting = pgTable(
 
 /**
  * The user's intent to acquire one Copy of an Artwork (KOI-308). Several Wants
- * may target the same Artwork. Status moves open <-> dropped here; ordered and
- * fulfilled are reached by the buying flow (KOI-311).
+ * may target the same Artwork. open <-> dropped; the buying flow (KOI-311) moves
+ * open -> ordered (an Offer bought) -> fulfilled (a Copy received), or ordered ->
+ * open (order cancelled). Fulfilled is terminal.
  */
 export const tcgWant = pgTable(
   "tcg_want",
@@ -73,13 +88,21 @@ export const tcgWant = pgTable(
     maxPrice: real("max_price").notNull(),
     minCondition: tcgConditionEnum("min_condition").notNull(),
     status: tcgWantStatusEnum("status").default("open").notNull(),
+    /** The Offer taken, set exactly while ordered or fulfilled. No cascade: a bought Offer can't be deleted. */
+    boughtOfferId: uuid("bought_offer_id").references((): AnyPgColumn => tcgOffer.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("tcg_want_userId_status_idx").on(table.userId, table.status)],
+  (table) => [
+    index("tcg_want_userId_status_idx").on(table.userId, table.status),
+    check(
+      "tcg_want_bought_offer_while_ordered",
+      sql`(${table.status} in ('ordered', 'fulfilled')) = (${table.boughtOfferId} is not null)`,
+    ),
+  ],
 );
 
 /** The user's 0–5 Art Rating of an Artwork, shared by all its Printings (KOI-307). No row = unrated. */
@@ -136,8 +159,8 @@ export const tcgArtworkTheme = pgTable(
 );
 
 /**
- * One physical card the user holds (KOI-309). Per user. The optional Want link is
- * added with the buying flow (KOI-311).
+ * One physical card the user holds (KOI-309). Per user. Linked to the Want it
+ * fulfilled when received through the buying flow (KOI-311).
  */
 export const tcgCopy = pgTable(
   "tcg_copy",
@@ -154,6 +177,8 @@ export const tcgCopy = pgTable(
     /** USD dollars, like finance amounts. Null for gifts and pack pulls. */
     pricePaid: real("price_paid"),
     acquiredOn: date("acquired_on", { mode: "string" }).notNull(),
+    /** The Want this Copy fulfilled; null when added directly. */
+    wantId: uuid("want_id").references((): AnyPgColumn => tcgWant.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
