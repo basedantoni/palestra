@@ -12,6 +12,7 @@ import { importRouter } from "./import";
 import { notificationsRouter } from "./notifications";
 import { plaidRouter } from "./plaid";
 import { preferencesRouter } from "./preferences";
+import { tcgRouter } from "./tcg";
 import { templatesRouter } from "./templates";
 import { tcxImportRouter } from "./tcx-import";
 import { transactionsRouter } from "./transactions";
@@ -50,5 +51,6 @@ export const appRouter = router({
   transactions: transactionsRouter,
   goals: goalsRouter,
   finance: financeRouter,
+  tcg: tcgRouter,
 });
 export type AppRouter = typeof appRouter;

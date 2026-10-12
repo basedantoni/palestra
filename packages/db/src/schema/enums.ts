@@ -147,3 +147,6 @@ export const transactionFlowEnum = pgEnum("transaction_flow", [
 
 /** Plaid environment that issued an item's access token; tokens only work there (KOI-288). */
 export const plaidEnvEnum = pgEnum("plaid_env", ["sandbox", "production"]);
+
+export const tcgLanguageEnum = pgEnum("tcg_language", ["ja", "en"]);
+export const tcgVariantKindEnum = pgEnum("tcg_variant_kind", ["base", "parallel", "manga", "reprint"]);

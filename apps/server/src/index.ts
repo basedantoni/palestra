@@ -10,6 +10,7 @@ import { logger } from "hono/logger";
 import { whoopOAuthApp } from "./whoop-oauth";
 import { plaidWebhookApp } from "@life-tracker/api/lib/plaid-webhook";
 import { internalApp } from "./internal";
+import { tcgImageApp } from "./tcg-image";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 120;
@@ -40,6 +41,8 @@ function cleanupExpired(now: number) {
 const app = new Hono();
 
 app.use(logger());
+// Before the rate limiter: one browse page loads up to 200 card images at once.
+app.route("/api/tcg", tcgImageApp);
 app.use("/*", async (c, next) => {
   const now = Date.now();
   if (rateLimitState.size > 10_000) {

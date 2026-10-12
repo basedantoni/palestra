@@ -25,6 +25,7 @@ export function AppSidebar() {
     { to: "/templates", label: "Templates" },
     { to: "/analytics", label: "Analytics" },
     { to: "/finance", label: "Finance" },
+    { to: "/tcg", label: "Cards" },
     { to: "/import", label: "Import" },
     { to: "/settings", label: "Settings" },
   ] as const;

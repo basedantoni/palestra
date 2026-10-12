@@ -1,0 +1,51 @@
+import { boolean, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+
+import { tcgLanguageEnum, tcgVariantKindEnum } from "./enums";
+
+/**
+ * One Piece TCG catalog (KOI-304): global reference data imported from
+ * punk-records by `pnpm db:import:tcg` (ADR 0006). Not per user. Terms follow the
+ * TCG sections of packages/api/GLOSSARY.md.
+ */
+
+/** A card number (e.g. `OP05-069`) and its character. */
+export const tcgCard = pgTable("tcg_card", {
+  number: text("number").primaryKey(),
+  nameEn: text("name_en"),
+  nameJa: text("name_ja"),
+});
+
+/** One illustration of a Card, keyed by Bandai's variant ID (e.g. `OP05-069_p1`). */
+export const tcgArtwork = pgTable(
+  "tcg_artwork",
+  {
+    variantId: text("variant_id").primaryKey(),
+    cardNumber: text("card_number")
+      .notNull()
+      .references(() => tcgCard.number, { onDelete: "cascade" }),
+    variantKind: tcgVariantKindEnum("variant_kind").notNull(),
+    /** Null = uncredited / not yet backfilled (KOI-306). The import never writes it. */
+    artist: text("artist"),
+    /** Japanese and English sources disagree on the artist (KOI-306). */
+    artistConflict: boolean("artist_conflict").default(false).notNull(),
+  },
+  (table) => [index("tcg_artwork_cardNumber_idx").on(table.cardNumber)],
+);
+
+/** An Artwork released in one language, with its set and hotlinked Bandai image. */
+export const tcgPrinting = pgTable(
+  "tcg_printing",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => tcgArtwork.variantId, { onDelete: "cascade" }),
+    language: tcgLanguageEnum("language").notNull(),
+    /** punk-records pack id (e.g. `550105`). */
+    packId: text("pack_id").notNull(),
+    /** Set code (`OP-05`) or product title. */
+    setName: text("set_name").notNull(),
+    imageUrl: text("image_url").notNull(),
+  },
+  (table) => [uniqueIndex("tcg_printing_variantId_language_unique_idx").on(table.variantId, table.language)],
+);

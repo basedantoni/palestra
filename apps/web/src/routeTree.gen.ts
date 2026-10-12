@@ -18,6 +18,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates/index'
+import { Route as TcgIndexRouteImport } from './routes/tcg/index'
 import { Route as ImportIndexRouteImport } from './routes/import/index'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
@@ -75,6 +76,11 @@ const WorkoutsIndexRoute = WorkoutsIndexRouteImport.update({
 const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
   id: '/templates/',
   path: '/templates/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TcgIndexRoute = TcgIndexRouteImport.update({
+  id: '/tcg/',
+  path: '/tcg/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportIndexRoute = ImportIndexRouteImport.update({
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/import/': typeof ImportIndexRoute
+  '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/finance': typeof FinanceIndexRoute
   '/import': typeof ImportIndexRoute
+  '/tcg': typeof TcgIndexRoute
   '/templates': typeof TemplatesIndexRoute
   '/workouts': typeof WorkoutsIndexRoute
   '/admin/exercises': typeof AdminExercisesIndexRoute
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/import/': typeof ImportIndexRoute
+  '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/finance/'
     | '/import/'
+    | '/tcg/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/finance'
     | '/import'
+    | '/tcg'
     | '/templates'
     | '/workouts'
     | '/admin/exercises'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/finance/'
     | '/import/'
+    | '/tcg/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -308,6 +320,7 @@ export interface RootRouteChildren {
   WorkoutsNewRoute: typeof WorkoutsNewRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   ImportIndexRoute: typeof ImportIndexRoute
+  TcgIndexRoute: typeof TcgIndexRoute
   TemplatesIndexRoute: typeof TemplatesIndexRoute
   WorkoutsIndexRoute: typeof WorkoutsIndexRoute
 }
@@ -375,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/templates'
       fullPath: '/templates/'
       preLoaderRoute: typeof TemplatesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tcg/': {
+      id: '/tcg/'
+      path: '/tcg'
+      fullPath: '/tcg/'
+      preLoaderRoute: typeof TcgIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/import/': {
@@ -502,6 +522,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkoutsNewRoute: WorkoutsNewRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   ImportIndexRoute: ImportIndexRoute,
+  TcgIndexRoute: TcgIndexRoute,
   TemplatesIndexRoute: TemplatesIndexRoute,
   WorkoutsIndexRoute: WorkoutsIndexRoute,
 }
