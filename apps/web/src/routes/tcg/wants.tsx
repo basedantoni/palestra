@@ -149,15 +149,16 @@ function WantsPage() {
                     {w.belowMinimum && <Badge variant="destructive">Below {w.minCondition}</Badge>}
                   </div>
                 </div>
+                {/* Offers change only while the Want is open. */}
+                {status === "open" && (
+                  <Button size="xs" variant="outline" onClick={() => setOffering({ want: w })}>
+                    Add Offer
+                  </Button>
+                )}
                 {status !== "fulfilled" && (
-                  <>
-                    <Button size="xs" variant="outline" onClick={() => setOffering({ want: w })}>
-                      Add Offer
-                    </Button>
-                    <Button size="xs" variant="outline" onClick={() => setEditing(w)}>
-                      Edit
-                    </Button>
-                  </>
+                  <Button size="xs" variant="outline" onClick={() => setEditing(w)}>
+                    Edit
+                  </Button>
                 )}
                 {status === "open" && (
                   <Button size="xs" variant="outline" disabled={drop.isPending} onClick={() => drop.mutate({ id: w.id })}>
@@ -225,12 +226,12 @@ function WantsPage() {
                           Mark bought
                         </Button>
                       )}
-                      {status !== "fulfilled" && (
+                      {status === "open" && (
                         <Button size="xs" variant="ghost" onClick={() => setOffering({ want: w, offer: o })}>
                           Edit
                         </Button>
                       )}
-                      {o.id !== w.boughtOfferId && (
+                      {status === "open" && (
                         <Button
                           size="xs"
                           variant="ghost"
