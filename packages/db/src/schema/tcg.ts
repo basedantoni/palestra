@@ -1,4 +1,5 @@
-import { boolean, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, index, integer, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum, tcgWantStatusEnum } from "./enums";
@@ -79,4 +80,57 @@ export const tcgWant = pgTable(
       .notNull(),
   },
   (table) => [index("tcg_want_userId_status_idx").on(table.userId, table.status)],
+);
+
+/** The user's 0–5 Art Rating of an Artwork, shared by all its Printings (KOI-307). No row = unrated. */
+export const tcgArtRating = pgTable(
+  "tcg_art_rating",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => tcgArtwork.variantId, { onDelete: "cascade" }),
+    rating: integer("rating").notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.variantId] }),
+    check("tcg_art_rating_range", sql`${table.rating} between 0 and 5`),
+  ],
+);
+
+/** A user-defined tag grouping Artworks (e.g. D Clan). Names unique per user, ignoring case (KOI-307). */
+export const tcgTheme = pgTable(
+  "tcg_theme",
+  {
+    id: uuid("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("tcg_theme_userId_name_unique_idx").on(table.userId, sql`lower(${table.name})`)],
+);
+
+/** An Artwork tagged with a Theme. Owned through the Theme; deleting the Theme removes its tags. */
+export const tcgArtworkTheme = pgTable(
+  "tcg_artwork_theme",
+  {
+    themeId: uuid("theme_id")
+      .notNull()
+      .references(() => tcgTheme.id, { onDelete: "cascade" }),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => tcgArtwork.variantId, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.themeId, table.variantId] }),
+    index("tcg_artwork_theme_variantId_idx").on(table.variantId),
+  ],
 );

@@ -78,6 +78,8 @@ describe("tcg.artworks", () => {
       nameJa: "モンキー・D・ルフィ",
       variantKind: "parallel",
       wanted: false,
+      rating: null,
+      themes: [],
       printings: [
         {
           language: "ja",
