@@ -21,6 +21,8 @@ const tcgSearchSchema = z.object({
   character: z.string().optional().catch(undefined),
   set: z.string().optional().catch(undefined),
   kind: z.enum(VARIANT_KINDS).optional().catch(undefined),
+  artist: z.string().optional().catch(undefined),
+  conflict: z.boolean().optional().catch(undefined),
   limit: z.number().int().positive().optional().catch(undefined),
 });
 
@@ -45,6 +47,8 @@ function TcgPage() {
       character: search.character,
       set: search.set,
       variantKind: search.kind,
+      artist: search.artist,
+      conflict: search.conflict,
       limit,
     }),
     placeholderData: keepPreviousData,
@@ -62,6 +66,13 @@ function TcgPage() {
           placeholder="Character"
           value={search.character ?? ""}
           onChange={(e) => update({ character: e.target.value || undefined })}
+          className="w-48"
+        />
+        <Input
+          aria-label="Artist"
+          placeholder="Artist"
+          value={search.artist ?? ""}
+          onChange={(e) => update({ artist: e.target.value || undefined })}
           className="w-48"
         />
         <select
@@ -90,6 +101,14 @@ function TcgPage() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={search.conflict ?? false}
+            onChange={(e) => update({ conflict: e.target.checked || undefined })}
+          />
+          Artist conflicts only
+        </label>
       </div>
 
       {isLoading ? (
@@ -112,6 +131,25 @@ function TcgPage() {
                     />
                   )}
                   <div className="text-xs font-medium">{a.nameEn ?? a.nameJa}</div>
+                  <div className="flex items-center gap-1 text-xs">
+                    {a.artist ? (
+                      <button
+                        type="button"
+                        className="truncate text-left underline-offset-2 hover:underline"
+                        title={`Show Artworks by ${a.artist}`}
+                        onClick={() => update({ artist: a.artist ?? undefined })}
+                      >
+                        {a.artist}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground italic">uncredited</span>
+                    )}
+                    {a.artistConflict && (
+                      <Badge variant="destructive" title="Japanese and English sources credit different artists">
+                        conflict
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                     <span>{a.variantId}</span>
                     <Badge variant="secondary">{a.variantKind}</Badge>
