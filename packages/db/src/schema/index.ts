@@ -11,6 +11,7 @@ export * from "./notification";
 export * from "./personal-record";
 export * from "./progressive-overload";
 export * from "./recalc-job";
+export * from "./tcg";
 export * from "./template";
 export * from "./transaction";
 export * from "./user-preferences";

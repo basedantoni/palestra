@@ -6,3 +6,4 @@ export * from "./whoop-dto";
 export * from "./whoop-sports";
 export * from "./hr-zones";
 export * from "./money";
+export * from "./tcg";

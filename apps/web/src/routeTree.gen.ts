@@ -18,12 +18,15 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates/index'
+import { Route as TcgIndexRouteImport } from './routes/tcg/index'
 import { Route as ImportIndexRouteImport } from './routes/import/index'
 import { Route as FinanceIndexRouteImport } from './routes/finance/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
 import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 import { Route as TemplatesTemplateIdRouteImport } from './routes/templates/$templateId'
+import { Route as TcgWantsRouteImport } from './routes/tcg/wants'
+import { Route as TcgCopiesRouteImport } from './routes/tcg/copies'
 import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
 import { Route as ImportTcxRouteImport } from './routes/import/tcx'
 import { Route as FinanceTransactionsRouteImport } from './routes/finance/transactions'
@@ -77,6 +80,11 @@ const TemplatesIndexRoute = TemplatesIndexRouteImport.update({
   path: '/templates/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TcgIndexRoute = TcgIndexRouteImport.update({
+  id: '/tcg/',
+  path: '/tcg/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ImportIndexRoute = ImportIndexRouteImport.update({
   id: '/import/',
   path: '/import/',
@@ -105,6 +113,16 @@ const WorkoutsWorkoutIdRoute = WorkoutsWorkoutIdRouteImport.update({
 const TemplatesTemplateIdRoute = TemplatesTemplateIdRouteImport.update({
   id: '/templates/$templateId',
   path: '/templates/$templateId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TcgWantsRoute = TcgWantsRouteImport.update({
+  id: '/tcg/wants',
+  path: '/tcg/wants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TcgCopiesRoute = TcgCopiesRouteImport.update({
+  id: '/tcg/copies',
+  path: '/tcg/copies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportWhoopRoute = ImportWhoopRouteImport.update({
@@ -157,12 +175,15 @@ export interface FileRoutesByFullPath {
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
+  '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin/': typeof AdminIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/import/': typeof ImportIndexRoute
+  '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -180,12 +201,15 @@ export interface FileRoutesByTo {
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
+  '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin': typeof AdminIndexRoute
   '/finance': typeof FinanceIndexRoute
   '/import': typeof ImportIndexRoute
+  '/tcg': typeof TcgIndexRoute
   '/templates': typeof TemplatesIndexRoute
   '/workouts': typeof WorkoutsIndexRoute
   '/admin/exercises': typeof AdminExercisesIndexRoute
@@ -205,12 +229,15 @@ export interface FileRoutesById {
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
+  '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
   '/workouts/new': typeof WorkoutsNewRoute
   '/admin/': typeof AdminIndexRoute
   '/finance/': typeof FinanceIndexRoute
   '/import/': typeof ImportIndexRoute
+  '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
@@ -231,12 +258,15 @@ export interface FileRouteTypes {
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
+    | '/tcg/copies'
+    | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin/'
     | '/finance/'
     | '/import/'
+    | '/tcg/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -254,12 +284,15 @@ export interface FileRouteTypes {
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
+    | '/tcg/copies'
+    | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin'
     | '/finance'
     | '/import'
+    | '/tcg'
     | '/templates'
     | '/workouts'
     | '/admin/exercises'
@@ -278,12 +311,15 @@ export interface FileRouteTypes {
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
+    | '/tcg/copies'
+    | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
     | '/workouts/new'
     | '/admin/'
     | '/finance/'
     | '/import/'
+    | '/tcg/'
     | '/templates/'
     | '/workouts/'
     | '/admin/exercises/'
@@ -303,11 +339,14 @@ export interface RootRouteChildren {
   FinanceTransactionsRoute: typeof FinanceTransactionsRoute
   ImportTcxRoute: typeof ImportTcxRoute
   ImportWhoopRoute: typeof ImportWhoopRoute
+  TcgCopiesRoute: typeof TcgCopiesRoute
+  TcgWantsRoute: typeof TcgWantsRoute
   TemplatesTemplateIdRoute: typeof TemplatesTemplateIdRoute
   WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
   WorkoutsNewRoute: typeof WorkoutsNewRoute
   FinanceIndexRoute: typeof FinanceIndexRoute
   ImportIndexRoute: typeof ImportIndexRoute
+  TcgIndexRoute: typeof TcgIndexRoute
   TemplatesIndexRoute: typeof TemplatesIndexRoute
   WorkoutsIndexRoute: typeof WorkoutsIndexRoute
 }
@@ -377,6 +416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TemplatesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tcg/': {
+      id: '/tcg/'
+      path: '/tcg'
+      fullPath: '/tcg/'
+      preLoaderRoute: typeof TcgIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/import/': {
       id: '/import/'
       path: '/import'
@@ -417,6 +463,20 @@ declare module '@tanstack/react-router' {
       path: '/templates/$templateId'
       fullPath: '/templates/$templateId'
       preLoaderRoute: typeof TemplatesTemplateIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tcg/wants': {
+      id: '/tcg/wants'
+      path: '/tcg/wants'
+      fullPath: '/tcg/wants'
+      preLoaderRoute: typeof TcgWantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tcg/copies': {
+      id: '/tcg/copies'
+      path: '/tcg/copies'
+      fullPath: '/tcg/copies'
+      preLoaderRoute: typeof TcgCopiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/import/whoop': {
@@ -497,11 +557,14 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceTransactionsRoute: FinanceTransactionsRoute,
   ImportTcxRoute: ImportTcxRoute,
   ImportWhoopRoute: ImportWhoopRoute,
+  TcgCopiesRoute: TcgCopiesRoute,
+  TcgWantsRoute: TcgWantsRoute,
   TemplatesTemplateIdRoute: TemplatesTemplateIdRoute,
   WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,
   WorkoutsNewRoute: WorkoutsNewRoute,
   FinanceIndexRoute: FinanceIndexRoute,
   ImportIndexRoute: ImportIndexRoute,
+  TcgIndexRoute: TcgIndexRoute,
   TemplatesIndexRoute: TemplatesIndexRoute,
   WorkoutsIndexRoute: WorkoutsIndexRoute,
 }

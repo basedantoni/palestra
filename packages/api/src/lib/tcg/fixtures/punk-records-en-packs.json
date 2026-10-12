@@ -1,0 +1,56 @@
+{
+  "569105": {
+    "id": "569105",
+    "raw_title": "BOOSTER PACK -AWAKENING OF THE NEW ERA- [OP-05]",
+    "title_parts": {
+      "label": "OP-05",
+      "prefix": "BOOSTER PACK",
+      "title": "AWAKENING OF THE NEW ERA"
+    }
+  },
+  "569108": {
+    "id": "569108",
+    "raw_title": "BOOSTER PACK -TWO LEGENDS- [OP-08]",
+    "title_parts": {
+      "label": "OP-08",
+      "prefix": "BOOSTER PACK",
+      "title": "TWO LEGENDS"
+    }
+  },
+  "569301": {
+    "id": "569301",
+    "raw_title": "PREMIUM BOOSTER -ONE PIECE CARD THE BEST- [PRB-01]",
+    "title_parts": {
+      "label": "PRB-01",
+      "prefix": "PREMIUM BOOSTER",
+      "title": "ONE PIECE CARD THE BEST"
+    }
+  },
+  "569801": {
+    "id": "569801",
+    "raw_title": "Other Product Card",
+    "title_parts": {
+      "label": null,
+      "prefix": null,
+      "title": "Other Product Card"
+    }
+  },
+  "569901": {
+    "id": "569901",
+    "raw_title": "Promotion card",
+    "title_parts": {
+      "label": null,
+      "prefix": null,
+      "title": "Promotion card"
+    }
+  },
+  "569113": {
+    "id": "569113",
+    "raw_title": "BOOSTER PACK -CARRYING ON HIS WILL- [OP-13]",
+    "title_parts": {
+      "label": "OP-13",
+      "prefix": "BOOSTER PACK",
+      "title": "CARRYING ON HIS WILL"
+    }
+  }
+}
