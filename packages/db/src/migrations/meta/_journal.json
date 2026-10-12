@@ -218,6 +218,13 @@
       "when": 1791763182682,
       "tag": "0030_mushy_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791764096849,
+      "tag": "0031_black_frightful_four",
+      "breakpoints": true
     }
   ]
 }

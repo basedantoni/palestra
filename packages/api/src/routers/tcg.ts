@@ -2,13 +2,16 @@ import { and, asc, eq, exists, ilike, inArray, or, type SQL } from "drizzle-orm"
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgPrinting, tcgVariantKindEnum } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCard, tcgCopy, tcgPrinting, tcgVariantKindEnum } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { tcgCopiesRouter } from "./tcg-copies";
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export const tcgRouter = router({
+  copies: tcgCopiesRouter,
+
   /** Browse the catalog: Artworks with their Card and one Printing per language. */
   artworks: protectedProcedure
     .input(
@@ -17,11 +20,21 @@ export const tcgRouter = router({
         character: z.string().trim().max(100).optional(),
         set: z.string().max(100).optional(),
         variantKind: z.enum(tcgVariantKindEnum.enumValues).optional(),
+        /** Only Artworks the caller owns a Copy of: the collection view. */
+        owned: z.boolean().optional(),
         limit: z.number().int().min(1).max(5000).default(200),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const where: SQL[] = [];
+      const owned = exists(
+        db
+          .select()
+          .from(tcgCopy)
+          .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
+          .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgCopy.userId, ctx.session.user.id))),
+      );
+      if (input.owned) where.push(owned);
       if (input.character) {
         const pattern = `%${escapeLike(input.character)}%`;
         where.push(or(ilike(tcgCard.nameEn, pattern), ilike(tcgCard.nameJa, pattern))!);
@@ -45,6 +58,7 @@ export const tcgRouter = router({
           nameEn: tcgCard.nameEn,
           nameJa: tcgCard.nameJa,
           variantKind: tcgArtwork.variantKind,
+          owned: owned.mapWith(Boolean),
         })
         .from(tcgArtwork)
         .innerJoin(tcgCard, eq(tcgCard.number, tcgArtwork.cardNumber))
@@ -55,6 +69,7 @@ export const tcgRouter = router({
 
       const printings = await db
         .select({
+          id: tcgPrinting.id,
           variantId: tcgPrinting.variantId,
           language: tcgPrinting.language,
           setName: tcgPrinting.setName,

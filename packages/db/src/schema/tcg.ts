@@ -1,6 +1,7 @@
-import { boolean, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-import { tcgLanguageEnum, tcgVariantKindEnum } from "./enums";
+import { user } from "./auth";
+import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum } from "./enums";
 
 /**
  * One Piece TCG catalog (KOI-304): global reference data imported from
@@ -48,4 +49,32 @@ export const tcgPrinting = pgTable(
     imageUrl: text("image_url").notNull(),
   },
   (table) => [uniqueIndex("tcg_printing_variantId_language_unique_idx").on(table.variantId, table.language)],
+);
+
+/**
+ * One physical card the user holds (KOI-309). Per user. The optional Want link is
+ * added with the buying flow (KOI-311).
+ */
+export const tcgCopy = pgTable(
+  "tcg_copy",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // No cascade: a catalog change must never delete what the user owns.
+    printingId: uuid("printing_id")
+      .notNull()
+      .references(() => tcgPrinting.id),
+    condition: tcgConditionEnum("condition").notNull(),
+    /** USD dollars, like finance amounts. Null for gifts and pack pulls. */
+    pricePaid: real("price_paid"),
+    acquiredOn: date("acquired_on", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("tcg_copy_userId_idx").on(table.userId)],
 );

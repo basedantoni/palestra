@@ -77,13 +77,16 @@ describe("tcg.artworks", () => {
       nameEn: "Monkey.D.Luffy",
       nameJa: "モンキー・D・ルフィ",
       variantKind: "parallel",
+      owned: false,
       printings: [
         {
+          id: expect.any(String),
           language: "ja",
           setName: "OP-05",
           imageUrl: "https://www.onepiece-cardgame.com/images/cardlist/card/OP05-119_p1.png?260828",
         },
         {
+          id: expect.any(String),
           language: "en",
           setName: "OP-05",
           imageUrl: "https://en.onepiece-cardgame.com/images/cardlist/card/OP05-119_p1.png?260929",

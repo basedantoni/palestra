@@ -1,5 +1,6 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
 
 import { env } from "@life-tracker/env/web";
@@ -7,8 +8,11 @@ import { env } from "@life-tracker/env/web";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useFinanceToday } from "@/hooks/use-finance-today";
 import { authClient } from "@/lib/auth-client";
-import { trpc } from "@/utils/trpc";
+import { trpc, type RouterOutputs } from "@/utils/trpc";
+
+import { CopyDialog } from "./-components/copy-dialog";
 
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
@@ -22,7 +26,11 @@ const tcgSearchSchema = z.object({
   set: z.string().optional().catch(undefined),
   kind: z.enum(VARIANT_KINDS).optional().catch(undefined),
   limit: z.number().int().positive().optional().catch(undefined),
+  /** Only Artworks the user owns a Copy of: the collection view. */
+  owned: z.boolean().optional().catch(undefined),
 });
+
+type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
 
 export const Route = createFileRoute("/tcg/")({
   validateSearch: (search) => tcgSearchSchema.parse(search),
@@ -45,17 +53,35 @@ function TcgPage() {
       character: search.character,
       set: search.set,
       variantKind: search.kind,
+      owned: search.owned,
       limit,
     }),
     placeholderData: keepPreviousData,
   });
+
+  const [adding, setAdding] = useState<ArtworkRow | null>(null);
+  const today = useFinanceToday();
+  const queryClient = useQueryClient();
+  const addCopy = useMutation(
+    trpc.tcg.copies.create.mutationOptions({
+      onSuccess: () => {
+        setAdding(null);
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      },
+    }),
+  );
 
   const update = (next: Partial<z.infer<typeof tcgSearchSchema>>) =>
     navigate({ search: (prev) => ({ ...prev, limit: undefined, ...next }), replace: true });
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
-      <h1 className="text-2xl font-bold">Cards</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Cards</h1>
+        <Link to="/tcg/copies" className="text-sm underline-offset-4 hover:underline">
+          My Copies
+        </Link>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Character"
@@ -90,6 +116,14 @@ function TcgPage() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={search.owned ?? false}
+            onChange={(e) => update({ owned: e.target.checked || undefined })}
+          />
+          Owned
+        </label>
       </div>
 
       {isLoading ? (
@@ -120,7 +154,11 @@ function TcgPage() {
                         {p.language.toUpperCase()}
                       </Badge>
                     ))}
+                    {a.owned && <Badge>Owned</Badge>}
                   </div>
+                  <Button size="xs" variant="outline" onClick={() => setAdding(a)}>
+                    Add Copy
+                  </Button>
                 </li>
               );
             })}
@@ -131,6 +169,21 @@ function TcgPage() {
             </Button>
           )}
         </>
+      )}
+
+      {adding && (
+        <CopyDialog
+          title={`Add a Copy of ${adding.variantId}`}
+          initial={{ printingId: adding.printings[0]!.id, condition: "NM", pricePaid: null, acquiredOn: today }}
+          printings={adding.printings}
+          pending={addCopy.isPending}
+          error={addCopy.error?.message}
+          onSubmit={(values) => addCopy.mutate(values)}
+          onClose={() => {
+            addCopy.reset();
+            setAdding(null);
+          }}
+        />
       )}
     </div>
   );

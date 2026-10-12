@@ -150,3 +150,5 @@ export const plaidEnvEnum = pgEnum("plaid_env", ["sandbox", "production"]);
 
 export const tcgLanguageEnum = pgEnum("tcg_language", ["ja", "en"]);
 export const tcgVariantKindEnum = pgEnum("tcg_variant_kind", ["base", "parallel", "manga", "reprint"]);
+/** Copy/Want condition, best first: NM > LP > MP > HP > DMG. Compare by this order, not enum sort. */
+export const tcgConditionEnum = pgEnum("tcg_condition", ["NM", "LP", "MP", "HP", "DMG"]);
