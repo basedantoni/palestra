@@ -10,6 +10,7 @@ import { useFinanceToday } from "@/hooks/use-finance-today";
 import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
+import { CardFundPanel, useCardFund } from "./-components/card-fund-panel";
 import { cardImage } from "./-components/card-image";
 import { OfferDialog } from "./-components/offer-dialog";
 import { WantDialog } from "./-components/want-dialog";
@@ -49,6 +50,7 @@ function WantsPage() {
   const [editing, setEditing] = useState<Want | null>(null);
   const [offering, setOffering] = useState<{ want: Want; offer?: Offer } | null>(null);
   const today = useFinanceToday();
+  const fund = useCardFund();
 
   const options = { onSuccess: () => queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() }) };
   const drop = useMutation(trpc.tcg.wants.drop.mutationOptions(options));
@@ -63,6 +65,7 @@ function WantsPage() {
           Browse cards
         </Link>
       </div>
+      <CardFundPanel />
       <Tabs
         value={status}
         onValueChange={(next) =>
@@ -148,6 +151,11 @@ function WantsPage() {
                         <span className="text-muted-foreground">· {o.setName}</span>
                       </span>
                       <span className={o.price <= w.maxPrice ? "font-medium" : undefined}>{price(o.price)}</span>
+                      {fund && (
+                        <span className={o.price <= fund.balance ? "text-muted-foreground" : "text-destructive"}>
+                          {o.price <= fund.balance ? "within fund" : "over fund"}
+                        </span>
+                      )}
                       <span className="w-20 text-right text-muted-foreground" title={o.seenOn}>
                         {age(o.seenOn, today)}
                       </span>

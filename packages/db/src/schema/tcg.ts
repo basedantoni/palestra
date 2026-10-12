@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
+import { category } from "./category";
 import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum, tcgWantStatusEnum } from "./enums";
 
 /**
@@ -192,3 +193,20 @@ export const tcgOffer = pgTable(
   },
   (table) => [index("tcg_offer_wantId_idx").on(table.wantId)],
 );
+
+/**
+ * Per-user TCG settings (KOI-312): which finance category counts as Cards and
+ * the Card Fund's start month (ADR 0005). Deleting the category unsets it.
+ */
+export const tcgSettings = pgTable("tcg_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  cardsCategoryId: uuid("cards_category_id").references(() => category.id, { onDelete: "set null" }),
+  /** YYYY-MM, inclusive. */
+  startMonth: text("start_month").notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
