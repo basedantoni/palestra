@@ -10,7 +10,7 @@ import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCard, tcgPrinting, user } from "@life-tracker/db/schema/index";
 import { eq } from "drizzle-orm";
 
-import { upsertCatalog } from "../lib/tcg/catalog-db";
+import { applyArtistUpdates, upsertCatalog } from "../lib/tcg/catalog-db";
 import { transformCatalog } from "../lib/tcg/catalog-transform";
 import { en, ja, packs } from "../lib/tcg/fixtures";
 import { appRouter } from "../routers/index";
@@ -27,6 +27,9 @@ const counts = async () => ({
   artworks: (await db.select().from(tcgArtwork)).length,
   printings: (await db.select().from(tcgPrinting)).length,
 });
+
+const artwork = async (variantId: string) =>
+  (await db.select().from(tcgArtwork).where(eq(tcgArtwork.variantId, variantId)))[0];
 
 beforeEach(() => truncateAll(db));
 
@@ -66,8 +69,48 @@ describe("upsertCatalog", () => {
   });
 });
 
+describe("applyArtistUpdates", () => {
+  beforeEach(() => upsertCatalog(catalog));
+
+  it("writes artist and conflict flag, and a Limitless manga label survives re-importing the catalog", async () => {
+    await applyArtistUpdates([
+      { variantId: "OP05-119_p1", artist: "Nakamaru", artistConflict: false, manga: true },
+      { variantId: "OP05-119_p4", artist: null, artistConflict: true, manga: false },
+    ]);
+    await upsertCatalog(catalog);
+
+    expect(await artwork("OP05-119_p1")).toMatchObject({ artist: "Nakamaru", artistConflict: false, variantKind: "manga" });
+    expect(await artwork("OP05-119_p4")).toMatchObject({ artist: null, artistConflict: true, variantKind: "parallel" });
+  });
+
+  it("re-running clears a resolved flag and never demotes a manga", async () => {
+    await applyArtistUpdates([{ variantId: "OP05-119_p2", artist: null, artistConflict: true, manga: false }]);
+    await applyArtistUpdates([{ variantId: "OP05-119_p2", artist: "Tadaichi Nakama", artistConflict: false, manga: false }]);
+
+    expect(await artwork("OP05-119_p2")).toMatchObject({
+      artist: "Tadaichi Nakama",
+      artistConflict: false,
+      variantKind: "manga",
+    });
+  });
+});
+
 describe("tcg.artworks", () => {
   beforeEach(() => upsertCatalog(catalog));
+
+  it("shows each Artwork's artist, filters by artist, and can show only flagged Artworks", async () => {
+    await applyArtistUpdates([
+      { variantId: "OP05-119", artist: "Nakamaru", artistConflict: false, manga: false },
+      { variantId: "OP05-119_p1", artist: "Tadaichi Nakama", artistConflict: true, manga: false },
+      { variantId: "OP08-119", artist: "NAKAMARU", artistConflict: false, manga: false },
+    ]);
+
+    const rows = await caller.tcg.artworks({});
+    expect(rows.find((r) => r.variantId === "OP05-119")).toMatchObject({ artist: "Nakamaru", artistConflict: false });
+    expect(rows.find((r) => r.variantId === "OP05-119_p2")).toMatchObject({ artist: null, artistConflict: false });
+    expect(ids(await caller.tcg.artworks({ artist: "nakamaru" }))).toEqual(["OP05-119", "OP08-119"]);
+    expect(ids(await caller.tcg.artworks({ conflict: true }))).toEqual(["OP05-119_p1"]);
+  });
 
   it("lists Artworks with their card, kind, and a Printing per language", async () => {
     const rows = await caller.tcg.artworks({});
@@ -77,6 +120,8 @@ describe("tcg.artworks", () => {
       nameEn: "Monkey.D.Luffy",
       nameJa: "モンキー・D・ルフィ",
       variantKind: "parallel",
+      artist: null,
+      artistConflict: false,
       owned: false,
       wanted: false,
       rating: null,

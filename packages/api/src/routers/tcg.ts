@@ -68,6 +68,10 @@ export const tcgRouter = router({
         character: z.string().trim().max(100).optional(),
         set: z.string().max(100).optional(),
         variantKind: z.enum(tcgVariantKindEnum.enumValues).optional(),
+        /** Substring of the credited artist. */
+        artist: z.string().trim().max(100).optional(),
+        /** Only Artworks whose Japanese and English sources disagree on the artist. */
+        conflict: z.boolean().optional(),
         /** Only Artworks the caller owns a Copy of: the collection view. */
         owned: z.boolean().optional(),
         limit: z.number().int().min(1).max(5000).default(200),
@@ -123,6 +127,8 @@ export const tcgRouter = router({
         );
       }
       if (input.variantKind) where.push(eq(tcgArtwork.variantKind, input.variantKind));
+      if (input.artist) where.push(ilike(tcgArtwork.artist, `%${escapeLike(input.artist)}%`));
+      if (input.conflict) where.push(eq(tcgArtwork.artistConflict, true));
 
       const artworks = await db
         .select({
@@ -131,6 +137,8 @@ export const tcgRouter = router({
           nameEn: tcgCard.nameEn,
           nameJa: tcgCard.nameJa,
           variantKind: tcgArtwork.variantKind,
+          artist: tcgArtwork.artist,
+          artistConflict: tcgArtwork.artistConflict,
           owned: owned.mapWith(Boolean),
           /** The caller has an open Want for this Artwork. */
           wanted: sql<boolean>`exists (select 1 from ${tcgWant} where ${tcgWant.variantId} = ${tcgArtwork.variantId} and ${tcgWant.userId} = ${ctx.session.user.id} and ${tcgWant.status} = 'open')`,
