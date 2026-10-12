@@ -1,8 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
-
-import { env } from "@life-tracker/env/web";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +9,11 @@ import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 
+import { cardImage } from "./-components/card-image";
+import { WantDialog } from "./-components/want-dialog";
+
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
-
-/** Bandai blocks cross-site image loads, so card images go through the server's relay. */
-const cardImage = (src: string) => `${env.VITE_SERVER_URL}/api/tcg/image?src=${encodeURIComponent(src)}`;
 
 // Filters live in the URL so a filtered view survives reloads.
 const tcgSearchSchema = z.object({
@@ -39,6 +38,7 @@ function TcgPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const limit = search.limit ?? PAGE;
+  const [wanting, setWanting] = useState<{ variantId: string; label: string } | null>(null);
   const { data: sets } = useQuery(trpc.tcg.sets.queryOptions());
   const { data: artworks, isLoading } = useQuery({
     ...trpc.tcg.artworks.queryOptions({
@@ -55,7 +55,12 @@ function TcgPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
-      <h1 className="text-2xl font-bold">Cards</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Cards</h1>
+        <Link to="/tcg/wants" className="text-sm underline underline-offset-4">
+          Wants
+        </Link>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Character"
@@ -121,6 +126,16 @@ function TcgPage() {
                       </Badge>
                     ))}
                   </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    {a.wanted && <Badge>Wanted</Badge>}
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
+                    >
+                      {a.wanted ? "Want another" : "Want"}
+                    </Button>
+                  </div>
                 </li>
               );
             })}
@@ -132,6 +147,7 @@ function TcgPage() {
           )}
         </>
       )}
+      {wanting && <WantDialog {...wanting} onClose={() => setWanting(null)} />}
     </div>
   );
 }

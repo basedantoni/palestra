@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgPrinting } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCard, tcgPrinting, user } from "@life-tracker/db/schema/index";
 import { eq } from "drizzle-orm";
 
 import { upsertCatalog } from "../lib/tcg/catalog-db";
@@ -77,6 +77,7 @@ describe("tcg.artworks", () => {
       nameEn: "Monkey.D.Luffy",
       nameJa: "モンキー・D・ルフィ",
       variantKind: "parallel",
+      wanted: false,
       printings: [
         {
           language: "ja",
@@ -107,5 +108,53 @@ describe("tcg.artworks", () => {
 
   it("lists the sets to filter by", async () => {
     expect(await caller.tcg.sets()).toEqual(["OP-05", "OP-08", "OP-13", "Other Product Card", "PRB-01"]);
+  });
+});
+
+/** Luffy Artworks browse marks as Wanted. */
+const wanted = async () => ids((await caller.tcg.artworks({ character: "luffy" })).filter((a) => a.wanted));
+
+describe("Wants against the catalog (KOI-308)", () => {
+  const other = appRouter.createCaller({ session: { user: { id: "user-other" } } } as any);
+  const terms = { languages: ["ja" as const], maxPrice: 25, minCondition: "LP" as const };
+
+  beforeEach(async () => {
+    await upsertCatalog(catalog);
+    for (const id of ["user-tcg", "user-other"]) {
+      await db.insert(user).values({ id, name: id, email: `${id}@test.internal` });
+    }
+  });
+
+  it("browse marks only Artworks with the caller's open Want", async () => {
+    const { id } = await caller.tcg.wants.create({ variantId: "OP05-119_p1", ...terms });
+    await caller.tcg.wants.create({ variantId: "OP05-119_p1", ...terms }); // a second Want is fine
+    await other.tcg.wants.create({ variantId: "OP05-119_p2", ...terms });
+    expect(await wanted()).toEqual(["OP05-119_p1"]);
+
+    await caller.tcg.wants.drop({ id });
+    expect(await wanted()).toEqual(["OP05-119_p1"]);
+    const [second] = await caller.tcg.wants.list();
+    await caller.tcg.wants.drop({ id: second!.id });
+    expect(await wanted()).toEqual([]);
+  });
+
+  it("lists open and dropped Wants with their Artwork", async () => {
+    const { id } = await caller.tcg.wants.create({ variantId: "OP05-119_p1", ...terms });
+    await caller.tcg.wants.drop({ id });
+
+    expect(await caller.tcg.wants.list()).toEqual([]);
+    expect(await caller.tcg.wants.list({ status: "dropped" })).toEqual([
+      expect.objectContaining({
+        id,
+        variantId: "OP05-119_p1",
+        nameEn: "Monkey.D.Luffy",
+        languages: ["ja"],
+        maxPrice: 25,
+        minCondition: "LP",
+        status: "dropped",
+        imageUrl: "https://www.onepiece-cardgame.com/images/cardlist/card/OP05-119_p1.png?260828",
+      }),
+    ]);
+    expect(await other.tcg.wants.list({ status: "dropped" })).toEqual([]);
   });
 });

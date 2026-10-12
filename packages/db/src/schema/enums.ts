@@ -150,3 +150,6 @@ export const plaidEnvEnum = pgEnum("plaid_env", ["sandbox", "production"]);
 
 export const tcgLanguageEnum = pgEnum("tcg_language", ["ja", "en"]);
 export const tcgVariantKindEnum = pgEnum("tcg_variant_kind", ["base", "parallel", "manga", "reprint"]);
+/** Condition, best first: NM > LP > MP > HP > DMG. "At least LP" compares positions in this order. Shared by Wants and Copies. */
+export const tcgConditionEnum = pgEnum("tcg_condition", ["NM", "LP", "MP", "HP", "DMG"]);
+export const tcgWantStatusEnum = pgEnum("tcg_want_status", ["open", "ordered", "fulfilled", "dropped"]);

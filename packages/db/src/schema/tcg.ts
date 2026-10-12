@@ -1,6 +1,7 @@
-import { boolean, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-import { tcgLanguageEnum, tcgVariantKindEnum } from "./enums";
+import { user } from "./auth";
+import { tcgConditionEnum, tcgLanguageEnum, tcgVariantKindEnum, tcgWantStatusEnum } from "./enums";
 
 /**
  * One Piece TCG catalog (KOI-304): global reference data imported from
@@ -48,4 +49,34 @@ export const tcgPrinting = pgTable(
     imageUrl: text("image_url").notNull(),
   },
   (table) => [uniqueIndex("tcg_printing_variantId_language_unique_idx").on(table.variantId, table.language)],
+);
+
+/**
+ * The user's intent to acquire one Copy of an Artwork (KOI-308). Several Wants
+ * may target the same Artwork. Status moves open <-> dropped here; ordered and
+ * fulfilled are reached by the buying flow (KOI-311).
+ */
+export const tcgWant = pgTable(
+  "tcg_want",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => tcgArtwork.variantId),
+    /** Accepted languages: one or both. */
+    languages: tcgLanguageEnum("languages").array().notNull(),
+    /** Maximum delivered price, USD dollars. */
+    maxPrice: real("max_price").notNull(),
+    minCondition: tcgConditionEnum("min_condition").notNull(),
+    status: tcgWantStatusEnum("status").default("open").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("tcg_want_userId_status_idx").on(table.userId, table.status)],
 );

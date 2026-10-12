@@ -1,10 +1,11 @@
-import { and, asc, eq, exists, ilike, inArray, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, exists, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgPrinting, tcgVariantKindEnum } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCard, tcgPrinting, tcgVariantKindEnum, tcgWant } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { tcgWantsRouter } from "./tcg-wants";
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
@@ -20,7 +21,7 @@ export const tcgRouter = router({
         limit: z.number().int().min(1).max(5000).default(200),
       }),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const where: SQL[] = [];
       if (input.character) {
         const pattern = `%${escapeLike(input.character)}%`;
@@ -45,6 +46,8 @@ export const tcgRouter = router({
           nameEn: tcgCard.nameEn,
           nameJa: tcgCard.nameJa,
           variantKind: tcgArtwork.variantKind,
+          /** The caller has an open Want for this Artwork. */
+          wanted: sql<boolean>`exists (select 1 from ${tcgWant} where ${tcgWant.variantId} = ${tcgArtwork.variantId} and ${tcgWant.userId} = ${ctx.session.user.id} and ${tcgWant.status} = 'open')`,
         })
         .from(tcgArtwork)
         .innerJoin(tcgCard, eq(tcgCard.number, tcgArtwork.cardNumber))
@@ -73,6 +76,8 @@ export const tcgRouter = router({
       for (const { variantId, ...p } of printings) byArtwork.get(variantId)?.printings.push(p);
       return [...byArtwork.values()];
     }),
+
+  wants: tcgWantsRouter,
 
   /** Set names to filter by. */
   sets: protectedProcedure.query(async () => {
