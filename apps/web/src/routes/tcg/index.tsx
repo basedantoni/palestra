@@ -1,20 +1,22 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
-
-import { env } from "@life-tracker/env/web";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useFinanceToday } from "@/hooks/use-finance-today";
 import { authClient } from "@/lib/auth-client";
-import { trpc } from "@/utils/trpc";
+import { trpc, type RouterOutputs } from "@/utils/trpc";
+
+import { cardImage } from "./-components/card-image";
+import { CopyDialog } from "./-components/copy-dialog";
+import { WantDialog } from "./-components/want-dialog";
+import { ArtRatingSelect, ThemeTagMenu, ThemesDialog } from "./-components/art-taste";
 
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
-
-/** Bandai blocks cross-site image loads, so card images go through the server's relay. */
-const cardImage = (src: string) => `${env.VITE_SERVER_URL}/api/tcg/image?src=${encodeURIComponent(src)}`;
 
 // Filters live in the URL so a filtered view survives reloads.
 const tcgSearchSchema = z.object({
@@ -24,7 +26,14 @@ const tcgSearchSchema = z.object({
   artist: z.string().optional().catch(undefined),
   conflict: z.boolean().optional().catch(undefined),
   limit: z.number().int().positive().optional().catch(undefined),
+  minRating: z.number().int().min(0).max(5).optional().catch(undefined),
+  theme: z.string().uuid().optional().catch(undefined),
+  sort: z.enum(["rating"]).optional().catch(undefined),
+  /** Only Artworks the user owns a Copy of: the collection view. */
+  owned: z.boolean().optional().catch(undefined),
 });
+
+type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
 
 export const Route = createFileRoute("/tcg/")({
   validateSearch: (search) => tcgSearchSchema.parse(search),
@@ -41,7 +50,9 @@ function TcgPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const limit = search.limit ?? PAGE;
+  const [wanting, setWanting] = useState<{ variantId: string; label: string } | null>(null);
   const { data: sets } = useQuery(trpc.tcg.sets.queryOptions());
+  const { data: themes } = useQuery(trpc.tcg.themes.queryOptions());
   const { data: artworks, isLoading } = useQuery({
     ...trpc.tcg.artworks.queryOptions({
       character: search.character,
@@ -49,17 +60,43 @@ function TcgPage() {
       variantKind: search.kind,
       artist: search.artist,
       conflict: search.conflict,
+      owned: search.owned,
       limit,
+      minRating: search.minRating,
+      themeId: search.theme,
+      sort: search.sort,
     }),
     placeholderData: keepPreviousData,
   });
+
+  const [adding, setAdding] = useState<ArtworkRow | null>(null);
+  const today = useFinanceToday();
+  const queryClient = useQueryClient();
+  const addCopy = useMutation(
+    trpc.tcg.copies.create.mutationOptions({
+      onSuccess: () => {
+        setAdding(null);
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      },
+    }),
+  );
 
   const update = (next: Partial<z.infer<typeof tcgSearchSchema>>) =>
     navigate({ search: (prev) => ({ ...prev, limit: undefined, ...next }), replace: true });
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
-      <h1 className="text-2xl font-bold">Cards</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Cards</h1>
+        <div className="flex gap-4">
+          <Link to="/tcg/copies" className="text-sm underline underline-offset-4">
+            My Copies
+          </Link>
+          <Link to="/tcg/wants" className="text-sm underline underline-offset-4">
+            Wants
+          </Link>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Character"
@@ -108,6 +145,50 @@ function TcgPage() {
             onChange={(e) => update({ conflict: e.target.checked || undefined })}
           />
           Artist conflicts only
+        </label>
+        <select
+          aria-label="Minimum Art Rating"
+          value={search.minRating ?? ""}
+          onChange={(e) => update({ minRating: e.target.value === "" ? undefined : Number(e.target.value) })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">Any rating</option>
+          {[0, 1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              ★ {n}+
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Theme"
+          value={search.theme ?? ""}
+          onChange={(e) => update({ theme: e.target.value || undefined })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">All Themes</option>
+          {(themes ?? []).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Sort"
+          value={search.sort ?? ""}
+          onChange={(e) => update({ sort: e.target.value === "rating" ? "rating" : undefined })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">Sort: card number</option>
+          <option value="rating">Sort: Art Rating</option>
+        </select>
+        <ThemesDialog />
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={search.owned ?? false}
+            onChange={(e) => update({ owned: e.target.checked || undefined })}
+          />
+          Owned
         </label>
       </div>
 
@@ -158,6 +239,29 @@ function TcgPage() {
                         {p.language.toUpperCase()}
                       </Badge>
                     ))}
+                    {a.owned && <Badge>Owned</Badge>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {a.wanted && <Badge>Wanted</Badge>}
+                    <Button size="xs" variant="outline" onClick={() => setAdding(a)}>
+                      Add Copy
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
+                    >
+                      {a.wanted ? "Want another" : "Want"}
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <ArtRatingSelect variantId={a.variantId} rating={a.rating} />
+                    <ThemeTagMenu variantId={a.variantId} tagged={a.themes} />
+                    {a.themes.map((t) => (
+                      <Badge key={t.id} variant="secondary">
+                        {t.name}
+                      </Badge>
+                    ))}
                   </div>
                 </li>
               );
@@ -170,6 +274,22 @@ function TcgPage() {
           )}
         </>
       )}
+
+      {adding && (
+        <CopyDialog
+          title={`Add a Copy of ${adding.variantId}`}
+          initial={{ printingId: adding.printings[0]!.id, condition: "NM", pricePaid: null, acquiredOn: today }}
+          printings={adding.printings}
+          pending={addCopy.isPending}
+          error={addCopy.error?.message}
+          onSubmit={(values) => addCopy.mutate(values)}
+          onClose={() => {
+            addCopy.reset();
+            setAdding(null);
+          }}
+        />
+      )}
+      {wanting && <WantDialog {...wanting} onClose={() => setWanting(null)} />}
     </div>
   );
 }
