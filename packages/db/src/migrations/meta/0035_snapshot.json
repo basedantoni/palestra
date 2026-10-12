@@ -1,5 +1,5 @@
 {
-  "id": "2013916e-38e8-4d1a-9e16-551a2647be94",
+  "id": "4f58ba14-1e27-427d-947b-2071b9ad4cac",
   "prevId": "cf353446-616b-421f-826d-0c51484cc74b",
   "version": "7",
   "dialect": "postgresql",
@@ -2390,12 +2390,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "want_id": {
-          "name": "want_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2453,19 +2447,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "tcg_copy_want_id_tcg_want_id_fk": {
-          "name": "tcg_copy_want_id_tcg_want_id_fk",
-          "tableFrom": "tcg_copy",
-          "tableTo": "tcg_want",
-          "columnsFrom": [
-            "want_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -2675,6 +2656,71 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tcg_settings": {
+      "name": "tcg_settings",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cards_category_id": {
+          "name": "cards_category_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_month": {
+          "name": "start_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tcg_settings_user_id_user_id_fk": {
+          "name": "tcg_settings_user_id_user_id_fk",
+          "tableFrom": "tcg_settings",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tcg_settings_cards_category_id_category_id_fk": {
+          "name": "tcg_settings_cards_category_id_category_id_fk",
+          "tableFrom": "tcg_settings",
+          "tableTo": "category",
+          "columnsFrom": [
+            "cards_category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tcg_theme": {
       "name": "tcg_theme",
       "schema": "",
@@ -2800,12 +2846,6 @@
           "notNull": true,
           "default": "'open'"
         },
-        "bought_offer_id": {
-          "name": "bought_offer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2870,30 +2910,12 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "tcg_want_bought_offer_id_tcg_offer_id_fk": {
-          "name": "tcg_want_bought_offer_id_tcg_offer_id_fk",
-          "tableFrom": "tcg_want",
-          "tableTo": "tcg_offer",
-          "columnsFrom": [
-            "bought_offer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "tcg_want_bought_offer_while_ordered": {
-          "name": "tcg_want_bought_offer_while_ordered",
-          "value": "(\"tcg_want\".\"status\" in ('ordered', 'fulfilled')) = (\"tcg_want\".\"bought_offer_id\" is not null)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.workout_template": {

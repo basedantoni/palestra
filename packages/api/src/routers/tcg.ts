@@ -19,6 +19,7 @@ import {
 
 import { protectedProcedure, router } from "../index";
 import { tcgCopiesRouter } from "./tcg-copies";
+import { tcgFundRouter } from "./tcg-fund";
 import { tcgOffersRouter } from "./tcg-offers";
 import { tcgWantsRouter } from "./tcg-wants";
 
@@ -59,6 +60,7 @@ async function assertOwnedTheme(userId: string, themeId: string) {
 
 export const tcgRouter = router({
   copies: tcgCopiesRouter,
+  fund: tcgFundRouter,
 
   /** Browse the catalog: Artworks with their Card and one Printing per language. */
   artworks: protectedProcedure

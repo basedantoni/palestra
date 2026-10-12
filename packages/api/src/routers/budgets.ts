@@ -12,9 +12,9 @@ import { protectedProcedure, router } from "../index";
 import { spendByCategory, spendHistory } from "../lib/budget-spend";
 import { getUserTimezone } from "../lib/user-timezone";
 
-const monthKeySchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "monthKey must be YYYY-MM");
+export const monthKeySchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "monthKey must be YYYY-MM");
 
-const spendColumns = {
+export const spendColumns = {
   categoryId: transaction.categoryId,
   amount: transaction.amount,
   flow: transaction.flow,
@@ -27,7 +27,7 @@ const spendColumns = {
  * Plaid dates are stored as UTC midnight of the bank's date, so the range is
  * [first day 00:00Z, first day of the following month 00:00Z).
  */
-function monthRange(fromMonth: string, toMonth: string): SQL[] {
+export function monthRange(fromMonth: string, toMonth: string): SQL[] {
   return [
     gte(transaction.date, new Date(`${fromMonth}-01T00:00:00.000Z`)),
     lt(transaction.date, new Date(`${addMonths(toMonth, 1)}-01T00:00:00.000Z`)),
