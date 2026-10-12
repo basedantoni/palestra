@@ -94,20 +94,22 @@ describe("received below the minimum Condition", () => {
 
 describe("tcg.offers.delete of a bought Offer", () => {
   it("refuses to delete the Offer a Want was bought from", async () => {
-    mockDb.onSelect(tcgOffer, [{ variantId: "OP05-069_p1", languages: ["ja"], boughtOfferId: OFFER_ID }]);
+    mockDb.onSelect(tcgOffer, [
+      { variantId: "OP05-069_p1", languages: ["ja"], status: "ordered", boughtOfferId: OFFER_ID },
+    ]);
 
     await expect(caller().tcg.offers.delete({ id: OFFER_ID })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(mockDb.deleted(tcgOffer)).toEqual([]);
   });
 
-  it("still deletes an ordered Want's other Offers", async () => {
+  it("keeps an ordered Want's other Offers too: Offers change only while the Want is open", async () => {
     const OTHER_OFFER = "00000000-0000-4000-8000-0000000000e2";
-    mockDb.onSelect(tcgOffer, [{ variantId: "OP05-069_p1", languages: ["ja"], boughtOfferId: OFFER_ID }]);
-    mockDb.onDelete(tcgOffer, [{ id: OTHER_OFFER }]);
+    mockDb.onSelect(tcgOffer, [
+      { variantId: "OP05-069_p1", languages: ["ja"], status: "ordered", boughtOfferId: OFFER_ID },
+    ]);
 
-    await caller().tcg.offers.delete({ id: OTHER_OFFER });
-
-    expect(mockDb.deleted(tcgOffer)).toEqual([[OTHER_OFFER]]);
+    await expect(caller().tcg.offers.delete({ id: OTHER_OFFER })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mockDb.deleted(tcgOffer)).toEqual([]);
   });
 });
 

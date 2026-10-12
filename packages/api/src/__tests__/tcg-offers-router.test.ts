@@ -24,7 +24,8 @@ const EN_PRINTING = "00000000-0000-4000-8000-0000000000a2";
 const caller = () => appRouter.createCaller({ session: { user: { id: USER_ID } } } as any);
 
 /** The caller's Want, as the ownership lookup finds it. */
-const wantIs = (languages: string[], variantId = "OP05-069_p1") => mockDb.onSelect(tcgWant, [{ variantId, languages }]);
+const wantIs = (languages: string[], variantId = "OP05-069_p1", status = "open") =>
+  mockDb.onSelect(tcgWant, [{ variantId, languages, status }]);
 /** The chosen Printing. */
 const printingIs = (language: string, variantId = "OP05-069_p1") =>
   mockDb.onSelect(tcgPrinting, [{ variantId, language }]);
@@ -113,6 +114,7 @@ describe("tcg.offers.create", () => {
     ["a blank seller", { seller: "  " }],
     ["a zero price", { price: 0 }],
     ["a malformed date", { seenOn: "10/10/2026" }],
+    ["an impossible date", { seenOn: "2026-02-30" }],
     ["a malformed URL", { url: "not a url" }],
   ])("rejects %s", async (_, bad) => {
     await expect(caller().tcg.offers.create({ wantId: WANT_ID, ...terms, ...bad })).rejects.toMatchObject({
@@ -123,8 +125,52 @@ describe("tcg.offers.create", () => {
 });
 
 /** The caller's Offer, as the ownership lookup (through its Want) finds it. */
-const offerIs = (languages: string[], variantId = "OP05-069_p1") =>
-  mockDb.onSelect(tcgOffer, [{ variantId, languages }]);
+const offerIs = (languages: string[], variantId = "OP05-069_p1", status = "open", boughtOfferId: string | null = null) =>
+  mockDb.onSelect(tcgOffer, [{ variantId, languages, status, boughtOfferId }]);
+
+describe("Offers change only while their Want is open", () => {
+  it.each(["ordered", "fulfilled", "dropped"])("rejects a new Offer on a %s Want", async (status) => {
+    wantIs(["ja"], "OP05-069_p1", status);
+    printingIs("ja");
+
+    await expect(caller().tcg.offers.create({ wantId: WANT_ID, ...terms })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringMatching(/open/),
+    });
+    expect(mockDb.inserted(tcgOffer)).toEqual([]);
+  });
+
+  it.each(["ordered", "fulfilled", "dropped"])("rejects editing an Offer of a %s Want", async (status) => {
+    offerIs(["ja"], "OP05-069_p1", status);
+    printingIs("ja");
+
+    await expect(caller().tcg.offers.update({ id: OFFER_ID, ...terms })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringMatching(/open/),
+    });
+    expect(mockDb.updated(tcgOffer)).toEqual([]);
+  });
+
+  it.each(["fulfilled", "dropped"])("rejects deleting an Offer of a %s Want", async (status) => {
+    offerIs(["ja"], "OP05-069_p1", status);
+
+    await expect(caller().tcg.offers.delete({ id: OFFER_ID })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringMatching(/open/),
+    });
+    expect(mockDb.deleted(tcgOffer)).toEqual([]);
+  });
+
+  it("still explains why the bought Offer can't be deleted", async () => {
+    offerIs(["ja"], "OP05-069_p1", "ordered", OFFER_ID);
+
+    await expect(caller().tcg.offers.delete({ id: OFFER_ID })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringMatching(/bought/),
+    });
+    expect(mockDb.deleted(tcgOffer)).toEqual([]);
+  });
+});
 
 describe("tcg.offers.update", () => {
   it("edits the caller's Offer", async () => {

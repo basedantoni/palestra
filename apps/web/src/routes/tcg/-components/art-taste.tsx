@@ -24,14 +24,18 @@ import { trpc } from "@/utils/trpc";
 
 const selectClass = "rounded-md border border-border bg-background px-1 py-0.5 text-xs";
 
-function useInvalidateTcg() {
+/** Ratings and tags show on browse rows; Theme edits also change the Theme list. */
+function useInvalidate() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+  const artworks = () => queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() });
+  const themes = () =>
+    Promise.all([artworks(), queryClient.invalidateQueries({ queryKey: trpc.tcg.themes.pathKey() })]);
+  return { artworks, themes };
 }
 
 export function ArtRatingSelect({ variantId, rating }: { variantId: string; rating: number | null }) {
-  const invalidate = useInvalidateTcg();
-  const setRating = useMutation(trpc.tcg.setRating.mutationOptions({ onSuccess: invalidate }));
+  const { artworks } = useInvalidate();
+  const setRating = useMutation(trpc.tcg.setRating.mutationOptions({ onSuccess: artworks }));
   return (
     <select
       aria-label={`Art Rating for ${variantId}`}
@@ -51,10 +55,10 @@ export function ArtRatingSelect({ variantId, rating }: { variantId: string; rati
 }
 
 export function ThemeTagMenu({ variantId, tagged }: { variantId: string; tagged: Array<{ id: string }> }) {
-  const invalidate = useInvalidateTcg();
+  const { artworks } = useInvalidate();
   const { data: themes } = useQuery(trpc.tcg.themes.queryOptions());
-  const tag = useMutation(trpc.tcg.tagArtwork.mutationOptions({ onSuccess: invalidate }));
-  const untag = useMutation(trpc.tcg.untagArtwork.mutationOptions({ onSuccess: invalidate }));
+  const tag = useMutation(trpc.tcg.tagArtwork.mutationOptions({ onSuccess: artworks }));
+  const untag = useMutation(trpc.tcg.untagArtwork.mutationOptions({ onSuccess: artworks }));
   const taggedIds = new Set(tagged.map((t) => t.id));
   return (
     <DropdownMenu>
@@ -78,7 +82,7 @@ export function ThemeTagMenu({ variantId, tagged }: { variantId: string; tagged:
 }
 
 export function ThemesDialog() {
-  const invalidate = useInvalidateTcg();
+  const { themes: invalidate } = useInvalidate();
   const { data: themes } = useQuery(trpc.tcg.themes.queryOptions());
   const [name, setName] = useState("");
   const create = useMutation(

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { TCG_CONDITIONS, TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -10,12 +11,7 @@ type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 type Language = Want["languages"][number];
 type Condition = Want["minCondition"];
 
-const LANGUAGES: Array<[Language, string]> = [
-  ["ja", "Japanese"],
-  ["en", "English"],
-];
-/** Best first: "at least LP" accepts NM and LP. */
-const CONDITIONS: Condition[] = ["NM", "LP", "MP", "HP", "DMG"];
+const LANGUAGES = Object.entries(TCG_LANGUAGE_NAME) as Array<[Language, string]>;
 
 /** Create a Want for an Artwork, or edit an existing Want's terms. */
 export function WantDialog({
@@ -37,7 +33,8 @@ export function WantDialog({
 
   const options = {
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.wants.pathKey() });
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() });
       onClose();
     },
   };
@@ -105,7 +102,7 @@ export function WantDialog({
               onChange={(e) => setMinCondition(e.target.value as Condition)}
               className="block rounded-md border border-border bg-background px-2 py-1 text-sm"
             >
-              {CONDITIONS.map((c) => (
+              {TCG_CONDITIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,6 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 type Offer = Want["offers"][number];
-
-const LANGUAGE_NAME = { ja: "Japanese", en: "English" } as const;
 
 /** Record an Offer against a Want, or edit one. */
 export function OfferDialog({
@@ -35,7 +34,7 @@ export function OfferDialog({
 
   const options = {
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.wants.pathKey() });
       onClose();
     },
   };
@@ -81,7 +80,7 @@ export function OfferDialog({
               >
                 {want.printings.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {LANGUAGE_NAME[p.language]} · {p.setName}
+                    {TCG_LANGUAGE_NAME[p.language]} · {p.setName}
                   </option>
                 ))}
               </select>

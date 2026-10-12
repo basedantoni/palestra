@@ -15,7 +15,7 @@ import { todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { cardFund } from "../lib/card-fund";
 import { getUserTimezone } from "../lib/user-timezone";
-import { monthKeySchema, monthRange, spendColumns } from "./budgets";
+import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 
 export const tcgFundRouter = router({
   /** The caller's settings (null until saved) and Card Fund (null without a Cards category). */

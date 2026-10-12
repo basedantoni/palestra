@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -14,6 +14,7 @@ import {
   tcgWant,
   tcgWantStatusEnum,
 } from "@life-tracker/db/schema/index";
+import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import type { Conn } from "../lib/category-rules-db";
@@ -149,6 +150,27 @@ export const tcgWantsRouter = router({
   /** Edit a Want's terms. */
   update: protectedProcedure.input(terms.extend({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
     const { id, ...set } = input;
+    // An Offer in a dropped language would still count as cheapest/buyable but no longer be editable.
+    const [stranded] = await db
+      .select({ language: tcgPrinting.language })
+      .from(tcgOffer)
+      .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgOffer.printingId))
+      .innerJoin(tcgWant, eq(tcgWant.id, tcgOffer.wantId))
+      .where(
+        and(
+          eq(tcgOffer.wantId, id),
+          eq(tcgWant.userId, ctx.session.user.id),
+          notInArray(tcgPrinting.language, set.languages),
+        ),
+      )
+      .limit(1);
+    if (stranded) {
+      const name = TCG_LANGUAGE_NAME[stranded.language];
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `This Want has ${name} Offers; delete them before dropping ${name}`,
+      });
+    }
     const [updated] = await db
       .update(tcgWant)
       .set(set)

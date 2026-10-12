@@ -16,6 +16,7 @@ import {
   validatePattern,
 } from "../lib/category-rules";
 import { type Conn, applyRecategorizations, loadMatchableRules, planRuleApply } from "../lib/category-rules-db";
+import { isUniqueViolation } from "../lib/pg-error";
 
 const ruleInput = z.object({
   pattern: z.string().max(MAX_PATTERN_LENGTH),
@@ -33,11 +34,6 @@ async function assertOwnedCategory(conn: Conn, userId: string, categoryId: strin
 
 function assertOwnedRule(rules: readonly MatchableRule[], ruleId: string): void {
   if (!rules.some((r) => r.id === ruleId)) throw new TRPCError({ code: "NOT_FOUND", message: "Rule not found" });
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23505" || e?.cause?.code === "23505";
 }
 
 /**

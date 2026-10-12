@@ -11,13 +11,17 @@ import {
   tcgArtworkTheme,
   tcgCard,
   tcgCopy,
+  tcgLanguageEnum,
   tcgPrinting,
   tcgTheme,
   tcgVariantKindEnum,
   tcgWant,
 } from "@life-tracker/db/schema/index";
 
+import { TCG_ARTWORKS_MAX_LIMIT } from "@life-tracker/shared";
+
 import { protectedProcedure, router } from "../index";
+import { isForeignKeyViolation, isUniqueViolation } from "../lib/pg-error";
 import { tcgCopiesRouter } from "./tcg-copies";
 import { tcgFundRouter } from "./tcg-fund";
 import { tcgOffersRouter } from "./tcg-offers";
@@ -25,19 +29,14 @@ import { tcgWantsRouter } from "./tcg-wants";
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-const pgCode = (err: unknown) => {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code ?? e?.cause?.code;
-};
-
 /** A write naming a variant ID that isn't in the catalog fails its foreign key. */
 function artworkNotFound(err: unknown): never {
-  if (pgCode(err) === "23503") throw new TRPCError({ code: "NOT_FOUND", message: "Artwork not found" });
+  if (isForeignKeyViolation(err)) throw new TRPCError({ code: "NOT_FOUND", message: "Artwork not found" });
   throw err;
 }
 
 function duplicateThemeName(err: unknown): never {
-  if (pgCode(err) === "23505") {
+  if (isUniqueViolation(err)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "You already have a Theme with that name" });
   }
   throw err;
@@ -76,7 +75,9 @@ export const tcgRouter = router({
         conflict: z.boolean().optional(),
         /** Only Artworks the caller owns a Copy of: the collection view. */
         owned: z.boolean().optional(),
-        limit: z.number().int().min(1).max(5000).default(200),
+        /** Only Artworks printed in this language; with `owned`, owned as a Copy in this language. */
+        language: z.enum(tcgLanguageEnum.enumValues).optional(),
+        limit: z.number().int().min(1).max(TCG_ARTWORKS_MAX_LIMIT).default(200),
         /** Only Artworks the caller rated at least this. */
         minRating: z.number().int().min(0).max(5).optional(),
         /** Only Artworks tagged with this Theme of the caller's. */
@@ -88,14 +89,32 @@ export const tcgRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const where: SQL[] = [];
-      const owned = exists(
-        db
-          .select()
-          .from(tcgCopy)
-          .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
-          .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgCopy.userId, ctx.session.user.id))),
-      );
-      if (input.owned) where.push(owned);
+      const ownedIn = (language?: (typeof tcgLanguageEnum.enumValues)[number]) =>
+        exists(
+          db
+            .select()
+            .from(tcgCopy)
+            .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
+            .where(
+              and(
+                eq(tcgPrinting.variantId, tcgArtwork.variantId),
+                eq(tcgCopy.userId, userId),
+                language ? eq(tcgPrinting.language, language) : undefined,
+              ),
+            ),
+        );
+      const owned = ownedIn();
+      if (input.owned) where.push(ownedIn(input.language));
+      else if (input.language) {
+        where.push(
+          exists(
+            db
+              .select()
+              .from(tcgPrinting)
+              .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgPrinting.language, input.language))),
+          ),
+        );
+      }
       if (input.minRating !== undefined) where.push(gte(tcgArtRating.rating, input.minRating));
       if (input.themeId) {
         where.push(

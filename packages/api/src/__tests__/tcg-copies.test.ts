@@ -55,6 +55,11 @@ describe("tcg.copies.update", () => {
     ]);
   });
 
+  it("rejects an edit that changes nothing", async () => {
+    await expect(caller().tcg.copies.update({ id: COPY_ID })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mockDb.updated(tcgCopy)).toEqual([]);
+  });
+
   it("rejects another user's Copy with NOT_FOUND", async () => {
     mockDb.onUpdate(tcgCopy, []);
 

@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
-import { tcgArtwork, tcgWant } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgOffer, tcgWant } from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
 import { mockDb } from "./helpers/mock-db";
@@ -86,6 +86,17 @@ describe("tcg.wants.update", () => {
     await expect(
       caller().tcg.wants.update({ id: WANT_ID, languages: ["en"], maxPrice: 30, minCondition: "MP" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("refuses to drop a language the Want still has Offers in", async () => {
+    // The caller's Want has a Japanese Offer (a language the edit drops).
+    mockDb.onSelect(tcgOffer, [{ language: "ja" }]);
+
+    await expect(
+      caller().tcg.wants.update({ id: WANT_ID, languages: ["en"], maxPrice: 30, minCondition: "MP" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/Japanese Offers/) });
+    expect(mockDb.selected(tcgOffer)[0]).toEqual(expect.arrayContaining([WANT_ID, USER_ID]));
+    expect(mockDb.updated(tcgWant)).toEqual([]);
   });
 });
 

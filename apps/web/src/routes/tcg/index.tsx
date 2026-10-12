@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { TCG_ARTWORKS_MAX_LIMIT, TCG_LANGUAGE_NAME } from "@life-tracker/shared";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,8 @@ import { ArtRatingSelect, ThemeTagMenu, ThemesDialog } from "./-components/art-t
 
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
+const TYPING_DEBOUNCE_MS = 300;
+const LANGUAGES = Object.keys(TCG_LANGUAGE_NAME) as Array<keyof typeof TCG_LANGUAGE_NAME>;
 
 // Filters live in the URL so a filtered view survives reloads.
 const tcgSearchSchema = z.object({
@@ -25,12 +28,14 @@ const tcgSearchSchema = z.object({
   kind: z.enum(VARIANT_KINDS).optional().catch(undefined),
   artist: z.string().optional().catch(undefined),
   conflict: z.boolean().optional().catch(undefined),
-  limit: z.number().int().positive().optional().catch(undefined),
+  limit: z.number().int().positive().max(TCG_ARTWORKS_MAX_LIMIT).optional().catch(undefined),
   minRating: z.number().int().min(0).max(5).optional().catch(undefined),
   theme: z.string().uuid().optional().catch(undefined),
   sort: z.enum(["rating"]).optional().catch(undefined),
   /** Only Artworks the user owns a Copy of: the collection view. */
   owned: z.boolean().optional().catch(undefined),
+  /** Only Artworks printed in this language; with `owned`, owned in this language. */
+  lang: z.enum(LANGUAGES).optional().catch(undefined),
 });
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -61,6 +66,7 @@ function TcgPage() {
       artist: search.artist,
       conflict: search.conflict,
       owned: search.owned,
+      language: search.lang,
       limit,
       minRating: search.minRating,
       themeId: search.theme,
@@ -76,7 +82,8 @@ function TcgPage() {
     trpc.tcg.copies.create.mutationOptions({
       onSuccess: () => {
         setAdding(null);
-        queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() });
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.copies.list.pathKey() });
       },
     }),
   );
@@ -98,20 +105,8 @@ function TcgPage() {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="Character"
-          placeholder="Character"
-          value={search.character ?? ""}
-          onChange={(e) => update({ character: e.target.value || undefined })}
-          className="w-48"
-        />
-        <Input
-          aria-label="Artist"
-          placeholder="Artist"
-          value={search.artist ?? ""}
-          onChange={(e) => update({ artist: e.target.value || undefined })}
-          className="w-48"
-        />
+        <SearchInput label="Character" value={search.character} onChange={(character) => update({ character })} />
+        <SearchInput label="Artist" value={search.artist} onChange={(artist) => update({ artist })} />
         <select
           aria-label="Set"
           value={search.set ?? ""}
@@ -180,6 +175,19 @@ function TcgPage() {
         >
           <option value="">Sort: card number</option>
           <option value="rating">Sort: Art Rating</option>
+        </select>
+        <select
+          aria-label="Language"
+          value={search.lang ?? ""}
+          onChange={(e) => update({ lang: (e.target.value || undefined) as (typeof LANGUAGES)[number] | undefined })}
+          className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="">Any language</option>
+          {LANGUAGES.map((l) => (
+            <option key={l} value={l}>
+              {TCG_LANGUAGE_NAME[l]}
+            </option>
+          ))}
         </select>
         <ThemesDialog />
         <label className="flex items-center gap-1 text-xs">
@@ -267,8 +275,8 @@ function TcgPage() {
               );
             })}
           </ul>
-          {artworks.length === limit && (
-            <Button variant="outline" onClick={() => update({ limit: limit + PAGE })}>
+          {artworks.length === limit && limit < TCG_ARTWORKS_MAX_LIMIT && (
+            <Button variant="outline" onClick={() => update({ limit: Math.min(limit + PAGE, TCG_ARTWORKS_MAX_LIMIT) })}>
               Show more
             </Button>
           )}
@@ -291,5 +299,42 @@ function TcgPage() {
       )}
       {wanting && <WantDialog {...wanting} onClose={() => setWanting(null)} />}
     </div>
+  );
+}
+
+/** A text filter that updates the URL once typing pauses, not on every keystroke. */
+function SearchInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | undefined;
+  onChange: (value: string | undefined) => void;
+}) {
+  const [text, setText] = useState(value ?? "");
+  const pushed = useRef(value);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // The URL changed elsewhere (e.g. clicking an artist): show it.
+  useEffect(() => {
+    if (value === pushed.current) return;
+    pushed.current = value;
+    setText(value ?? "");
+  }, [value]);
+
+  useEffect(() => {
+    const next = text || undefined;
+    if (next === pushed.current) return;
+    const timer = setTimeout(() => {
+      pushed.current = next;
+      onChangeRef.current(next);
+    }, TYPING_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [text]);
+
+  return (
+    <Input aria-label={label} placeholder={label} value={text} onChange={(e) => setText(e.target.value)} className="w-48" />
   );
 }

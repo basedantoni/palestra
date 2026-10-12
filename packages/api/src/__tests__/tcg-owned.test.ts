@@ -54,3 +54,23 @@ describe("tcg.artworks owned", () => {
     expect(await caller.tcg.artworks({ owned: true, character: "kaido" })).toEqual([]);
   });
 });
+
+describe("tcg.artworks language", () => {
+  it.each(["ja", "en"] as const)("keeps only Artworks with a %s Printing", async (language) => {
+    const all = await caller.tcg.artworks({});
+    const inLanguage = all.filter((a) => a.printings.some((p) => p.language === language)).map((a) => a.variantId);
+    // The fixtures include a Japanese-only and an English-only parallel.
+    expect(inLanguage.length).toBeLessThan(all.length);
+
+    const rows = await caller.tcg.artworks({ language });
+    expect(rows.map((r) => r.variantId)).toEqual(inLanguage);
+  });
+
+  it("with owned, keeps Artworks the caller owns a Copy of in that language", async () => {
+    // The caller's only Copy is OP05-119_p1 in English, though it is printed in Japanese too.
+    expect((await caller.tcg.artworks({ owned: true, language: "en" })).map((r) => r.variantId)).toEqual([
+      "OP05-119_p1",
+    ]);
+    expect(await caller.tcg.artworks({ owned: true, language: "ja" })).toEqual([]);
+  });
+});

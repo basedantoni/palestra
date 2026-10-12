@@ -25,7 +25,12 @@ function CopiesPage() {
   const { data: copies, isLoading } = useQuery(trpc.tcg.copies.list.queryOptions());
   const [editing, setEditing] = useState<CopyRow | null>(null);
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+  // Copies drive browse's owned flag too.
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.copies.list.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() }),
+    ]);
   const update = useMutation(
     trpc.tcg.copies.update.mutationOptions({
       onSuccess: () => {

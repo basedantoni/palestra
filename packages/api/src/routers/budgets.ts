@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq, gte, lt, lte, max, type SQL } from "drizzle-orm";
+import { and, eq, gte, lt, lte, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -10,29 +10,8 @@ import { addMonths, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { spendByCategory, spendHistory } from "../lib/budget-spend";
+import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { getUserTimezone } from "../lib/user-timezone";
-
-export const monthKeySchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "monthKey must be YYYY-MM");
-
-export const spendColumns = {
-  categoryId: transaction.categoryId,
-  amount: transaction.amount,
-  flow: transaction.flow,
-  excluded: transaction.excluded,
-  date: transaction.date,
-};
-
-/**
- * Date conditions covering whole calendar months `fromMonth`..`toMonth`.
- * Plaid dates are stored as UTC midnight of the bank's date, so the range is
- * [first day 00:00Z, first day of the following month 00:00Z).
- */
-export function monthRange(fromMonth: string, toMonth: string): SQL[] {
-  return [
-    gte(transaction.date, new Date(`${fromMonth}-01T00:00:00.000Z`)),
-    lt(transaction.date, new Date(`${addMonths(toMonth, 1)}-01T00:00:00.000Z`)),
-  ];
-}
 
 /**
  * Where a month's limits could be copied from: the latest earlier month with

@@ -1,10 +1,10 @@
+import { TCG_CONDITIONS } from "@life-tracker/shared";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export const CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"] as const;
-export type Condition = (typeof CONDITIONS)[number];
+type Condition = (typeof TCG_CONDITIONS)[number];
 
 export interface CopyValues {
   printingId: string;
@@ -73,7 +73,7 @@ export function CopyDialog({
               className={field}
               autoFocus
             >
-              {CONDITIONS.map((c) => (
+              {TCG_CONDITIONS.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

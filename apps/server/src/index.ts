@@ -3,7 +3,7 @@ import { createContext } from "@life-tracker/api/context";
 import { appRouter } from "@life-tracker/api/routers/index";
 import { auth } from "@life-tracker/auth";
 import { env } from "@life-tracker/env/server";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
@@ -14,7 +14,8 @@ import { tcgImageApp } from "./tcg-image";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 120;
-const rateLimitState = new Map<string, { count: number; resetAt: number }>();
+// One browse page loads up to 200 card images at once (browser-cached for a week afterwards).
+const IMAGE_RATE_LIMIT_MAX_REQUESTS = 1_000;
 
 function getClientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for");
@@ -30,51 +31,58 @@ function getClientIp(headers: Headers): string {
   );
 }
 
-function cleanupExpired(now: number) {
-  for (const [key, value] of rateLimitState.entries()) {
+function cleanupExpired(state: Map<string, { count: number; resetAt: number }>, now: number) {
+  for (const [key, value] of state.entries()) {
     if (value.resetAt <= now) {
-      rateLimitState.delete(key);
+      state.delete(key);
     }
   }
+}
+
+/** Fixed-window limit of `maxRequests` per client IP and method per minute; each limiter counts separately. */
+function rateLimit(maxRequests: number): MiddlewareHandler {
+  const state = new Map<string, { count: number; resetAt: number }>();
+  return async (c, next) => {
+    const now = Date.now();
+    if (state.size > 10_000) {
+      cleanupExpired(state, now);
+    }
+
+    const ip = getClientIp(c.req.raw.headers);
+    const key = `${ip}:${c.req.method}`;
+    const current = state.get(key);
+
+    if (!current || current.resetAt <= now) {
+      state.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      return next();
+    }
+
+    if (current.count >= maxRequests) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((current.resetAt - now) / 1000),
+      );
+      c.header("Retry-After", String(retryAfterSeconds));
+      return c.json(
+        {
+          error: "Too many requests",
+        },
+        429,
+      );
+    }
+
+    current.count += 1;
+    return next();
+  };
 }
 
 const app = new Hono();
 
 app.use(logger());
-// Before the rate limiter: one browse page loads up to 200 card images at once.
+// Card images get their own, larger budget so a browse page doesn't exhaust the API limit.
+app.use("/api/tcg/*", rateLimit(IMAGE_RATE_LIMIT_MAX_REQUESTS));
 app.route("/api/tcg", tcgImageApp);
-app.use("/*", async (c, next) => {
-  const now = Date.now();
-  if (rateLimitState.size > 10_000) {
-    cleanupExpired(now);
-  }
-
-  const ip = getClientIp(c.req.raw.headers);
-  const key = `${ip}:${c.req.method}`;
-  const current = rateLimitState.get(key);
-
-  if (!current || current.resetAt <= now) {
-    rateLimitState.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return next();
-  }
-
-  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
-    const retryAfterSeconds = Math.max(
-      1,
-      Math.ceil((current.resetAt - now) / 1000),
-    );
-    c.header("Retry-After", String(retryAfterSeconds));
-    return c.json(
-      {
-        error: "Too many requests",
-      },
-      429,
-    );
-  }
-
-  current.count += 1;
-  return next();
-});
+app.use("/*", rateLimit(RATE_LIMIT_MAX_REQUESTS));
 
 app.use(
   "/*",

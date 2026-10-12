@@ -45,6 +45,9 @@ export const tcgCopiesRouter = router({
       }),
     )
     .mutation(async ({ ctx, input: { id, ...set } }) => {
+      if (Object.values(set).every((v) => v === undefined)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Nothing to update" });
+      }
       const [updated] = await db
         .update(tcgCopy)
         .set(set)

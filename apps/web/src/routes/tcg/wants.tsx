@@ -61,7 +61,15 @@ function WantsPage() {
   const today = useFinanceToday();
   const fund = useCardFund();
 
-  const options = { onSuccess: () => queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() }) };
+  // Want moves change browse's Wanted flag; receiving adds a Copy.
+  const options = {
+    onSuccess: () =>
+      Promise.all(
+        [trpc.tcg.wants.pathKey(), trpc.tcg.artworks.pathKey(), trpc.tcg.copies.pathKey()].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      ),
+  };
   const drop = useMutation(trpc.tcg.wants.drop.mutationOptions(options));
   const reopen = useMutation(trpc.tcg.wants.reopen.mutationOptions(options));
   const buy = useMutation(trpc.tcg.wants.buy.mutationOptions(options));
