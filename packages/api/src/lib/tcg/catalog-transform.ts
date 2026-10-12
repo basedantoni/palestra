@@ -86,8 +86,9 @@ function setName(packs: PunkPacks, packId: string): string {
  * punk-records has no manga label, so a manga is inferred: the secret rare's
  * `_p2`, printed in the same pack as its base card (OP01 Shanks, OP05 Luffy,
  * OP13's three brothers…; OP13's `_p3`/`_p4` are red and wanted-poster arts).
- * ponytail: heuristic checked by eye against every current set; switch to
- * Limitless's "manga" print label (KOI-306 scrapes those pages) if it misfires.
+ * ponytail: heuristic, checked by eye. It misses manga-style alt arts on
+ * other rarities (Limitless labels OP05-069_p2, an SR, "manga"); KOI-306
+ * scrapes Limitless per variant and can set the kind from that label.
  */
 function variantKind(r: PunkRecord, basePackId: string | undefined): VariantKind {
   const suffix = /_([pr])(\d+)$/.exec(r.id);
