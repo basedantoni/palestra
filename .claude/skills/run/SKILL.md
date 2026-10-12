@@ -5,7 +5,7 @@ description: Start Palestra locally, log in as the seeded dev user, and drive th
 
 # Run Palestra
 
-Server: http://localhost:3000. Web: http://localhost:3001. Both ports are fixed (CORS and Better-Auth trust only 3001).
+Server: http://localhost:3000. Web: http://localhost:3001. These are the user's ports. In a worktree, or beside other agents, run a second stack on your own ports and database: [PARALLEL.md](PARALLEL.md).
 
 ## 1. Check what is already running
 
@@ -13,7 +13,7 @@ Server: http://localhost:3000. Web: http://localhost:3001. Both ports are fixed 
 lsof -nP -iTCP:3000 -iTCP:3001 -sTCP:LISTEN
 ```
 
-If both ports are listening, the user's dev servers are up. Reuse them and skip to step 3. You will not have their logs. Do not kill them.
+If both ports are listening, the user's dev servers are up and serve the main checkout's code. Leave them running. From the main checkout, reuse them and skip to step 3 (you will not have their logs). From a worktree, run your own stack with [PARALLEL.md](PARALLEL.md).
 
 ## 2. Start the stack
 

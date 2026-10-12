@@ -41,6 +41,15 @@ jobs:
       - name: Type Check
         run: pnpm check-types
 
+      - name: Migrations match schema
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain -- packages/db/src/migrations)" ]; then
+            git status --short -- packages/db/src/migrations
+            echo "::error::The Drizzle schema has changes with no migration. Run pnpm db:generate and commit the output."
+            exit 1
+          fi
+
   deploy:
     runs-on: ubuntu-latest
     needs: verify
