@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
@@ -6,10 +6,12 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useFinanceToday } from "@/hooks/use-finance-today";
 import { authClient } from "@/lib/auth-client";
-import { trpc } from "@/utils/trpc";
+import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { cardImage } from "./-components/card-image";
+import { CopyDialog } from "./-components/copy-dialog";
 import { WantDialog } from "./-components/want-dialog";
 import { ArtRatingSelect, ThemeTagMenu, ThemesDialog } from "./-components/art-taste";
 
@@ -25,7 +27,11 @@ const tcgSearchSchema = z.object({
   minRating: z.number().int().min(0).max(5).optional().catch(undefined),
   theme: z.string().uuid().optional().catch(undefined),
   sort: z.enum(["rating"]).optional().catch(undefined),
+  /** Only Artworks the user owns a Copy of: the collection view. */
+  owned: z.boolean().optional().catch(undefined),
 });
+
+type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
 
 export const Route = createFileRoute("/tcg/")({
   validateSearch: (search) => tcgSearchSchema.parse(search),
@@ -50,6 +56,7 @@ function TcgPage() {
       character: search.character,
       set: search.set,
       variantKind: search.kind,
+      owned: search.owned,
       limit,
       minRating: search.minRating,
       themeId: search.theme,
@@ -58,6 +65,18 @@ function TcgPage() {
     placeholderData: keepPreviousData,
   });
 
+  const [adding, setAdding] = useState<ArtworkRow | null>(null);
+  const today = useFinanceToday();
+  const queryClient = useQueryClient();
+  const addCopy = useMutation(
+    trpc.tcg.copies.create.mutationOptions({
+      onSuccess: () => {
+        setAdding(null);
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      },
+    }),
+  );
+
   const update = (next: Partial<z.infer<typeof tcgSearchSchema>>) =>
     navigate({ search: (prev) => ({ ...prev, limit: undefined, ...next }), replace: true });
 
@@ -65,9 +84,14 @@ function TcgPage() {
     <div className="mx-auto max-w-6xl space-y-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cards</h1>
-        <Link to="/tcg/wants" className="text-sm underline underline-offset-4">
-          Wants
-        </Link>
+        <div className="flex gap-4">
+          <Link to="/tcg/copies" className="text-sm underline underline-offset-4">
+            My Copies
+          </Link>
+          <Link to="/tcg/wants" className="text-sm underline underline-offset-4">
+            Wants
+          </Link>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input
@@ -139,6 +163,14 @@ function TcgPage() {
           <option value="rating">Sort: Art Rating</option>
         </select>
         <ThemesDialog />
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={search.owned ?? false}
+            onChange={(e) => update({ owned: e.target.checked || undefined })}
+          />
+          Owned
+        </label>
       </div>
 
       {isLoading ? (
@@ -169,9 +201,13 @@ function TcgPage() {
                         {p.language.toUpperCase()}
                       </Badge>
                     ))}
+                    {a.owned && <Badge>Owned</Badge>}
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
                     {a.wanted && <Badge>Wanted</Badge>}
+                    <Button size="xs" variant="outline" onClick={() => setAdding(a)}>
+                      Add Copy
+                    </Button>
                     <Button
                       size="xs"
                       variant="outline"
@@ -199,6 +235,21 @@ function TcgPage() {
             </Button>
           )}
         </>
+      )}
+
+      {adding && (
+        <CopyDialog
+          title={`Add a Copy of ${adding.variantId}`}
+          initial={{ printingId: adding.printings[0]!.id, condition: "NM", pricePaid: null, acquiredOn: today }}
+          printings={adding.printings}
+          pending={addCopy.isPending}
+          error={addCopy.error?.message}
+          onSubmit={(values) => addCopy.mutate(values)}
+          onClose={() => {
+            addCopy.reset();
+            setAdding(null);
+          }}
+        />
       )}
       {wanting && <WantDialog {...wanting} onClose={() => setWanting(null)} />}
     </div>

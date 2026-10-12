@@ -232,6 +232,13 @@
       "when": 1791764519349,
       "tag": "0032_legal_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791764649014,
+      "tag": "0033_puzzling_secret_warriors",
+      "breakpoints": true
     }
   ]
 }

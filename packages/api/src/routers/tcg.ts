@@ -10,6 +10,7 @@ import {
   tcgArtwork,
   tcgArtworkTheme,
   tcgCard,
+  tcgCopy,
   tcgPrinting,
   tcgTheme,
   tcgVariantKindEnum,
@@ -17,6 +18,7 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { tcgCopiesRouter } from "./tcg-copies";
 import { tcgWantsRouter } from "./tcg-wants";
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -55,6 +57,8 @@ async function assertOwnedTheme(userId: string, themeId: string) {
 }
 
 export const tcgRouter = router({
+  copies: tcgCopiesRouter,
+
   /** Browse the catalog: Artworks with their Card and one Printing per language. */
   artworks: protectedProcedure
     .input(
@@ -63,6 +67,8 @@ export const tcgRouter = router({
         character: z.string().trim().max(100).optional(),
         set: z.string().max(100).optional(),
         variantKind: z.enum(tcgVariantKindEnum.enumValues).optional(),
+        /** Only Artworks the caller owns a Copy of: the collection view. */
+        owned: z.boolean().optional(),
         limit: z.number().int().min(1).max(5000).default(200),
         /** Only Artworks the caller rated at least this. */
         minRating: z.number().int().min(0).max(5).optional(),
@@ -75,6 +81,14 @@ export const tcgRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const where: SQL[] = [];
+      const owned = exists(
+        db
+          .select()
+          .from(tcgCopy)
+          .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
+          .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgCopy.userId, ctx.session.user.id))),
+      );
+      if (input.owned) where.push(owned);
       if (input.minRating !== undefined) where.push(gte(tcgArtRating.rating, input.minRating));
       if (input.themeId) {
         where.push(
@@ -116,6 +130,7 @@ export const tcgRouter = router({
           nameEn: tcgCard.nameEn,
           nameJa: tcgCard.nameJa,
           variantKind: tcgArtwork.variantKind,
+          owned: owned.mapWith(Boolean),
           /** The caller has an open Want for this Artwork. */
           wanted: sql<boolean>`exists (select 1 from ${tcgWant} where ${tcgWant.variantId} = ${tcgArtwork.variantId} and ${tcgWant.userId} = ${ctx.session.user.id} and ${tcgWant.status} = 'open')`,
           rating: tcgArtRating.rating,
@@ -137,6 +152,7 @@ export const tcgRouter = router({
 
       const printings = await db
         .select({
+          id: tcgPrinting.id,
           variantId: tcgPrinting.variantId,
           language: tcgPrinting.language,
           setName: tcgPrinting.setName,
