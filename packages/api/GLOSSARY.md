@@ -108,6 +108,10 @@ _Avoid_: Category (finance owns that word), collection
 A run of Artworks that browse lists together, keyed by the browse sort. By card number, the Card's card-number prefix (`OP05` for `OP05-119_p3`): a reprint stays in its Card's Section whichever set its Printings came out in. By Art Rating, the rating (★5 … ★0, then Unrated).
 _Avoid_: Set (a Printing's set is a different thing), group, page
 
+**Binder**:
+The collection laid out like a physical binder: the Artworks the user owns a Copy of, in card-number order, nine pockets to a sheet, one sheet at a time.
+_Avoid_: Album, collection view, page (say sheet)
+
 ### TCG — buying
 
 **Want**:
