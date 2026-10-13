@@ -13,6 +13,7 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { CardFundPanel, useCardFund } from "./-components/card-fund-panel";
 import { cardImage } from "./-components/card-image";
 import { CopyDialog } from "./-components/copy-dialog";
+import { invalidateBrowse } from "./-components/invalidate-browse";
 import { OfferDialog } from "./-components/offer-dialog";
 import { WantDialog } from "./-components/want-dialog";
 
@@ -64,11 +65,12 @@ function WantsPage() {
   // Want moves change browse's Wanted flag; receiving adds a Copy.
   const options = {
     onSuccess: () =>
-      Promise.all(
-        [trpc.tcg.wants.pathKey(), trpc.tcg.artworks.pathKey(), trpc.tcg.copies.pathKey()].map((queryKey) =>
+      Promise.all([
+        ...[trpc.tcg.wants.pathKey(), trpc.tcg.copies.pathKey()].map((queryKey) =>
           queryClient.invalidateQueries({ queryKey }),
         ),
-      ),
+        invalidateBrowse(queryClient),
+      ]),
   };
   const drop = useMutation(trpc.tcg.wants.drop.mutationOptions(options));
   const reopen = useMutation(trpc.tcg.wants.reopen.mutationOptions(options));

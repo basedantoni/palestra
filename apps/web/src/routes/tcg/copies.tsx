@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { CopyDialog } from "./-components/copy-dialog";
+import { invalidateBrowse } from "./-components/invalidate-browse";
 
 type CopyRow = RouterOutputs["tcg"]["copies"]["list"][number];
 
@@ -29,7 +30,7 @@ function CopiesPage() {
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.tcg.copies.list.pathKey() }),
-      queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() }),
+      invalidateBrowse(queryClient),
     ]);
   const update = useMutation(
     trpc.tcg.copies.update.mutationOptions({

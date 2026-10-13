@@ -156,6 +156,52 @@ describe("tcg.artworks", () => {
     expect(ids(await caller.tcg.artworks({ variantKind: "manga" }))).toEqual(["OP05-119_p2"]);
   });
 
+  it("sections Artworks by card-number prefix, with counts", async () => {
+    expect(await caller.tcg.artworkSections({})).toEqual([
+      { key: "OP05", count: 6 },
+      { key: "OP07", count: 1 },
+      { key: "OP08", count: 1 },
+      { key: "OP13", count: 2 },
+    ]);
+  });
+
+  it("filters narrow the sections and their counts", async () => {
+    await applyArtistUpdates([
+      { variantId: "OP05-119", artist: "Nakamaru", artistConflict: false, manga: false },
+      { variantId: "OP08-119", artist: "NAKAMARU", artistConflict: false, manga: false },
+    ]);
+    expect(await caller.tcg.artworkSections({ artist: "nakamaru" })).toEqual([
+      { key: "OP05", count: 1 },
+      { key: "OP08", count: 1 },
+    ]);
+    expect(await caller.tcg.artworkSections({ character: "nobody" })).toEqual([]);
+  });
+
+  it("counts by the caller's Art Ratings and Copies", async () => {
+    await db.insert(user).values({ id: "user-tcg", name: "user-tcg", email: "user-tcg@test.internal" });
+    await caller.tcg.setRating({ variantId: "OP13-118", rating: 4 });
+    await caller.tcg.setRating({ variantId: "OP05-119", rating: 2 });
+    expect(await caller.tcg.artworkSections({ minRating: 3 })).toEqual([{ key: "OP13", count: 1 }]);
+
+    const [kaido] = await caller.tcg.artworks({ section: "OP08" });
+    await caller.tcg.copies.create({
+      printingId: kaido!.printings[0]!.id,
+      condition: "NM",
+      pricePaid: null,
+      acquiredOn: "2026-10-01",
+    });
+    expect(await caller.tcg.artworkSections({ owned: true })).toEqual([{ key: "OP08", count: 1 }]);
+  });
+
+  it("lists one section's Artworks, reprints under their Card's prefix", async () => {
+    expect(ids(await caller.tcg.artworks({ section: "OP13" }))).toEqual(["OP13-118", "OP13-118_p3"]);
+    expect(ids(await caller.tcg.artworks({ section: "OP05", set: "PRB-01" }))).toEqual([
+      "OP05-119_p3",
+      "OP05-119_p4",
+      "OP05-119_r1",
+    ]);
+  });
+
   it("lists the sets to filter by", async () => {
     expect(await caller.tcg.sets()).toEqual(["OP-05", "OP-08", "OP-13", "Other Product Card", "PRB-01"]);
   });
