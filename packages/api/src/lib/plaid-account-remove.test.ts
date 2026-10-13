@@ -56,7 +56,21 @@ describe("removeFinancialAccount", () => {
   it("returns removed:false and touches nothing when the account isn't the user's", async () => {
     accountReads([]);
 
-    await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({ removed: false });
+    await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
+      removed: false,
+      reason: "not_found",
+    });
+    expect(deletedTables()).toEqual([]);
+    expect(mockItemRemove).not.toHaveBeenCalled();
+  });
+
+  it("refuses a SnapTrade account (no Plaid item) and touches nothing", async () => {
+    accountReads([{ id: ACCOUNT, plaidItemId: null }]);
+
+    await expect(removeFinancialAccount(USER, ACCOUNT)).resolves.toEqual({
+      removed: false,
+      reason: "snaptrade",
+    });
     expect(deletedTables()).toEqual([]);
     expect(mockItemRemove).not.toHaveBeenCalled();
   });

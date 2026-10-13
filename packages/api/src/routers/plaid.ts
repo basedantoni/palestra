@@ -201,7 +201,7 @@ export const plaidRouter = router({
     .input(z.object({ accountId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await removeFinancialAccount(ctx.session.user.id, input.accountId);
-      if (!result.removed && result.managedBySnaptrade) {
+      if (!result.removed && result.reason === "snaptrade") {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "This account syncs from SnapTrade. Disconnect it in the SnapTrade dashboard.",

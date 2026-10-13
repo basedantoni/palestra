@@ -27,7 +27,7 @@ import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./pla
 import { foreignPlaidEnvError } from "./plaid-env";
 
 export type RemoveAccountResult =
-  | { removed: false; managedBySnaptrade?: true }
+  | { removed: false; reason: "not_found" | "snaptrade" }
   | { removed: true; itemRemoved: boolean };
 
 export type RemoveItemResult =
@@ -53,10 +53,10 @@ export async function removeFinancialAccount(
     .from(financialAccount)
     .where(and(eq(financialAccount.id, accountId), eq(financialAccount.userId, userId)))
     .limit(1);
-  if (!account) return { removed: false };
+  if (!account) return { removed: false, reason: "not_found" };
   // No Plaid item = a SnapTrade account (KOI-318): it's disconnected in SnapTrade's dashboard.
   const { plaidItemId } = account;
-  if (!plaidItemId) return { removed: false, managedBySnaptrade: true };
+  if (!plaidItemId) return { removed: false, reason: "snaptrade" };
 
   const siblings = await db
     .select({ id: financialAccount.id })
