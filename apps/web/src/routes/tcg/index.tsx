@@ -11,10 +11,19 @@ import { useFinanceToday } from "@/hooks/use-finance-today";
 import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
+import { PrototypeSwitcher } from "@/components/prototype-switcher";
+
 import { cardImage } from "./-components/card-image";
 import { CopyDialog } from "./-components/copy-dialog";
 import { WantDialog } from "./-components/want-dialog";
 import { ArtRatingSelect, ThemeTagMenu, ThemesDialog } from "./-components/art-taste";
+import {
+  Binder,
+  InfiniteScroll,
+  NumberedPages,
+  PROTOTYPE_VARIANTS,
+  Sections,
+} from "./-components/pagination-prototype";
 
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const PAGE = 200;
@@ -36,6 +45,9 @@ const tcgSearchSchema = z.object({
   owned: z.boolean().optional().catch(undefined),
   /** Only Artworks printed in this language; with `owned`, owned in this language. */
   lang: z.enum(LANGUAGES).optional().catch(undefined),
+  // PROTOTYPE: pagination variants.
+  variant: z.enum(["current", "A", "B", "C", "D"]).optional().catch(undefined),
+  page: z.number().int().positive().optional().catch(undefined),
 });
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -54,7 +66,9 @@ export const Route = createFileRoute("/tcg/")({
 function TcgPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const limit = search.limit ?? PAGE;
+  const variant = search.variant ?? "A";
+  // PROTOTYPE: variants slice client-side, so fetch everything.
+  const limit = variant === "current" ? (search.limit ?? PAGE) : TCG_ARTWORKS_MAX_LIMIT;
   const [wanting, setWanting] = useState<{ variantId: string; label: string } | null>(null);
   const { data: sets } = useQuery(trpc.tcg.sets.queryOptions());
   const { data: themes } = useQuery(trpc.tcg.themes.queryOptions());
@@ -89,10 +103,21 @@ function TcgPage() {
   );
 
   const update = (next: Partial<z.infer<typeof tcgSearchSchema>>) =>
-    navigate({ search: (prev) => ({ ...prev, limit: undefined, ...next }), replace: true });
+    navigate({ search: (prev) => ({ ...prev, limit: undefined, page: undefined, ...next }), replace: true });
+  const setPage = (page: number) => navigate({ search: (prev) => ({ ...prev, page }), replace: true });
+  const renderCard = (a: ArtworkRow) => (
+    <ArtworkCard
+      key={a.variantId}
+      a={a}
+      onArtist={(artist) => update({ artist })}
+      onAdd={() => setAdding(a)}
+      onWant={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
+    />
+  );
+  const filterKey = JSON.stringify({ ...search, variant: undefined, page: undefined });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-6 pb-24">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cards</h1>
         <div className="flex gap-4">
@@ -206,82 +231,27 @@ function TcgPage() {
         <p className="text-sm text-muted-foreground">No Artworks match. Run `pnpm db:import:tcg` if the catalog is empty.</p>
       ) : (
         <>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {artworks.map((a) => {
-              const image = a.printings.find((p) => p.language === "ja") ?? a.printings[0];
-              return (
-                <li key={a.variantId} className="space-y-1">
-                  {image && (
-                    <img
-                      src={cardImage(image.imageUrl)}
-                      alt={`${a.variantId} ${a.nameEn ?? a.nameJa ?? ""}`}
-                      loading="lazy"
-                      className="aspect-[63/88] w-full rounded-sm bg-muted object-cover"
-                    />
-                  )}
-                  <div className="text-xs font-medium">{a.nameEn ?? a.nameJa}</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    {a.artist ? (
-                      <button
-                        type="button"
-                        className="truncate text-left underline-offset-2 hover:underline"
-                        title={`Show Artworks by ${a.artist}`}
-                        onClick={() => update({ artist: a.artist ?? undefined })}
-                      >
-                        {a.artist}
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground italic">uncredited</span>
-                    )}
-                    {a.artistConflict && (
-                      <Badge variant="destructive" title="Japanese and English sources credit different artists">
-                        conflict
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>{a.variantId}</span>
-                    <Badge variant="secondary">{a.variantKind}</Badge>
-                    {a.printings.map((p) => (
-                      <Badge key={p.language} variant="outline" title={p.setName}>
-                        {p.language.toUpperCase()}
-                      </Badge>
-                    ))}
-                    {a.owned && <Badge>Owned</Badge>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {a.wanted && <Badge>Wanted</Badge>}
-                    <Button size="xs" variant="outline" onClick={() => setAdding(a)}>
-                      Add Copy
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
-                    >
-                      {a.wanted ? "Want another" : "Want"}
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <ArtRatingSelect variantId={a.variantId} rating={a.rating} />
-                    <ThemeTagMenu variantId={a.variantId} tagged={a.themes} />
-                    {a.themes.map((t) => (
-                      <Badge key={t.id} variant="secondary">
-                        {t.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          {artworks.length === limit && limit < TCG_ARTWORKS_MAX_LIMIT && (
-            <Button variant="outline" onClick={() => update({ limit: Math.min(limit + PAGE, TCG_ARTWORKS_MAX_LIMIT) })}>
-              Show more
-            </Button>
+          {variant === "current" && (
+            <>
+              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">{artworks.map(renderCard)}</ul>
+              {artworks.length === limit && limit < TCG_ARTWORKS_MAX_LIMIT && (
+                <Button variant="outline" onClick={() => update({ limit: Math.min(limit + PAGE, TCG_ARTWORKS_MAX_LIMIT) })}>
+                  Show more
+                </Button>
+              )}
+            </>
           )}
+          {variant === "A" && <NumberedPages key={filterKey} artworks={artworks} renderCard={renderCard} page={search.page ?? 1} setPage={setPage} />}
+          {variant === "B" && <InfiniteScroll key={filterKey} artworks={artworks} renderCard={renderCard} />}
+          {variant === "C" && <Binder key={filterKey} artworks={artworks} renderCard={renderCard} page={search.page ?? 1} setPage={setPage} />}
+          {variant === "D" && <Sections key={filterKey} artworks={artworks} renderCard={renderCard} sort={search.sort} />}
         </>
       )}
+      <PrototypeSwitcher
+        variants={PROTOTYPE_VARIANTS}
+        current={variant}
+        onChange={(v) => navigate({ search: (prev) => ({ ...prev, variant: v, page: undefined, limit: undefined }), replace: true })}
+      />
 
       {adding && (
         <CopyDialog
@@ -300,6 +270,84 @@ function TcgPage() {
       {wanting && <WantDialog {...wanting} onClose={() => setWanting(null)} />}
     </div>
   );
+}
+
+/** One Artwork tile in the browse grid. */
+function ArtworkCard({
+  a,
+  onArtist,
+  onAdd,
+  onWant,
+}: {
+  a: ArtworkRow;
+  onArtist: (artist: string | undefined) => void;
+  onAdd: () => void;
+  onWant: () => void;
+}) {
+  const image = a.printings.find((p) => p.language === "ja") ?? a.printings[0];
+  return (
+    <li className="space-y-1">
+      {image && (
+        <img
+          src={cardImage(image.imageUrl)}
+          alt={`${a.variantId} ${a.nameEn ?? a.nameJa ?? ""}`}
+          loading="lazy"
+          className="aspect-[63/88] w-full rounded-sm bg-muted object-cover"
+        />
+      )}
+      <div className="text-xs font-medium">{a.nameEn ?? a.nameJa}</div>
+      <div className="flex items-center gap-1 text-xs">
+        {a.artist ? (
+          <button
+            type="button"
+            className="truncate text-left underline-offset-2 hover:underline"
+            title={`Show Artworks by ${a.artist}`}
+            onClick={() => onArtist(a.artist ?? undefined)}
+          >
+            {a.artist}
+          </button>
+        ) : (
+          <span className="text-muted-foreground italic">uncredited</span>
+        )}
+        {a.artistConflict && (
+          <Badge variant="destructive" title="Japanese and English sources credit different artists">
+            conflict
+          </Badge>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+        <span>{a.variantId}</span>
+        <Badge variant="secondary">{a.variantKind}</Badge>
+        {a.printings.map((p) => (
+          <Badge key={p.language} variant="outline" title={p.setName}>
+            {p.language.toUpperCase()}
+          </Badge>
+        ))}
+        {a.owned && <Badge>Owned</Badge>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {a.wanted && <Badge>Wanted</Badge>}
+        <Button size="xs" variant="outline" onClick={onAdd}>
+          Add Copy
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={onWant}
+        >
+          {a.wanted ? "Want another" : "Want"}
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <ArtRatingSelect variantId={a.variantId} rating={a.rating} />
+        <ThemeTagMenu variantId={a.variantId} tagged={a.themes} />
+        {a.themes.map((t) => (
+          <Badge key={t.id} variant="secondary">
+            {t.name}
+          </Badge>
+        ))}
+      </div>
+    </li>  );
 }
 
 /** A text filter that updates the URL once typing pauses, not on every keystroke. */
