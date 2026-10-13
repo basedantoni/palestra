@@ -67,6 +67,7 @@ function TcgPage() {
     language: search.lang,
     minRating: search.minRating,
     themeId: search.theme,
+    sort: search.sort,
   };
 
   const [adding, setAdding] = useState<ArtworkRow | null>(null);
@@ -196,7 +197,6 @@ function TcgPage() {
 
       <ArtworkSections
         filters={filters}
-        sort={search.sort}
         renderCard={(a) => (
           <ArtworkCard
             key={a.variantId}

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { TCG_ARTWORKS_MAX_LIMIT } from "@life-tracker/shared";
+import { TCG_ARTWORKS_MAX_LIMIT, TCG_UNRATED_SECTION } from "@life-tracker/shared";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -7,28 +7,28 @@ import { trpc, type RouterInputs, type RouterOutputs } from "@/utils/trpc";
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
 type Filters = RouterInputs["tcg"]["artworkSections"];
-type Sort = RouterInputs["tcg"]["artworks"]["sort"];
 
 /** Artworks a collapsed section shows. */
 const PREVIEW = 10;
 const GRID = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5";
 const anchor = (key: string) => `section-${key}`;
+/** Sorted by Art Rating, Sections are ratings: `4` reads ★ 4. */
+const sectionLabel = (key: string, sort: Filters["sort"]) =>
+  sort !== "rating" ? key : key === TCG_UNRATED_SECTION ? "Unrated" : `★ ${key}`;
 
 /** Browse split into sections with a jump rail; each section fetches its Artworks once it nears the screen. */
 export function ArtworkSections({
   filters,
-  sort,
   renderCard,
 }: {
   filters: Filters;
-  sort: Sort;
   renderCard: (a: ArtworkRow) => ReactNode;
 }) {
   const { data: sections, isLoading } = useQuery({
     ...trpc.tcg.artworkSections.queryOptions(filters),
     placeholderData: keepPreviousData,
   });
-  // New filters remount every section: collapsed, and fetched afresh.
+  // New filters or sort remount every section: collapsed, and fetched afresh.
   const filtersKey = JSON.stringify(filters);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -55,7 +55,7 @@ export function ArtworkSections({
             }}
             className="flex shrink-0 justify-between gap-2 rounded px-2 py-1 hover:bg-muted"
           >
-            <span className="font-medium">{s.key}</span>
+            <span className="font-medium">{sectionLabel(s.key, filters.sort)}</span>
             <span className="text-muted-foreground">{s.count.toLocaleString()}</span>
           </a>
         ))}
@@ -67,7 +67,6 @@ export function ArtworkSections({
             sectionKey={s.key}
             count={s.count}
             filters={filters}
-            sort={sort}
             renderCard={renderCard}
           />
         ))}
@@ -80,22 +79,20 @@ function Section({
   sectionKey,
   count,
   filters,
-  sort,
   renderCard,
 }: {
   sectionKey: string;
   count: number;
   filters: Filters;
-  sort: Sort;
   renderCard: (a: ArtworkRow) => ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
   const seen = useSeen(ref);
   const [open, setOpen] = useState(false);
+  const heading = sectionLabel(sectionKey, filters.sort);
   const { data: artworks } = useQuery({
     ...trpc.tcg.artworks.queryOptions({
       ...filters,
-      sort,
       section: sectionKey,
       limit: open ? TCG_ARTWORKS_MAX_LIMIT : PREVIEW,
     }),
@@ -106,7 +103,7 @@ function Section({
   return (
     <section ref={ref} id={anchor(sectionKey)} className="scroll-mt-4 space-y-3">
       <h2 className="sticky top-0 z-10 flex items-baseline gap-2 bg-background/95 py-1 text-lg font-semibold">
-        {sectionKey}
+        {heading}
         <span className="text-xs font-normal text-muted-foreground">
           {count.toLocaleString()} {count === 1 ? "Artwork" : "Artworks"}
         </span>
@@ -132,7 +129,7 @@ function Section({
             if (open && ref.current && ref.current.getBoundingClientRect().top < 0) ref.current.scrollIntoView();
           }}
         >
-          {open ? `Collapse ${sectionKey}` : `Show all ${count.toLocaleString()} in ${sectionKey}`}
+          {open ? `Collapse ${heading}` : `Show all ${count.toLocaleString()} in ${heading}`}
         </Button>
       )}
     </section>

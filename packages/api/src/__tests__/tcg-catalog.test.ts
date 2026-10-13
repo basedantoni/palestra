@@ -193,6 +193,24 @@ describe("tcg.artworks", () => {
     expect(await caller.tcg.artworkSections({ owned: true })).toEqual([{ key: "OP08", count: 1 }]);
   });
 
+  it("sorted by Art Rating, sections by rating, highest first and unrated last", async () => {
+    await db.insert(user).values({ id: "user-tcg", name: "user-tcg", email: "user-tcg@test.internal" });
+    await caller.tcg.setRating({ variantId: "OP13-118", rating: 4 });
+    await caller.tcg.setRating({ variantId: "OP08-119", rating: 4 });
+    await caller.tcg.setRating({ variantId: "OP05-119", rating: 2 });
+    await caller.tcg.setRating({ variantId: "OP07-091_p1", rating: 0 });
+
+    expect(await caller.tcg.artworkSections({ sort: "rating" })).toEqual([
+      { key: "4", count: 2 },
+      { key: "2", count: 1 },
+      { key: "0", count: 1 },
+      { key: "unrated", count: 6 },
+    ]);
+    expect(await caller.tcg.artworkSections({ sort: "rating", minRating: 3 })).toEqual([{ key: "4", count: 2 }]);
+    expect(ids(await caller.tcg.artworks({ sort: "rating", section: "4" }))).toEqual(["OP08-119", "OP13-118"]);
+    expect(await caller.tcg.artworks({ sort: "rating", section: "unrated" })).toHaveLength(6);
+  });
+
   it("lists one section's Artworks, reprints under their Card's prefix", async () => {
     expect(ids(await caller.tcg.artworks({ section: "OP13" }))).toEqual(["OP13-118", "OP13-118_p3"]);
     expect(ids(await caller.tcg.artworks({ section: "OP05", set: "PRB-01" }))).toEqual([
