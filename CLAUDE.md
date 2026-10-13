@@ -65,6 +65,8 @@ When a test needs real Postgres behaviour (constraints, indexes, cascades, SQL t
 
 Server deploys to Fly.io (`fly.toml`, app `palestra`, region `dfw`, internal port 3000) from the root `Dockerfile`. Release runs `scripts/fly-release.sh` (DB migration step). `NODE_ENV=production` and `PORT=3000` set in `fly.toml`.
 
+Prod data scripts (TCG catalog import, artist backfill, any one-off): run them locally with `scripts/with-prod-db.sh <command>`, which proxies to the `palestra-db` Fly app. The app VM has 256 MB and serves traffic; a script run there starves the web server.
+
 ## Agent skills
 
 ### Issue tracker
