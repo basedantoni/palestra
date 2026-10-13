@@ -105,7 +105,7 @@ A user-defined tag grouping Artworks across characters, such as D Clan. What a t
 _Avoid_: Category (finance owns that word), collection
 
 **Section**:
-A run of Artworks that browse lists together, keyed by their Card's card-number prefix (`OP05` for `OP05-119_p3`). A reprint stays in its Card's Section whichever set its Printings came out in.
+A run of Artworks that browse lists together, keyed by the browse sort. By card number, the Card's card-number prefix (`OP05` for `OP05-119_p3`): a reprint stays in its Card's Section whichever set its Printings came out in. By Art Rating, the rating (★5 … ★0, then Unrated).
 _Avoid_: Set (a Printing's set is a different thing), group, page
 
 ### TCG — buying

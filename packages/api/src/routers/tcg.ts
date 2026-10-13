@@ -18,7 +18,7 @@ import {
   tcgWant,
 } from "@life-tracker/db/schema/index";
 
-import { TCG_ARTWORKS_MAX_LIMIT } from "@life-tracker/shared";
+import { TCG_ARTWORKS_MAX_LIMIT, TCG_UNRATED_SECTION } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { isForeignKeyViolation, isUniqueViolation } from "../lib/pg-error";
@@ -77,11 +77,18 @@ const artworkFilters = z.object({
   themeId: z.string().uuid().optional(),
 });
 
+/** `rating`: highest Art Rating first, unrated last. */
+const browseSort = z.enum(["variant", "rating"]).default("variant");
+
 /**
- * The Section an Artwork browses under: its Card's card-number prefix (`OP05` for `OP05-119_p3`).
- * Not a Printing's set, which can differ by language.
+ * The Section an Artwork browses under: its Card's card-number prefix (`OP05` for `OP05-119_p3`), not a
+ * Printing's set, which can differ by language. Sorted by Art Rating, the caller's rating (`"5"`…`"0"`, `unrated`).
+ * Literals stay inline, not bound, so the select and GROUP BY are the same expression.
  */
-const section = sql<string>`split_part(${tcgArtwork.cardNumber}, '-', 1)`;
+const sectionOf = (sort: z.infer<typeof browseSort>) =>
+  sort === "rating"
+    ? sql<string>`coalesce(${tcgArtRating.rating}::text, ${sql.raw(`'${TCG_UNRATED_SECTION}'`)})`
+    : sql<string>`split_part(${tcgArtwork.cardNumber}, '-', 1)`;
 
 /** The caller owns a Copy of the Artwork, in `language` if given. */
 const ownedIn = (userId: string, language?: (typeof tcgLanguageEnum.enumValues)[number]) =>
@@ -159,17 +166,16 @@ export const tcgRouter = router({
   artworks: protectedProcedure
     .input(
       artworkFilters.extend({
-        /** Only Artworks in this Section. */
+        /** Only Artworks in this Section (of the given sort). */
         section: z.string().max(20).optional(),
-        /** `rating`: highest Art Rating first, unrated last. */
-        sort: z.enum(["variant", "rating"]).default("variant"),
+        sort: browseSort,
         limit: z.number().int().min(1).max(TCG_ARTWORKS_MAX_LIMIT).default(200),
       }),
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const where = artworkWhere(userId, input);
-      if (input.section) where.push(eq(section, input.section));
+      if (input.section) where.push(eq(sectionOf(input.sort), input.section));
       const owned = ownedIn(userId);
 
       const artworks = await db
@@ -236,8 +242,9 @@ export const tcgRouter = router({
     }),
 
   /** The Sections browse splits the filtered catalog into, in order, with each one's Artwork count. */
-  artworkSections: protectedProcedure.input(artworkFilters).query(({ ctx, input }) => {
+  artworkSections: protectedProcedure.input(artworkFilters.extend({ sort: browseSort })).query(({ ctx, input }) => {
     const userId = ctx.session.user.id;
+    const section = sectionOf(input.sort);
     return db
       .select({ key: section, count: count() })
       .from(tcgArtwork)
@@ -245,7 +252,7 @@ export const tcgRouter = router({
       .leftJoin(tcgArtRating, and(eq(tcgArtRating.variantId, tcgArtwork.variantId), eq(tcgArtRating.userId, userId)))
       .where(and(...artworkWhere(userId, input)))
       .groupBy(section)
-      .orderBy(section);
+      .orderBy(input.sort === "rating" ? sql`max(${tcgArtRating.rating}) desc nulls last` : section);
   }),
 
   wants: tcgWantsRouter,
