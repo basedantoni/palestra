@@ -27,6 +27,7 @@
     "drizzle-orm": "^0.45.1",
     "jose": "^6.2.3",
     "plaid": "^42.2.0",
+    "snaptrade-typescript-sdk": "12.2.22",
     "zod": "catalog:"
   },
   "devDependencies": {

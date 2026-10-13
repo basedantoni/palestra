@@ -73,7 +73,7 @@ _Avoid_: Plaid category, auto category
 An account's balance as recorded on a given day. History exists only from when the account was linked.
 
 **Net Worth**:
-Total balance of asset accounts (depository, investment) minus total owed on liability accounts (credit, loan), across linked accounts only.
+Total balance of asset accounts (depository, investment) minus total owed on liability accounts (credit, loan), across linked accounts only (via Plaid or SnapTrade).
 _Avoid_: Total balance, wealth
 
 ### TCG — cards

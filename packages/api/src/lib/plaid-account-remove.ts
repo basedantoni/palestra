@@ -27,7 +27,7 @@ import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./pla
 import { foreignPlaidEnvError } from "./plaid-env";
 
 export type RemoveAccountResult =
-  | { removed: false }
+  | { removed: false; managedBySnaptrade?: true }
   | { removed: true; itemRemoved: boolean };
 
 export type RemoveItemResult =
@@ -54,15 +54,18 @@ export async function removeFinancialAccount(
     .where(and(eq(financialAccount.id, accountId), eq(financialAccount.userId, userId)))
     .limit(1);
   if (!account) return { removed: false };
+  // No Plaid item = a SnapTrade account (KOI-318): it's disconnected in SnapTrade's dashboard.
+  const { plaidItemId } = account;
+  if (!plaidItemId) return { removed: false, managedBySnaptrade: true };
 
   const siblings = await db
     .select({ id: financialAccount.id })
     .from(financialAccount)
-    .where(eq(financialAccount.plaidItemId, account.plaidItemId));
+    .where(eq(financialAccount.plaidItemId, plaidItemId));
 
-  if (siblings.length <= 1 && (await revokePlaidItem(account.plaidItemId)).ok) {
+  if (siblings.length <= 1 && (await revokePlaidItem(plaidItemId)).ok) {
     // Cascades to the account row and everything under it.
-    await db.delete(plaidItem).where(eq(plaidItem.id, account.plaidItemId));
+    await db.delete(plaidItem).where(eq(plaidItem.id, plaidItemId));
     return { removed: true, itemRemoved: true };
   }
 

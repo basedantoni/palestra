@@ -1,6 +1,7 @@
 name: Plaid Balance Snapshot
 
-# Daily net worth history capture (KOI-289, ADR 0003). 10:00 UTC is early
+# Daily net worth history capture (KOI-289, ADR 0003): Plaid accounts, then
+# SnapTrade (Fidelity, KOI-318). Run manually to backfill today after setup. 10:00 UTC is early
 # morning US time, so the UTC snapshot day matches the local day.
 on:
   schedule:
@@ -17,5 +18,14 @@ jobs:
             -X POST \
             -H "X-Internal-Secret: ${{ secrets.INTERNAL_API_SECRET }}" \
             "${{ secrets.SERVER_BASE_URL }}/api/internal/plaid/snapshot-balances")
+          echo "HTTP $status: $(cat /tmp/response.json)"
+          [ "$status" = "200" ] || exit 1
+      - name: Snapshot SnapTrade balances
+        if: ${{ !cancelled() }}
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_API_SECRET }}" \
+            "${{ secrets.SERVER_BASE_URL }}/api/internal/snaptrade/snapshot-balances")
           echo "HTTP $status: $(cat /tmp/response.json)"
           [ "$status" = "200" ] || exit 1

@@ -33,6 +33,7 @@ import { foreignPlaidEnvError } from "./plaid-env";
 import {
   type PlaidSyncDelta,
   type PlaidTransactionInput,
+  accountIdsByPlaid,
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
@@ -116,7 +117,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     .select({ id: financialAccount.id, plaidAccountId: financialAccount.plaidAccountId })
     .from(financialAccount)
     .where(eq(financialAccount.userId, userId));
-  const accountIdByPlaid = new Map(accounts.map((a) => [a.plaidAccountId, a.id]));
+  const accountIdByPlaid = accountIdsByPlaid(accounts);
 
   const categoryByName = await ensureSeedCategories(userId);
   const rules = await loadMatchableRules(db, userId);
