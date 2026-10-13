@@ -104,6 +104,10 @@ _Avoid_: Score, preference score
 A user-defined tag grouping Artworks across characters, such as D Clan. What a theme covers is decided when tagging, not by the app.
 _Avoid_: Category (finance owns that word), collection
 
+**Section**:
+A run of Artworks that browse lists together, keyed by their Card's card-number prefix (`OP05` for `OP05-119_p3`). A reprint stays in its Card's Section whichever set its Printings came out in.
+_Avoid_: Set (a Printing's set is a different thing), group, page
+
 ### TCG — buying
 
 **Want**:

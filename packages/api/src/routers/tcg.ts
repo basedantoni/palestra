@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, gte, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, exists, gte, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
@@ -57,6 +57,100 @@ async function assertOwnedTheme(userId: string, themeId: string) {
   if (!owned) throw themeNotFound();
 }
 
+/** Browse filters, shared by the Artwork list and its sections. */
+const artworkFilters = z.object({
+  /** Substring of the character name, English or Japanese. */
+  character: z.string().trim().max(100).optional(),
+  set: z.string().max(100).optional(),
+  variantKind: z.enum(tcgVariantKindEnum.enumValues).optional(),
+  /** Substring of the credited artist. */
+  artist: z.string().trim().max(100).optional(),
+  /** Only Artworks whose Japanese and English sources disagree on the artist. */
+  conflict: z.boolean().optional(),
+  /** Only Artworks the caller owns a Copy of: the collection view. */
+  owned: z.boolean().optional(),
+  /** Only Artworks printed in this language; with `owned`, owned as a Copy in this language. */
+  language: z.enum(tcgLanguageEnum.enumValues).optional(),
+  /** Only Artworks the caller rated at least this. */
+  minRating: z.number().int().min(0).max(5).optional(),
+  /** Only Artworks tagged with this Theme of the caller's. */
+  themeId: z.string().uuid().optional(),
+});
+
+/**
+ * The Section an Artwork browses under: its Card's card-number prefix (`OP05` for `OP05-119_p3`).
+ * Not a Printing's set, which can differ by language.
+ */
+const section = sql<string>`split_part(${tcgArtwork.cardNumber}, '-', 1)`;
+
+/** The caller owns a Copy of the Artwork, in `language` if given. */
+const ownedIn = (userId: string, language?: (typeof tcgLanguageEnum.enumValues)[number]) =>
+  exists(
+    db
+      .select()
+      .from(tcgCopy)
+      .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
+      .where(
+        and(
+          eq(tcgPrinting.variantId, tcgArtwork.variantId),
+          eq(tcgCopy.userId, userId),
+          language ? eq(tcgPrinting.language, language) : undefined,
+        ),
+      ),
+  );
+
+/** Browse filters as SQL over Artwork ⋈ Card ⟕ the caller's Art Rating. */
+function artworkWhere(userId: string, input: z.infer<typeof artworkFilters>): SQL[] {
+  const where: SQL[] = [];
+  if (input.owned) where.push(ownedIn(userId, input.language));
+  else if (input.language) {
+    where.push(
+      exists(
+        db
+          .select()
+          .from(tcgPrinting)
+          .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgPrinting.language, input.language))),
+      ),
+    );
+  }
+  if (input.minRating !== undefined) where.push(gte(tcgArtRating.rating, input.minRating));
+  if (input.themeId) {
+    where.push(
+      exists(
+        db
+          .select()
+          .from(tcgArtworkTheme)
+          .innerJoin(tcgTheme, eq(tcgTheme.id, tcgArtworkTheme.themeId))
+          .where(
+            and(
+              eq(tcgArtworkTheme.variantId, tcgArtwork.variantId),
+              eq(tcgArtworkTheme.themeId, input.themeId),
+              eq(tcgTheme.userId, userId),
+            ),
+          ),
+      ),
+    );
+  }
+  if (input.character) {
+    const pattern = `%${escapeLike(input.character)}%`;
+    where.push(or(ilike(tcgCard.nameEn, pattern), ilike(tcgCard.nameJa, pattern))!);
+  }
+  if (input.set) {
+    where.push(
+      exists(
+        db
+          .select()
+          .from(tcgPrinting)
+          .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgPrinting.setName, input.set))),
+      ),
+    );
+  }
+  if (input.variantKind) where.push(eq(tcgArtwork.variantKind, input.variantKind));
+  if (input.artist) where.push(ilike(tcgArtwork.artist, `%${escapeLike(input.artist)}%`));
+  if (input.conflict) where.push(eq(tcgArtwork.artistConflict, true));
+  return where;
+}
+
 export const tcgRouter = router({
   copies: tcgCopiesRouter,
   fund: tcgFundRouter,
@@ -64,92 +158,19 @@ export const tcgRouter = router({
   /** Browse the catalog: Artworks with their Card and one Printing per language. */
   artworks: protectedProcedure
     .input(
-      z.object({
-        /** Substring of the character name, English or Japanese. */
-        character: z.string().trim().max(100).optional(),
-        set: z.string().max(100).optional(),
-        variantKind: z.enum(tcgVariantKindEnum.enumValues).optional(),
-        /** Substring of the credited artist. */
-        artist: z.string().trim().max(100).optional(),
-        /** Only Artworks whose Japanese and English sources disagree on the artist. */
-        conflict: z.boolean().optional(),
-        /** Only Artworks the caller owns a Copy of: the collection view. */
-        owned: z.boolean().optional(),
-        /** Only Artworks printed in this language; with `owned`, owned as a Copy in this language. */
-        language: z.enum(tcgLanguageEnum.enumValues).optional(),
-        limit: z.number().int().min(1).max(TCG_ARTWORKS_MAX_LIMIT).default(200),
-        /** Only Artworks the caller rated at least this. */
-        minRating: z.number().int().min(0).max(5).optional(),
-        /** Only Artworks tagged with this Theme of the caller's. */
-        themeId: z.string().uuid().optional(),
+      artworkFilters.extend({
+        /** Only Artworks in this Section. */
+        section: z.string().max(20).optional(),
         /** `rating`: highest Art Rating first, unrated last. */
         sort: z.enum(["variant", "rating"]).default("variant"),
+        limit: z.number().int().min(1).max(TCG_ARTWORKS_MAX_LIMIT).default(200),
       }),
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const where: SQL[] = [];
-      const ownedIn = (language?: (typeof tcgLanguageEnum.enumValues)[number]) =>
-        exists(
-          db
-            .select()
-            .from(tcgCopy)
-            .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
-            .where(
-              and(
-                eq(tcgPrinting.variantId, tcgArtwork.variantId),
-                eq(tcgCopy.userId, userId),
-                language ? eq(tcgPrinting.language, language) : undefined,
-              ),
-            ),
-        );
-      const owned = ownedIn();
-      if (input.owned) where.push(ownedIn(input.language));
-      else if (input.language) {
-        where.push(
-          exists(
-            db
-              .select()
-              .from(tcgPrinting)
-              .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgPrinting.language, input.language))),
-          ),
-        );
-      }
-      if (input.minRating !== undefined) where.push(gte(tcgArtRating.rating, input.minRating));
-      if (input.themeId) {
-        where.push(
-          exists(
-            db
-              .select()
-              .from(tcgArtworkTheme)
-              .innerJoin(tcgTheme, eq(tcgTheme.id, tcgArtworkTheme.themeId))
-              .where(
-                and(
-                  eq(tcgArtworkTheme.variantId, tcgArtwork.variantId),
-                  eq(tcgArtworkTheme.themeId, input.themeId),
-                  eq(tcgTheme.userId, userId),
-                ),
-              ),
-          ),
-        );
-      }
-      if (input.character) {
-        const pattern = `%${escapeLike(input.character)}%`;
-        where.push(or(ilike(tcgCard.nameEn, pattern), ilike(tcgCard.nameJa, pattern))!);
-      }
-      if (input.set) {
-        where.push(
-          exists(
-            db
-              .select()
-              .from(tcgPrinting)
-              .where(and(eq(tcgPrinting.variantId, tcgArtwork.variantId), eq(tcgPrinting.setName, input.set))),
-          ),
-        );
-      }
-      if (input.variantKind) where.push(eq(tcgArtwork.variantKind, input.variantKind));
-      if (input.artist) where.push(ilike(tcgArtwork.artist, `%${escapeLike(input.artist)}%`));
-      if (input.conflict) where.push(eq(tcgArtwork.artistConflict, true));
+      const where = artworkWhere(userId, input);
+      if (input.section) where.push(eq(section, input.section));
+      const owned = ownedIn(userId);
 
       const artworks = await db
         .select({
@@ -213,6 +234,19 @@ export const tcgRouter = router({
       for (const { variantId, ...t } of tags) byArtwork.get(variantId)?.themes.push(t);
       return [...byArtwork.values()];
     }),
+
+  /** The Sections browse splits the filtered catalog into, in order, with each one's Artwork count. */
+  artworkSections: protectedProcedure.input(artworkFilters).query(({ ctx, input }) => {
+    const userId = ctx.session.user.id;
+    return db
+      .select({ key: section, count: count() })
+      .from(tcgArtwork)
+      .innerJoin(tcgCard, eq(tcgCard.number, tcgArtwork.cardNumber))
+      .leftJoin(tcgArtRating, and(eq(tcgArtRating.variantId, tcgArtwork.variantId), eq(tcgArtRating.userId, userId)))
+      .where(and(...artworkWhere(userId, input)))
+      .groupBy(section)
+      .orderBy(section);
+  }),
 
   wants: tcgWantsRouter,
   offers: tcgOffersRouter,

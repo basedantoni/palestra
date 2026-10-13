@@ -20,6 +20,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/utils/trpc";
 
+import { invalidateBrowse } from "./invalidate-browse";
+
 /** Art Rating and Theme controls for the browse page (KOI-307). */
 
 const selectClass = "rounded-md border border-border bg-background px-1 py-0.5 text-xs";
@@ -27,7 +29,7 @@ const selectClass = "rounded-md border border-border bg-background px-1 py-0.5 t
 /** Ratings and tags show on browse rows; Theme edits also change the Theme list. */
 function useInvalidate() {
   const queryClient = useQueryClient();
-  const artworks = () => queryClient.invalidateQueries({ queryKey: trpc.tcg.artworks.pathKey() });
+  const artworks = () => invalidateBrowse(queryClient);
   const themes = () =>
     Promise.all([artworks(), queryClient.invalidateQueries({ queryKey: trpc.tcg.themes.pathKey() })]);
   return { artworks, themes };
