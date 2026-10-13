@@ -17,7 +17,7 @@ import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
 import { todayUtc } from "./date-utils";
 import { persistAccountBalances } from "./plaid-balance-db";
 import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
-import { accountBalanceMutations } from "./plaid-sync-transform";
+import { accountBalanceMutations, accountIdsByPlaid } from "./plaid-sync-transform";
 import { decryptToken } from "./token-encryption";
 
 export interface SnapshotBalancesResult {
@@ -39,7 +39,7 @@ async function snapshotItem(
     .select({ id: financialAccount.id, plaidAccountId: financialAccount.plaidAccountId })
     .from(financialAccount)
     .where(eq(financialAccount.plaidItemId, item.id));
-  const accountIdByPlaid = new Map(accounts.map((a) => [a.plaidAccountId, a.id]));
+  const accountIdByPlaid = accountIdsByPlaid(accounts);
 
   await persistAccountBalances(item.userId, accountIdByPlaid, mutations);
 }

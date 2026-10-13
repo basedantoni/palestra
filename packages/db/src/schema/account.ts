@@ -1,12 +1,17 @@
-import { relations } from "drizzle-orm";
-import { index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { check, index, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-import { accountTypeEnum } from "./enums";
+import { accountSourceEnum, accountTypeEnum } from "./enums";
 import { user } from "./auth";
 import { plaidItem } from "./plaid-item";
 
 /**
- * A financial account surfaced by Plaid (checking, savings, credit card, ...).
+ * A financial account surfaced by Plaid (checking, savings, credit card, ...)
+ * or by SnapTrade (Fidelity 401k / brokerage, KOI-318).
+ *
+ * `source` decides which identity columns are set: Plaid rows carry the Plaid
+ * item + account id, SnapTrade rows carry `snaptradeAccountId` and store their
+ * own `institutionName` (no Plaid item behind them). A CHECK enforces it.
  *
  * Named `financialAccount` to avoid colliding with Better-Auth's `account`
  * table (OAuth provider accounts).
@@ -25,10 +30,12 @@ export const financialAccount = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    plaidItemId: uuid("plaid_item_id")
-      .notNull()
-      .references(() => plaidItem.id, { onDelete: "cascade" }),
-    plaidAccountId: text("plaid_account_id").notNull(),
+    source: accountSourceEnum("source").default("plaid").notNull(),
+    plaidItemId: uuid("plaid_item_id").references(() => plaidItem.id, { onDelete: "cascade" }),
+    plaidAccountId: text("plaid_account_id"),
+    snaptradeAccountId: text("snaptrade_account_id"),
+    /** Set for SnapTrade accounts; Plaid accounts read theirs from the Plaid item. */
+    institutionName: text("institution_name"),
     name: text("name").notNull(),
     officialName: text("official_name"),
     mask: text("mask"),
@@ -47,6 +54,12 @@ export const financialAccount = pgTable(
     index("financial_account_userId_idx").on(table.userId),
     index("financial_account_plaidItemId_idx").on(table.plaidItemId),
     uniqueIndex("financial_account_plaidAccountId_unique_idx").on(table.plaidAccountId),
+    uniqueIndex("financial_account_snaptradeAccountId_unique_idx").on(table.snaptradeAccountId),
+    check(
+      "financial_account_source_identity",
+      sql`(${table.source} = 'plaid' and ${table.plaidItemId} is not null and ${table.plaidAccountId} is not null and ${table.snaptradeAccountId} is null)
+        or (${table.source} = 'snaptrade' and ${table.snaptradeAccountId} is not null and ${table.plaidItemId} is null and ${table.plaidAccountId} is null)`,
+    ),
   ],
 );
 

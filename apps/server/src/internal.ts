@@ -1,5 +1,8 @@
 import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
+import { todayUtc } from "@life-tracker/api/lib/date-utils";
 import { snapshotAllPlaidBalances } from "@life-tracker/api/lib/plaid-balance-snapshot";
+import { describeSnaptradeError, getSnaptradeClient } from "@life-tracker/api/lib/snaptrade-client";
+import { snapshotSnaptradeAccounts } from "@life-tracker/api/lib/snaptrade-snapshot";
 import { refreshAllValidWhoopTokens } from "@life-tracker/api/lib/whoop-client";
 import { env } from "@life-tracker/env/server";
 import { Hono } from "hono";
@@ -42,5 +45,30 @@ internalApp.post("/plaid/snapshot-balances", async (c) => {
   // A day not captured is lost for good (ADR 0003): if every item failed, fail
   // the request so the cron run goes red instead of silently passing.
   const ok = result.failed === 0 || result.snapshotted > 0;
+  return c.json({ ok, ...result }, ok ? 200 : 500);
+});
+
+internalApp.post("/snaptrade/snapshot-balances", async (c) => {
+  let result;
+  try {
+    result = await snapshotSnaptradeAccounts({
+      client: getSnaptradeClient(),
+      ownerEmail: env.SNAPTRADE_OWNER_EMAIL,
+      asOfDate: todayUtc(),
+    });
+  } catch (err) {
+    const error = describeSnaptradeError(err);
+    console.error(`[internal] SnapTrade balance snapshot failed: ${error}`);
+    return c.json({ ok: false, error }, 500);
+  }
+  if (!result.configured) {
+    console.log("[internal] SnapTrade balance snapshot: not configured, skipped");
+    return c.json({ ok: true, configured: false });
+  }
+  console.log(
+    `[internal] SnapTrade balance snapshot: ${result.synced} synced, ${result.failed} failed`,
+  );
+  // Same as Plaid (ADR 0003): only a run where every account failed goes red.
+  const ok = result.failed === 0 || result.synced > 0;
   return c.json({ ok, ...result }, ok ? 200 : 500);
 });

@@ -125,6 +125,15 @@ export function accountBalanceMutations(
   return { accountBalances, snapshots };
 }
 
+/** Plaid account id → Palestra account id, skipping SnapTrade rows (no Plaid identity). */
+export function accountIdsByPlaid(
+  accounts: Array<{ id: string; plaidAccountId: string | null }>,
+): Map<string, string> {
+  return new Map(
+    accounts.flatMap((a) => (a.plaidAccountId ? [[a.plaidAccountId, a.id] as const] : [])),
+  );
+}
+
 export function applyTransactionSyncDelta(delta: PlaidSyncDelta): SyncMutations {
   const upserts = [...delta.added, ...delta.modified].map(toUpsert);
   const deletes = delta.removed.map((r) => r.transaction_id);

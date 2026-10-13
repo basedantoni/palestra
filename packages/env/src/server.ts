@@ -24,6 +24,10 @@ export const env = createEnv({
     PLAID_WEBHOOK_URL: z.string().url().optional(),
     PLAID_PRODUCTS: z.string().min(1).default("transactions"),
     PLAID_COUNTRY_CODES: z.string().min(1).default("US"),
+    // SnapTrade Personal API key (KOI-318). All three or SnapTrade is off.
+    SNAPTRADE_CLIENT_ID: z.string().min(1).optional(),
+    SNAPTRADE_CONSUMER_KEY: z.string().min(1).optional(),
+    SNAPTRADE_OWNER_EMAIL: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

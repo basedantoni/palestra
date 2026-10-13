@@ -21,7 +21,9 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 
 type Account = {
   id: string;
-  plaidItemId: string;
+  /** Null for SnapTrade accounts (KOI-318): no Plaid bank behind them. */
+  plaidItemId: string | null;
+  institutionName: string | null;
   name: string;
   mask: string | null;
   type: string;
@@ -105,6 +107,7 @@ export function AccountsList() {
   }
 
   const groups = groupByBank(accounts ?? [], items ?? []);
+  const snaptradeGroups = groupSnaptradeByInstitution(accounts ?? []);
   const brokenCount = groups.filter((g) => isBroken(g.item)).length;
 
   return (
@@ -135,6 +138,20 @@ export function AccountsList() {
             setPendingBank(item);
           }}
         />
+      ))}
+      {[...snaptradeGroups].map(([institution, groupAccounts]) => (
+        <section key={`snaptrade:${institution}`} className="border border-border">
+          <header className="flex items-center gap-2 bg-muted/40 px-4 py-2">
+            <span className="truncate text-sm font-semibold">{institution}</span>
+            <Badge
+              variant="secondary"
+              title="Connected, reconnected and removed in the SnapTrade dashboard"
+            >
+              via SnapTrade
+            </Badge>
+          </header>
+          <AccountRows accounts={groupAccounts} />
+        </section>
       ))}
 
       <Dialog
@@ -228,6 +245,7 @@ function groupByBank(
   const itemById = new Map(items.map((i) => [i.id, i]));
   const groups = new Map<string, { item: BankItem; accounts: Account[] }>();
   for (const a of accounts) {
+    if (!a.plaidItemId) continue; // SnapTrade: grouped by institution instead
     let group = groups.get(a.plaidItemId);
     if (!group) {
       // Placeholder while listItems hasn't loaded or caught up: rendered as a healthy,
@@ -248,6 +266,17 @@ function groupByBank(
     if (!groups.has(item.id)) groups.set(item.id, { item, accounts: [] });
   }
   return [...groups.values()];
+}
+
+/** SnapTrade accounts (no Plaid item) under their institution name. */
+function groupSnaptradeByInstitution(accounts: Account[]): Map<string, Account[]> {
+  const groups = new Map<string, Account[]>();
+  for (const a of accounts) {
+    if (a.plaidItemId) continue;
+    const name = a.institutionName ?? "SnapTrade";
+    groups.set(name, [...(groups.get(name) ?? []), a]);
+  }
+  return groups;
 }
 
 function BankGroup({
@@ -320,21 +349,38 @@ function BankGroup({
         </p>
       )}
       {message && <p className="border-t border-border px-4 py-1.5 text-xs">{message}</p>}
-      <ul className="divide-y divide-border">
-        {accounts.map((a) => (
-          <li key={a.id} className="flex items-center justify-between px-4 py-3">
-            <div className={`flex flex-col ${broken ? "opacity-60" : ""}`}>
-              <span className="font-medium">{a.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {a.type}
-                {a.mask ? ` ····${a.mask}` : ""}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`tabular-nums ${broken ? "opacity-60" : ""}`}>
-                {a.currentBalance == null ? "—" : usd.format(a.currentBalance)}
-                {broken && <span className="ml-1 text-xs text-muted-foreground">(stale)</span>}
-              </span>
+      <AccountRows accounts={accounts} stale={broken} onRemove={onRemove} />
+    </section>
+  );
+}
+
+/** Account rows. No `onRemove` = no remove button (SnapTrade accounts are removed in SnapTrade). */
+function AccountRows({
+  accounts,
+  stale = false,
+  onRemove,
+}: {
+  accounts: Account[];
+  stale?: boolean;
+  onRemove?: (account: Account) => void;
+}) {
+  return (
+    <ul className="divide-y divide-border">
+      {accounts.map((a) => (
+        <li key={a.id} className="flex items-center justify-between px-4 py-3">
+          <div className={`flex flex-col ${stale ? "opacity-60" : ""}`}>
+            <span className="font-medium">{a.name}</span>
+            <span className="text-xs text-muted-foreground">
+              {a.type}
+              {a.mask ? ` ····${a.mask}` : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`tabular-nums ${stale ? "opacity-60" : ""}`}>
+              {a.currentBalance == null ? "—" : usd.format(a.currentBalance)}
+              {stale && <span className="ml-1 text-xs text-muted-foreground">(stale)</span>}
+            </span>
+            {onRemove && (
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -343,10 +389,10 @@ function BankGroup({
               >
                 <Trash2 />
               </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

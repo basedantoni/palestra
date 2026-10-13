@@ -139,6 +139,9 @@ export const accountTypeEnum = pgEnum("account_type", [
   "loan",
 ]);
 
+/** Where a financial account is synced from (KOI-318). */
+export const accountSourceEnum = pgEnum("account_source", ["plaid", "snaptrade"]);
+
 export const transactionFlowEnum = pgEnum("transaction_flow", [
   "income",
   "expense",
