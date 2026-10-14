@@ -1,10 +1,12 @@
 /**
- * Daily balance snapshot job (KOI-289, ADR 0003).
+ * Plaid balance capture: the daily snapshot job (KOI-289, ADR 0003) and the
+ * per-sync refresh (KOI-316).
  *
  * Plaid only reports current balances, so net worth history can't be
  * backfilled — a day not captured is lost. A daily GitHub Actions cron hits
  * `POST /api/internal/plaid/snapshot-balances`, which calls this to record one
- * balance snapshot per account for today.
+ * balance snapshot per account for today. Every transaction sync also calls
+ * `captureItemBalances`, so a quiet account doesn't wait for the cron.
  *
  * Uses `/accounts/get` (free, cached ~daily), never `/accounts/balance/get`
  * (billed per call). Idempotent per day via the (account, day) upsert.
@@ -27,7 +29,13 @@ export interface SnapshotBalancesResult {
   failed: number;
 }
 
-async function snapshotItem(
+/**
+ * Refresh balances and today's snapshot for every account on one Plaid item.
+ * The one Plaid balance capture path: the daily job and every transaction sync
+ * (KOI-316) call it, since `/transactions/sync` only reports accounts that had
+ * transactions in the delta.
+ */
+export async function captureItemBalances(
   item: { id: string; userId: string; accessTokenEnc: string },
   asOfDate: string,
 ): Promise<void> {
@@ -66,7 +74,7 @@ export async function snapshotAllPlaidBalances(
   let failed = 0;
   for (const item of items) {
     try {
-      await snapshotItem(item, asOfDate);
+      await captureItemBalances(item, asOfDate);
       snapshotted++;
     } catch (err) {
       failed++;

@@ -13,7 +13,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks (must run before imports)
 // ────────────────────────────────────────────────────────────────────────────
-const { mockPlaid } = vi.hoisted(() => ({ mockPlaid: { transactionsSync: vi.fn() } }));
+const { mockPlaid } = vi.hoisted(() => ({
+  mockPlaid: { transactionsSync: vi.fn(), accountsGet: vi.fn(async () => ({ data: { accounts: [] } })) },
+}));
 
 vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 vi.mock("../lib/token-encryption", () => ({

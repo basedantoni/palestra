@@ -1,5 +1,6 @@
 /**
- * Integration tests: daily Plaid balance snapshot job (KOI-289).
+ * Integration tests: Plaid balance capture — the daily snapshot job (KOI-289)
+ * and every transaction sync (KOI-316).
  *
  * - every non-revoked item is fetched via the free `/accounts/get`, never the
  *   billed `/accounts/balance/get`
@@ -7,6 +8,8 @@
  *   re-run updates rather than duplicates; account balances are refreshed too
  * - one item failing (e.g. ITEM_LOGIN_REQUIRED) is logged and skipped without
  *   aborting the others
+ * - a sync refreshes every account at the bank, not just those with
+ *   transactions in the `/transactions/sync` delta
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Hoisted mocks (must run before imports)
 // ────────────────────────────────────────────────────────────────────────────
 const { mockPlaid } = vi.hoisted(() => ({
-  mockPlaid: { accountsGet: vi.fn(), accountsBalanceGet: vi.fn() },
+  mockPlaid: { accountsGet: vi.fn(), accountsBalanceGet: vi.fn(), transactionsSync: vi.fn() },
 }));
 
 vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
@@ -28,9 +31,17 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 }));
 
-import { balanceSnapshot, financialAccount, plaidItem } from "@life-tracker/db/schema/index";
+import {
+  balanceSnapshot,
+  financialAccount,
+  plaidItem,
+  transaction,
+} from "@life-tracker/db/schema/index";
+
+import { env } from "@life-tracker/env/server";
 
 import { snapshotAllPlaidBalances } from "../lib/plaid-balance-snapshot";
+import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { mockDb } from "./helpers/mock-db";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -174,5 +185,92 @@ describe("snapshotAllPlaidBalances", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// syncPlaidItem
+// ────────────────────────────────────────────────────────────────────────────
+describe("syncPlaidItem balances", () => {
+  it("refreshes every account at the bank, not just those in the transaction delta", async () => {
+    mockDb.onSelect(plaidItem, [
+      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+    ]);
+    // Plaid's sync `accounts` only lists accounts with transactions in the delta.
+    mockPlaid.transactionsSync.mockResolvedValueOnce({
+      data: {
+        added: [
+          {
+            transaction_id: "plaid-txn-1",
+            account_id: "p_chk",
+            amount: 12,
+            date: "2026-10-01",
+            name: "Blue Bottle",
+            pending: false,
+          },
+        ],
+        modified: [],
+        removed: [],
+        accounts: [plaidAccount("p_chk", 1500)],
+        next_cursor: "c2",
+        has_more: false,
+      },
+    });
+    mockPlaid.accountsGet.mockResolvedValueOnce({
+      data: { accounts: [plaidAccount("p_chk", 1500), plaidAccount("p_sav", 8000)] },
+    });
+    const linked = [
+      { id: "fa-chk", plaidAccountId: "p_chk" },
+      { id: "fa-sav", plaidAccountId: "p_sav" },
+    ];
+    linkedAccounts(linked); // the sync's account lookup
+    linkedAccounts(linked); // the balance capture's
+
+    await syncPlaidItem(ITEM_A);
+
+    expect(mockPlaid.accountsGet).toHaveBeenCalledWith({ access_token: "access-enc-a1" });
+    expect(mockPlaid.accountsBalanceGet).not.toHaveBeenCalled();
+    expect(mockDb.updated(financialAccount)).toEqual([
+      { set: expect.objectContaining({ currentBalance: 1500 }), where: ["fa-chk"] },
+      { set: expect.objectContaining({ currentBalance: 8000 }), where: ["fa-sav"] },
+    ]);
+    expect(snapshotUpserts().map((u) => u.values)).toEqual([
+      expect.objectContaining({ accountId: "fa-chk", balance: 1500 }),
+      expect.objectContaining({ accountId: "fa-sav", balance: 8000 }),
+    ]);
+  });
+
+  it("still ingests transactions and advances the cursor when /accounts/get fails", async () => {
+    mockDb.onSelect(plaidItem, [
+      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+    ]);
+    mockPlaid.transactionsSync.mockResolvedValueOnce({
+      data: {
+        added: [
+          { transaction_id: "plaid-txn-1", account_id: "p_chk", amount: 12, date: "2026-10-01", name: "Blue Bottle" },
+        ],
+        modified: [],
+        removed: [],
+        accounts: [],
+        next_cursor: "c2",
+        has_more: false,
+      },
+    });
+    mockPlaid.accountsGet.mockRejectedValueOnce({
+      response: { data: { error_code: "RATE_LIMIT_EXCEEDED", error_message: "slow down" } },
+    });
+    linkedAccounts([{ id: "fa-chk", plaidAccountId: "p_chk" }]);
+
+    await syncPlaidItem(ITEM_A);
+
+    expect(mockDb.inserted(transaction)).toHaveLength(1);
+    expect(mockDb.updated(plaidItem)).toEqual([
+      expect.objectContaining({ set: expect.objectContaining({ transactionCursor: "c2" }) }),
+    ]);
+    expect(snapshotUpserts()).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining(ITEM_A),
+      expect.stringContaining("RATE_LIMIT_EXCEEDED"),
+    );
   });
 });

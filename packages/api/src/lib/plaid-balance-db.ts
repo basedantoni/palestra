@@ -1,10 +1,10 @@
 /**
  * Persist account balances + daily balance snapshots.
  *
- * Shared by the Plaid transaction sync (`plaid-sync-db.ts`), the daily Plaid
- * snapshot job (`plaid-balance-snapshot.ts`, KOI-289) and the SnapTrade
- * snapshot (`snaptrade-snapshot.ts`, KOI-318) so every capture path writes
- * balances identically. Snapshots upsert on (account, day): a same-day re-run
+ * Shared by Plaid balance capture (`plaid-balance-snapshot.ts`: the daily job
+ * and every transaction sync, KOI-289/KOI-316) and the SnapTrade snapshot
+ * (`snaptrade-snapshot.ts`, KOI-318) so every capture path writes balances
+ * identically. Snapshots upsert on (account, day): a same-day re-run
  * updates the row rather than duplicating it.
  */
 import { randomUUID } from "node:crypto";

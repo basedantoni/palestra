@@ -21,8 +21,6 @@ describe("applyTransactionSyncDelta", () => {
       added: [txn()],
       modified: [txn({ transaction_id: "t2", amount: 99, merchant_name: null })],
       removed: [],
-      accounts: [],
-      asOfDate: "2026-06-10",
     });
 
     expect(out.upserts).toHaveLength(2);
@@ -47,44 +45,8 @@ describe("applyTransactionSyncDelta", () => {
       added: [],
       modified: [],
       removed: [{ transaction_id: "gone1" }, { transaction_id: "gone2" }],
-      accounts: [],
-      asOfDate: "2026-06-10",
     });
     expect(out.deletes).toEqual(["gone1", "gone2"]);
-  });
-
-  it("derives account balance updates and a daily snapshot per account", () => {
-    const out = applyTransactionSyncDelta({
-      added: [],
-      modified: [],
-      removed: [],
-      accounts: [
-        {
-          account_id: "acc_1",
-          balances: { current: 500.5, available: 480, iso_currency_code: "USD" },
-        },
-      ],
-      asOfDate: "2026-06-10",
-    });
-
-    expect(out.accountBalances).toEqual([
-      { plaidAccountId: "acc_1", current: 500.5, available: 480, isoCurrencyCode: "USD" },
-    ]);
-    expect(out.snapshots).toEqual([
-      { plaidAccountId: "acc_1", asOfDate: "2026-06-10", balance: 500.5 },
-    ]);
-  });
-
-  it("skips the snapshot when current balance is null but still records the balance row", () => {
-    const out = applyTransactionSyncDelta({
-      added: [],
-      modified: [],
-      removed: [],
-      accounts: [{ account_id: "acc_2", balances: { current: null, available: null } }],
-      asOfDate: "2026-06-10",
-    });
-    expect(out.accountBalances).toHaveLength(1);
-    expect(out.snapshots).toHaveLength(0);
   });
 
   it("tolerates missing merchant_name and personal_finance_category", () => {
@@ -100,8 +62,6 @@ describe("applyTransactionSyncDelta", () => {
       ],
       modified: [],
       removed: [],
-      accounts: [],
-      asOfDate: "2026-06-10",
     });
     expect(out.upserts[0]).toMatchObject({
       merchantName: null,
