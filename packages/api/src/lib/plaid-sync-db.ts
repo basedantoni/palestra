@@ -27,8 +27,8 @@ import {
 
 import { decryptToken } from "./token-encryption";
 import { todayUtc } from "./date-utils";
-import { persistAccountBalances } from "./plaid-balance-db";
-import { getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
+import { captureItemBalances } from "./plaid-balance-snapshot";
+import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
 import { foreignPlaidEnvError } from "./plaid-env";
 import {
   type PlaidSyncDelta,
@@ -64,12 +64,11 @@ async function ensureSeedCategories(userId: string): Promise<Map<string, string>
 async function fetchSyncDelta(
   accessToken: string,
   startCursor: string | null,
-): Promise<{ delta: Omit<PlaidSyncDelta, "asOfDate">; nextCursor: string }> {
+): Promise<{ delta: PlaidSyncDelta; nextCursor: string }> {
   const plaid = getPlaidClient();
   const added: PlaidTransactionInput[] = [];
   const modified: PlaidTransactionInput[] = [];
   const removed: Array<{ transaction_id: string }> = [];
-  const accountsById = new Map<string, PlaidSyncDelta["accounts"][number]>();
 
   let cursor = startCursor ?? undefined;
   let hasMore = true;
@@ -78,17 +77,11 @@ async function fetchSyncDelta(
     added.push(...(res.data.added as unknown as PlaidTransactionInput[]));
     modified.push(...(res.data.modified as unknown as PlaidTransactionInput[]));
     removed.push(...res.data.removed.map((r) => ({ transaction_id: r.transaction_id })));
-    for (const a of res.data.accounts) {
-      accountsById.set(a.account_id, a as unknown as PlaidSyncDelta["accounts"][number]);
-    }
     cursor = res.data.next_cursor;
     hasMore = res.data.has_more;
   }
 
-  return {
-    delta: { added, modified, removed, accounts: [...accountsById.values()] },
-    nextCursor: cursor ?? "",
-  };
+  return { delta: { added, modified, removed }, nextCursor: cursor ?? "" };
 }
 
 export async function syncPlaidItem(plaidItemId: string): Promise<{
@@ -109,8 +102,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const userId = item.userId;
   const accessToken = decryptToken(item.accessTokenEnc, getTokenEncryptionKey());
   const { delta, nextCursor } = await fetchSyncDelta(accessToken, item.transactionCursor);
-  const asOfDate = todayUtc();
-  const mutations = applyTransactionSyncDelta({ ...delta, asOfDate });
+  const mutations = applyTransactionSyncDelta(delta);
 
   // Resolve Plaid account ids → our financial_account ids for FK wiring.
   const accounts = await db
@@ -122,8 +114,17 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const categoryByName = await ensureSeedCategories(userId);
   const rules = await loadMatchableRules(db, userId);
 
-  // Account balances + daily snapshots.
-  await persistAccountBalances(userId, accountIdByPlaid, mutations);
+  // Balances + today's snapshot for every account at the bank, not just those
+  // with transactions in the delta. A failed `/accounts/get` must not block
+  // transaction ingestion; the next sync or the daily job catches up.
+  try {
+    await captureItemBalances(item, todayUtc());
+  } catch (err) {
+    console.error(
+      `[plaid] balance capture failed for plaid_item ${plaidItemId}:`,
+      describePlaidError(err),
+    );
+  }
 
   // Transaction upserts — fold in flow classification + category resolution.
   // The category only applies on insert: a known transaction keeps its own.

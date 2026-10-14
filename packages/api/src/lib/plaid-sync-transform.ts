@@ -2,11 +2,12 @@
  * Pure transform from a Plaid `/transactions/sync` delta to domain mutations.
  *
  * This is the primary test seam for finance ingestion (KOI-105): given a
- * recorded Plaid sync response it yields the transaction upserts/deletes,
- * account balance updates, and daily balance snapshots to persist — with no
- * DB or HTTP. Flow classification, category seeding, and transfer
- * pair-matching are layered on in later slices and are intentionally NOT done
- * here (raw `plaidCategory*` is retained for them).
+ * recorded Plaid sync response it yields the transaction upserts/deletes to
+ * persist — with no DB or HTTP. Balances come from `/accounts/get` via
+ * `accountBalanceMutations` instead: the sync's `accounts` only lists accounts
+ * with transactions in the delta (KOI-316). Flow classification, category
+ * seeding, and transfer pair-matching are layered on in later slices and are
+ * intentionally NOT done here (raw `plaidCategory*` is retained for them).
  *
  * Typed against minimal local interfaces, not the Plaid SDK, so the transform
  * stays fixture-testable.
@@ -38,9 +39,6 @@ export interface PlaidSyncDelta {
   added: PlaidTransactionInput[];
   modified: PlaidTransactionInput[];
   removed: Array<{ transaction_id: string }>;
-  accounts: PlaidAccountBalanceInput[];
-  /** Day the sync ran, YYYY-MM-DD, used as the snapshot key. */
-  asOfDate: string;
 }
 
 export interface TransactionUpsert {
@@ -69,7 +67,7 @@ export interface BalanceSnapshotRow {
   balance: number;
 }
 
-export interface SyncMutations extends AccountBalanceMutations {
+export interface SyncMutations {
   upserts: TransactionUpsert[];
   deletes: string[];
 }
@@ -97,9 +95,10 @@ export interface AccountBalanceMutations {
 
 /**
  * Plaid account balances → balance updates plus one snapshot per account for
- * `asOfDate`. Shared by the transaction sync and the daily snapshot job
- * (KOI-289) so the two capture paths can't drift. An account with no current
- * balance gets no snapshot — missing, not zero.
+ * `asOfDate`, from `/accounts/get`. Used by `captureItemBalances`, the one
+ * Plaid capture path for the transaction sync and the daily snapshot job
+ * (KOI-289, KOI-316). An account with no current balance gets no snapshot —
+ * missing, not zero.
  */
 export function accountBalanceMutations(
   accounts: PlaidAccountBalanceInput[],
@@ -137,5 +136,5 @@ export function accountIdsByPlaid(
 export function applyTransactionSyncDelta(delta: PlaidSyncDelta): SyncMutations {
   const upserts = [...delta.added, ...delta.modified].map(toUpsert);
   const deletes = delta.removed.map((r) => r.transaction_id);
-  return { upserts, deletes, ...accountBalanceMutations(delta.accounts, delta.asOfDate) };
+  return { upserts, deletes };
 }
