@@ -35,6 +35,21 @@ export interface NetWorthPoint {
 
 const LIABILITY: ReadonlySet<AccountType> = new Set(["credit", "loan"]);
 
+/**
+ * An account's balance with its pending transactions folded in. Plaid's
+ * `current` counts only posted transactions while the transaction list shows
+ * pending ones too. Plaid sign: positive = money out, so a pending outflow
+ * lowers an asset and raises what a credit/loan owes. Missing stays missing.
+ */
+export function balanceWithPending(
+  type: AccountType,
+  current: number | null,
+  pending: number,
+): number | null {
+  if (current === null) return null;
+  return cents(LIABILITY.has(type) ? current + pending : current - pending);
+}
+
 const parseDay = (day: string) => {
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d, 12);
