@@ -136,6 +136,9 @@ export const plaidRouter = router({
             status: "active",
             plaidEnv: env.PLAID_ENV,
             ...(institutionName ? { institutionName } : {}),
+            // Re-linking brings removed accounts back, with their history re-pulled (KOI-317).
+            removedPlaidAccountIds: [],
+            transactionCursor: null,
           },
         });
 

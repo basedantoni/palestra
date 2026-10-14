@@ -1,0 +1,1 @@
+ALTER TABLE "plaid_item" ADD COLUMN "removed_plaid_account_ids" text[] DEFAULT '{}' NOT NULL;

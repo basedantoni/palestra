@@ -95,9 +95,8 @@ export interface AccountBalanceMutations {
 
 /**
  * Plaid account balances → balance updates plus one snapshot per account for
- * `asOfDate`, from `/accounts/get`. Used by `captureItemBalances`, the one
- * Plaid capture path for the transaction sync and the daily snapshot job
- * (KOI-289, KOI-316). An account with no current balance gets no snapshot —
+ * `asOfDate`, from `/accounts/get`. Used by the transaction sync and the daily
+ * snapshot job (KOI-289, KOI-316). An account with no current balance gets no snapshot —
  * missing, not zero.
  */
 export function accountBalanceMutations(

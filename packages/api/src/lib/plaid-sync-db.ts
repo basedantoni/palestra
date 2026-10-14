@@ -9,6 +9,12 @@
  *    Category Rule, else the Default Category from the seeded categories
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
+ * Accounts the app has no row for (opened after linking, or shared during a
+ * reconnect) are created first, unless the user removed them (KOI-317). Their
+ * transactions were skipped by earlier syncs while the cursor moved on, so
+ * adding one re-pulls the bank's history from the start; the upserts below keep
+ * that safe to repeat.
+ *
  * Idempotent: transactions upsert on the unique Plaid id, snapshots upsert on
  * (account, day), the cursor advances only after a successful drain. A re-run
  * converges to the same state.
@@ -27,12 +33,14 @@ import {
 
 import { decryptToken } from "./token-encryption";
 import { todayUtc } from "./date-utils";
-import { captureItemBalances } from "./plaid-balance-snapshot";
+import { plaidAccountToRow, type PlaidAccountInput } from "./plaid-account-map";
+import { persistAccountBalances } from "./plaid-balance-db";
 import { describePlaidError, getPlaidClient, getTokenEncryptionKey } from "./plaid-client";
 import { foreignPlaidEnvError } from "./plaid-env";
 import {
   type PlaidSyncDelta,
   type PlaidTransactionInput,
+  accountBalanceMutations,
   accountIdsByPlaid,
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
@@ -101,7 +109,24 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
 
   const userId = item.userId;
   const accessToken = decryptToken(item.accessTokenEnc, getTokenEncryptionKey());
-  const { delta, nextCursor } = await fetchSyncDelta(accessToken, item.transactionCursor);
+
+  // Every account at the bank (`/accounts/get`), not just those with
+  // transactions in the delta: add the unknown ones now, refresh balances +
+  // today's snapshot below. A failed `/accounts/get` must not block
+  // transaction ingestion; the next sync or the daily job catches up.
+  let plaidAccounts: PlaidAccountInput[] = [];
+  let startCursor = item.transactionCursor;
+  try {
+    plaidAccounts = (await getPlaidClient().accountsGet({ access_token: accessToken })).data.accounts;
+    if (await addUnknownAccounts(item, plaidAccounts)) startCursor = null;
+  } catch (err) {
+    console.error(
+      `[plaid] account refresh failed for plaid_item ${plaidItemId}:`,
+      describePlaidError(err),
+    );
+  }
+
+  const { delta, nextCursor } = await fetchSyncDelta(accessToken, startCursor);
   const mutations = applyTransactionSyncDelta(delta);
 
   // Resolve Plaid account ids → our financial_account ids for FK wiring.
@@ -111,20 +136,14 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     .where(eq(financialAccount.userId, userId));
   const accountIdByPlaid = accountIdsByPlaid(accounts);
 
+  await persistAccountBalances(
+    userId,
+    accountIdByPlaid,
+    accountBalanceMutations(plaidAccounts, todayUtc()),
+  );
+
   const categoryByName = await ensureSeedCategories(userId);
   const rules = await loadMatchableRules(db, userId);
-
-  // Balances + today's snapshot for every account at the bank, not just those
-  // with transactions in the delta. A failed `/accounts/get` must not block
-  // transaction ingestion; the next sync or the daily job catches up.
-  try {
-    await captureItemBalances(item, todayUtc());
-  } catch (err) {
-    console.error(
-      `[plaid] balance capture failed for plaid_item ${plaidItemId}:`,
-      describePlaidError(err),
-    );
-  }
 
   // Transaction upserts — fold in flow classification + category resolution.
   // The category only applies on insert: a known transaction keeps its own.
@@ -197,6 +216,33 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     modified: delta.modified.length,
     removed: delta.removed.length,
   };
+}
+
+/**
+ * Create rows for the bank's accounts the app doesn't have, skipping ones the
+ * user removed. Adding any clears the item's cursor in the same transaction, so
+ * the history re-pull survives a sync that fails after this point. Returns
+ * whether any account was added.
+ */
+async function addUnknownAccounts(
+  item: { id: string; userId: string; removedPlaidAccountIds: string[] },
+  plaidAccounts: PlaidAccountInput[],
+): Promise<boolean> {
+  const rows = plaidAccounts
+    .filter((a) => !item.removedPlaidAccountIds.includes(a.account_id))
+    .map((a) => ({ id: randomUUID(), ...plaidAccountToRow(a, { userId: item.userId, plaidItemId: item.id }) }));
+  if (rows.length === 0) return false;
+
+  return db.transaction(async (tx) => {
+    const added = await tx
+      .insert(financialAccount)
+      .values(rows)
+      .onConflictDoNothing({ target: financialAccount.plaidAccountId })
+      .returning({ id: financialAccount.id });
+    if (added.length === 0) return false;
+    await tx.update(plaidItem).set({ transactionCursor: null }).where(eq(plaidItem.id, item.id));
+    return true;
+  });
 }
 
 /**
