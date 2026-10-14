@@ -18,6 +18,10 @@ import { user } from "./auth";
  *
  * `plaidEnv` is the environment that issued the token. A token only works in
  * that environment, so sync and revoke skip items from another `PLAID_ENV`.
+ *
+ * `removedPlaidAccountIds` lists the bank's accounts the user removed. Sync
+ * creates any other account it has no row for (KOI-317), so this is what keeps
+ * a removed account gone; re-linking the bank through Link clears it.
  */
 export const plaidItem = pgTable(
   "plaid_item",
@@ -33,6 +37,7 @@ export const plaidItem = pgTable(
     transactionCursor: text("transaction_cursor"),
     status: text("status").default("active").notNull(),
     plaidEnv: plaidEnvEnum("plaid_env").notNull(),
+    removedPlaidAccountIds: text("removed_plaid_account_ids").array().default([]).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

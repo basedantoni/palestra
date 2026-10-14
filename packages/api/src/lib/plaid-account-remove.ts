@@ -4,8 +4,9 @@
  * Plaid has no per-account unlink — access is granted per Item (institution).
  * So:
  *  - If the Item still has other accounts, only the local `financial_account`
- *    row is deleted. Sync skips Plaid accounts it has no row for, so the
- *    account stays gone until the user re-links the institution.
+ *    row is deleted and its Plaid account id is recorded on the Item as
+ *    removed, so sync doesn't recreate it (KOI-317). It stays gone until the
+ *    user re-links the institution, which clears that record.
  *  - If this was the Item's last account, the Item is revoked at Plaid
  *    (`/item/remove`, stops billing + webhooks) and the `plaid_item` row is
  *    deleted. If Plaid refuses, the Item row (and its encrypted token) is kept
@@ -17,7 +18,7 @@
  *
  * Transactions, balance snapshots, and goal links cascade via FKs.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
@@ -49,7 +50,11 @@ export async function removeFinancialAccount(
   accountId: string,
 ): Promise<RemoveAccountResult> {
   const [account] = await db
-    .select({ id: financialAccount.id, plaidItemId: financialAccount.plaidItemId })
+    .select({
+      id: financialAccount.id,
+      plaidItemId: financialAccount.plaidItemId,
+      plaidAccountId: financialAccount.plaidAccountId,
+    })
     .from(financialAccount)
     .where(and(eq(financialAccount.id, accountId), eq(financialAccount.userId, userId)))
     .limit(1);
@@ -69,7 +74,15 @@ export async function removeFinancialAccount(
     return { removed: true, itemRemoved: true };
   }
 
-  await db.delete(financialAccount).where(eq(financialAccount.id, account.id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(plaidItem)
+      .set({
+        removedPlaidAccountIds: sql`array_append(${plaidItem.removedPlaidAccountIds}, ${account.plaidAccountId})`,
+      })
+      .where(eq(plaidItem.id, plaidItemId));
+    await tx.delete(financialAccount).where(eq(financialAccount.id, account.id));
+  });
   return { removed: true, itemRemoved: false };
 }
 

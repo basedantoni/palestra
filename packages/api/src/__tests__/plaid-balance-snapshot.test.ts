@@ -194,7 +194,7 @@ describe("snapshotAllPlaidBalances", () => {
 describe("syncPlaidItem balances", () => {
   it("refreshes every account at the bank, not just those in the transaction delta", async () => {
     mockDb.onSelect(plaidItem, [
-      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV, removedPlaidAccountIds: [] },
     ]);
     // Plaid's sync `accounts` only lists accounts with transactions in the delta.
     mockPlaid.transactionsSync.mockResolvedValueOnce({
@@ -223,8 +223,7 @@ describe("syncPlaidItem balances", () => {
       { id: "fa-chk", plaidAccountId: "p_chk" },
       { id: "fa-sav", plaidAccountId: "p_sav" },
     ];
-    linkedAccounts(linked); // the sync's account lookup
-    linkedAccounts(linked); // the balance capture's
+    linkedAccounts(linked); // one lookup feeds transactions and balances
 
     await syncPlaidItem(ITEM_A);
 
@@ -242,7 +241,7 @@ describe("syncPlaidItem balances", () => {
 
   it("still ingests transactions and advances the cursor when /accounts/get fails", async () => {
     mockDb.onSelect(plaidItem, [
-      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
+      { id: ITEM_A, userId: "user-1", accessTokenEnc: "enc-a1", transactionCursor: "c1", plaidEnv: env.PLAID_ENV, removedPlaidAccountIds: [] },
     ]);
     mockPlaid.transactionsSync.mockResolvedValueOnce({
       data: {

@@ -5,8 +5,9 @@
  * Plaid only reports current balances, so net worth history can't be
  * backfilled — a day not captured is lost. A daily GitHub Actions cron hits
  * `POST /api/internal/plaid/snapshot-balances`, which calls this to record one
- * balance snapshot per account for today. Every transaction sync also calls
- * `captureItemBalances`, so a quiet account doesn't wait for the cron.
+ * balance snapshot per account for today. Every transaction sync also writes
+ * balances from its own `/accounts/get` read (`plaid-sync-db.ts`), so a quiet
+ * account doesn't wait for the cron.
  *
  * Uses `/accounts/get` (free, cached ~daily), never `/accounts/balance/get`
  * (billed per call). Idempotent per day via the (account, day) upsert.
@@ -31,8 +32,9 @@ export interface SnapshotBalancesResult {
 
 /**
  * Refresh balances and today's snapshot for every account on one Plaid item.
- * The one Plaid balance capture path: the daily job and every transaction sync
- * (KOI-316) call it, since `/transactions/sync` only reports accounts that had
+ * Used by the daily job. Every transaction sync (KOI-316) writes the same way
+ * from its own `/accounts/get` read, which it also uses to add accounts
+ * (KOI-317), since `/transactions/sync` only reports accounts that had
  * transactions in the delta.
  */
 export async function captureItemBalances(
