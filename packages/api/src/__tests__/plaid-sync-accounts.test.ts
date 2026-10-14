@@ -216,6 +216,21 @@ describe("syncPlaidItem: accounts the app has no row for", () => {
 
     expect(await transactionsOn((await accountByPlaidId("p_new"))!.id)).toHaveLength(1);
   });
+
+  it("doesn't overwrite a cursor reset by an overlapping sync", async () => {
+    const { item } = await seedBank();
+    bankHas({ accounts: [CHECKING], history: [] });
+    // While this sync pulls its delta, another one adds an account and resets the cursor.
+    const pull = mockPlaid.transactionsSync.getMockImplementation()!;
+    mockPlaid.transactionsSync.mockImplementationOnce(async (req: { cursor?: string }) => {
+      await db.update(plaidItem).set({ transactionCursor: null }).where(eq(plaidItem.id, item.id));
+      return pull(req);
+    });
+
+    await syncPlaidItem(item.id);
+
+    expect((await itemRow(item.id)).transactionCursor).toBeNull();
+  });
 });
 
 describe("removed accounts", () => {

@@ -5,8 +5,9 @@
  * Plaid only reports current balances, so net worth history can't be
  * backfilled — a day not captured is lost. A daily GitHub Actions cron hits
  * `POST /api/internal/plaid/snapshot-balances`, which calls this to record one
- * balance snapshot per account for today. Every transaction sync also calls
- * `captureItemBalances`, so a quiet account doesn't wait for the cron.
+ * balance snapshot per account for today. Every transaction sync also writes
+ * balances from its own `/accounts/get` read (`plaid-sync-db.ts`), so a quiet
+ * account doesn't wait for the cron.
  *
  * Uses `/accounts/get` (free, cached ~daily), never `/accounts/balance/get`
  * (billed per call). Idempotent per day via the (account, day) upsert.

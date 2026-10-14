@@ -136,11 +136,15 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     .where(eq(financialAccount.userId, userId));
   const accountIdByPlaid = accountIdsByPlaid(accounts);
 
-  await persistAccountBalances(
-    userId,
-    accountIdByPlaid,
-    accountBalanceMutations(plaidAccounts, todayUtc()),
-  );
+  try {
+    await persistAccountBalances(
+      userId,
+      accountIdByPlaid,
+      accountBalanceMutations(plaidAccounts, todayUtc()),
+    );
+  } catch (err) {
+    console.error(`[plaid] balance capture failed for plaid_item ${plaidItemId}:`, err);
+  }
 
   const categoryByName = await ensureSeedCategories(userId);
   const rules = await loadMatchableRules(db, userId);
@@ -203,13 +207,20 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   // A successful sync proves an errored login works again. Other statuses
   // (e.g. pending_expiration) still need user action — leave them to ITEM
   // webhooks so the reconnect banner isn't silently cleared.
+  // Compare-and-set: an overlapping sync that moved the cursor (or reset it to
+  // re-pull history for an added account) wins; this one's upserts are idempotent.
   await db
     .update(plaidItem)
     .set({
       transactionCursor: nextCursor,
       status: sql`case when ${plaidItem.status} = 'error' then 'active' else ${plaidItem.status} end`,
     })
-    .where(eq(plaidItem.id, plaidItemId));
+    .where(
+      and(
+        eq(plaidItem.id, plaidItemId),
+        sql`${plaidItem.transactionCursor} is not distinct from ${startCursor}`,
+      ),
+    );
 
   return {
     added: delta.added.length,
@@ -221,7 +232,8 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
 /**
  * Create rows for the bank's accounts the app doesn't have, skipping ones the
  * user removed. Adding any clears the item's cursor in the same transaction, so
- * the history re-pull survives a sync that fails after this point. Returns
+ * the history re-pull survives a sync that fails after this point (or overlaps
+ * it: the final cursor write is compare-and-set). Returns
  * whether any account was added.
  */
 async function addUnknownAccounts(
