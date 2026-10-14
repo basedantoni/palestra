@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sum } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { financialAccount, plaidItem } from "@life-tracker/db/schema/index";
+import { financialAccount, plaidItem, transaction } from "@life-tracker/db/schema/index";
 import { env } from "@life-tracker/env/server";
 
 import { protectedProcedure, router } from "../index";
 import { encryptToken } from "../lib/token-encryption";
+import { balanceWithPending } from "../lib/net-worth";
 import { plaidAccountToRow } from "../lib/plaid-account-map";
 import { canRepairInUpdateMode, getOwnedPlaidItem } from "../lib/plaid-item-access";
 import { removeFinancialAccount, removePlaidItem } from "../lib/plaid-account-remove";
@@ -185,12 +186,31 @@ export const plaidRouter = router({
       };
     }),
 
-  /** List the user's connected accounts. */
+  /**
+   * List the user's connected accounts, each with its balance with pending
+   * transactions folded in (Plaid's `current` is posted-only).
+   */
   listAccounts: protectedProcedure.query(async ({ ctx }) => {
-    return db
+    const userId = ctx.session.user.id;
+    const accounts = await db
       .select()
       .from(financialAccount)
-      .where(eq(financialAccount.userId, ctx.session.user.id));
+      .where(eq(financialAccount.userId, userId));
+    const pendingRows = await db
+      .select({ accountId: transaction.accountId, amount: sum(transaction.amount).mapWith(Number) })
+      .from(transaction)
+      .where(and(eq(transaction.userId, userId), eq(transaction.pending, true)))
+      .groupBy(transaction.accountId);
+    const pendingByAccount = new Map(pendingRows.map((r) => [r.accountId, r.amount]));
+
+    return accounts.map((a) => ({
+      ...a,
+      balanceWithPending: balanceWithPending(
+        a.type,
+        a.currentBalance,
+        pendingByAccount.get(a.id) ?? 0,
+      ),
+    }));
   }),
 
   /**

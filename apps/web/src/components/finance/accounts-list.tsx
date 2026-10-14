@@ -18,6 +18,11 @@ import {
 import { RECONNECT_MESSAGE, isReconnecting, useReconnectBank } from "./use-reconnect-bank";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const signedUsd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  signDisplay: "always",
+});
 
 type Account = {
   id: string;
@@ -28,6 +33,8 @@ type Account = {
   mask: string | null;
   type: string;
   currentBalance: number | null;
+  /** `currentBalance` with pending transactions folded in; what we show. */
+  balanceWithPending: number | null;
 };
 
 /** `foreignEnv`: linked under another PLAID_ENV, so this server can't sync or revoke it. Not broken. */
@@ -65,7 +72,7 @@ function isLiability(type: string): boolean {
 
 export function netWorth(accounts: Account[]): number {
   return accounts.reduce((sum, a) => {
-    const bal = a.currentBalance ?? 0;
+    const bal = a.balanceWithPending ?? 0;
     return sum + (isLiability(a.type) ? -bal : bal);
   }, 0);
 }
@@ -354,6 +361,17 @@ function BankGroup({
   );
 }
 
+/** How much pending transactions moved the shown balance, e.g. "incl. −$58.12 pending". */
+function PendingNote({ account }: { account: Account }) {
+  const { currentBalance, balanceWithPending } = account;
+  if (currentBalance == null || balanceWithPending == null) return null;
+  const delta = balanceWithPending - currentBalance;
+  if (Math.abs(delta) < 0.005) return null;
+  return (
+    <span className="text-xs text-muted-foreground">incl. {signedUsd.format(delta)} pending</span>
+  );
+}
+
 /** Account rows. No `onRemove` = no remove button (SnapTrade accounts are removed in SnapTrade). */
 function AccountRows({
   accounts,
@@ -376,9 +394,12 @@ function AccountRows({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`tabular-nums ${stale ? "opacity-60" : ""}`}>
-              {a.currentBalance == null ? "—" : usd.format(a.currentBalance)}
-              {stale && <span className="ml-1 text-xs text-muted-foreground">(stale)</span>}
+            <span className={`flex flex-col items-end tabular-nums ${stale ? "opacity-60" : ""}`}>
+              <span>
+                {a.balanceWithPending == null ? "—" : usd.format(a.balanceWithPending)}
+                {stale && <span className="ml-1 text-xs text-muted-foreground">(stale)</span>}
+              </span>
+              <PendingNote account={a} />
             </span>
             {onRemove && (
               <Button

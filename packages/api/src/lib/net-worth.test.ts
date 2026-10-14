@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { carryForwardSeries, netWorthHistory, type NetWorthAccount, type NetWorthSnapshot } from "./net-worth";
+import {
+  balanceWithPending,
+  carryForwardSeries,
+  netWorthHistory,
+  type NetWorthAccount,
+  type NetWorthSnapshot,
+} from "./net-worth";
 
 const checking: NetWorthAccount = { id: "chk", type: "depository" };
 const brokerage: NetWorthAccount = { id: "inv", type: "investment" };
@@ -165,5 +171,26 @@ describe("netWorthHistory: missing before first snapshot", () => {
   it("ignores snapshots of accounts that are no longer linked", () => {
     const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 2000), snap("gone", "2026-06-01", 9999)]);
     expect(netWorths(r)).toEqual([["2026-06-01", 2000, false]]);
+  });
+});
+
+describe("balanceWithPending", () => {
+  // Plaid sign: positive = money out, negative = money in.
+  it("lowers an asset by pending outflows and raises it by pending inflows", () => {
+    expect(balanceWithPending("depository", 1000, 58.12)).toBe(941.88);
+    expect(balanceWithPending("investment", 1000, -200)).toBe(1200);
+  });
+
+  it("raises what a credit card or loan owes by pending charges and lowers it by pending payments", () => {
+    expect(balanceWithPending("credit", 878.4, 34)).toBe(912.4);
+    expect(balanceWithPending("loan", 5000, -500)).toBe(4500);
+  });
+
+  it("returns the posted balance unchanged with nothing pending", () => {
+    expect(balanceWithPending("depository", 1000, 0)).toBe(1000);
+  });
+
+  it("stays missing when Plaid reports no current balance", () => {
+    expect(balanceWithPending("depository", null, 20)).toBeNull();
   });
 });
