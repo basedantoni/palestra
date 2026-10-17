@@ -82,7 +82,7 @@ function FinanceOverview() {
   const accounts = useQuery(trpc.plaid.listAccounts.queryOptions());
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const { cashFlow, range, setRange, selectedMonth, selectMonth, period, setPeriod } = useOverviewFilters(hasAccounts);
-  const netWorth = useQuery({ ...trpc.finance.netWorthHistory.queryOptions(), enabled: hasAccounts });
+  const netWorth = useQuery({ ...trpc.finance.netWorthHistory.queryOptions({ timeframe: "1M" }), enabled: hasAccounts });
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6">
@@ -124,7 +124,7 @@ function FinanceOverview() {
       )}
       {hasAccounts && netWorth.data && (
         <Section title="Net worth">
-          <NetWorthChart data={netWorth.data} />
+          <NetWorthChart />
         </Section>
       )}
       <Section title="Accounts" to="/finance/accounts">
