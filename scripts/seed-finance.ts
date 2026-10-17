@@ -28,7 +28,7 @@ import { env } from "@life-tracker/env/server";
 import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
-import { SEED_CATEGORIES } from "../packages/api/src/lib/category-seed";
+import { SEED_CATEGORIES, seedCategoryColor } from "../packages/api/src/lib/category-seed";
 import { writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
 import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
@@ -125,7 +125,16 @@ async function seedFinance() {
 
     await tx
       .insert(category)
-      .values(SEED_CATEGORIES.map((name) => ({ id: id(`category:${name}`), userId, name, isSystem: true })))
+      .values(
+        SEED_CATEGORIES.map((name, sortOrder) => ({
+          id: id(`category:${name}`),
+          userId,
+          name,
+          isSystem: true,
+          color: seedCategoryColor(name),
+          sortOrder,
+        })),
+      )
       .onConflictDoNothing();
 
     // Reset: cascades to the fixture accounts and their transactions.

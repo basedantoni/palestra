@@ -8,3 +8,4 @@ export * from "./hr-zones";
 export * from "./money";
 export * from "./tcg";
 export * from "./tcg-binder";
+export * from "./category-colors";

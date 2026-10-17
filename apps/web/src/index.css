@@ -33,13 +33,20 @@
   /* Balance lines: blue/orange, not green/red, which merge under deuteranopia (dataviz validator). */
   --chart-assets: #2a78d6;
   --chart-liabilities: #eb6834;
-  /* Spend-by-category slots: green and red left out so they don't read as income/spend. */
-  --chart-cat-1: #2a78d6;
-  --chart-cat-2: #eb6834;
-  --chart-cat-3: #1baf7a;
-  --chart-cat-4: #eda100;
-  --chart-cat-5: #e87ba4;
-  --chart-cat-6: #4a3aa7;
+  /* Category palette (KOI-336): one var per token in @life-tracker/shared category-colors.ts. */
+  --chart-cat-blue: #2a78d6;
+  --chart-cat-orange: #eb6834;
+  --chart-cat-aqua: #1baf7a;
+  --chart-cat-yellow: #eda100;
+  --chart-cat-magenta: #e87ba4;
+  --chart-cat-violet: #6250d6;
+  --chart-cat-brown: #7e5904;
+  --chart-cat-purple: #be63f8;
+  --chart-cat-olive: #76863d;
+  --chart-cat-sky: #2baad3;
+  --chart-cat-red: #e34948;
+  --chart-cat-plum: #8c0888;
+  --chart-cat-green: #008300;
   --chart-cat-other: oklch(0.75 0 0);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
@@ -80,12 +87,19 @@
   --chart-spend: oklch(0.7 0.18 25);
   --chart-assets: #3987e5;
   --chart-liabilities: #d95926;
-  --chart-cat-1: #3987e5;
-  --chart-cat-2: #d95926;
-  --chart-cat-3: #199e70;
-  --chart-cat-4: #c98500;
-  --chart-cat-5: #d55181;
-  --chart-cat-6: #9085e9;
+  --chart-cat-blue: #3987e5;
+  --chart-cat-orange: #d95926;
+  --chart-cat-aqua: #199e70;
+  --chart-cat-yellow: #c98500;
+  --chart-cat-magenta: #d55181;
+  --chart-cat-violet: #9085e9;
+  --chart-cat-brown: #876114;
+  --chart-cat-purple: #9537cb;
+  --chart-cat-olive: #889e2a;
+  --chart-cat-sky: #0b7b9c;
+  --chart-cat-red: #e66767;
+  --chart-cat-plum: #8f588a;
+  --chart-cat-green: #008300;
   --chart-cat-other: oklch(0.5 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);

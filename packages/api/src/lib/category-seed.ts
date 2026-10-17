@@ -1,3 +1,5 @@
+import { CATEGORY_COLORS, type CategoryColor } from "@life-tracker/shared";
+
 /**
  * Bank Category → seed category mapping (KOI-107).
  *
@@ -64,6 +66,16 @@ export const SEED_CATEGORIES: string[] = [
   "Bank Fees",
   "Government & Non-Profit",
 ];
+
+/**
+ * Seed colors (KOI-336): the expense seeds take the palette in order, so each
+ * is distinct. Income and Transfers get none; they leave in KOI-341. The
+ * KOI-336 migration backfilled existing users with the same colors.
+ */
+export function seedCategoryColor(name: string): CategoryColor | null {
+  if (name === "Income" || name === "Transfers") return null;
+  return CATEGORY_COLORS[SEED_CATEGORIES.indexOf(name) - 2] ?? null;
+}
 
 /**
  * The seed category name for a Bank Category, or null when it can't be

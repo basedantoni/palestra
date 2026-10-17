@@ -6,6 +6,7 @@ import { periodToSearch, searchToPeriod, transactionPeriodSearchSchema } from "@
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc } from "@/utils/trpc";
+import { categoryLabel } from "@/components/finance/category-color";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { TransactionPeriodPicker } from "@/components/finance/transaction-period-picker";
 
@@ -100,7 +101,7 @@ function TransactionsPage() {
           <option value={UNCATEGORIZED}>Uncategorized</option>
           {(categories ?? []).map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {categoryLabel(c)}
             </option>
           ))}
         </select>
