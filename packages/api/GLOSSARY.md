@@ -85,7 +85,7 @@ A game card identified by its card number (e.g. `OP05-069`) and character. Sever
 _Avoid_: Using "card" for a physical card or a specific artwork
 
 **Artwork**:
-One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language.
+One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language. A region-exclusive print with no Japanese variant ID (a Korea-only promo, a China-only card) is not an Artwork here.
 _Avoid_: Variant (as a noun), art, illustration
 
 **Printing**:
@@ -143,3 +143,11 @@ _Avoid_: Price, market value, quote
 **Price History**:
 The daily Market Prices of one Printing from one Marketplace over time. Never blended across Marketplaces.
 _Avoid_: Price chart, price trend, history
+
+**Price Move**:
+The change in one Printing's Market Price on one Marketplace over a window, as a percentage in the Marketplace's own currency, so exchange-rate swings never count as a move.
+_Avoid_: Mover, swing, trend
+
+**Watched Artwork**:
+An Artwork the user has an open Want for, holds a Copy of, has rated ★4 or ★5, or has tagged with a Theme. Derived from those facts, never hand-picked.
+_Avoid_: Watchlist, favourite
