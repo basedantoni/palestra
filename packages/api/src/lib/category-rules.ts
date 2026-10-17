@@ -1,20 +1,21 @@
 /**
  * Category resolution for transactions (KOI-295): Default Category, Manual
  * Category and Category Rules. Pure — matching never lives in SQL, so sync,
- * reset and retroactive apply all share these functions.
+ * reset, retroactive apply and remapping all share these functions.
  */
-import { categoryNameForPfc } from "./category-seed";
+
+/** The user's Bank Category mapping (KOI-335): PFC primary → category id, null when unmapped. */
+export type BankCategoryMapping = ReadonlyMap<string, string | null>;
 
 /**
- * The Default Category: the user's seeded category for the Plaid primary
- * category, or null (Uncategorized) when the primary can't be mapped.
+ * The Default Category: the category the user mapped the Bank Category (Plaid
+ * primary) to, or null (Uncategorized) when it is unmapped or unknown.
  */
 export function defaultCategoryId(
   plaidCategoryPrimary: string | null | undefined,
-  categoryByName: ReadonlyMap<string, string>,
+  mapping: BankCategoryMapping,
 ): string | null {
-  const name = categoryNameForPfc(plaidCategoryPrimary);
-  return name === null ? null : (categoryByName.get(name) ?? null);
+  return plaidCategoryPrimary ? (mapping.get(plaidCategoryPrimary) ?? null) : null;
 }
 
 /**
@@ -25,9 +26,9 @@ export function defaultCategoryId(
 export function isManualCategory(
   categoryId: string | null,
   plaidCategoryPrimary: string | null | undefined,
-  categoryByName: ReadonlyMap<string, string>,
+  mapping: BankCategoryMapping,
 ): boolean {
-  return categoryId !== defaultCategoryId(plaidCategoryPrimary, categoryByName);
+  return categoryId !== defaultCategoryId(plaidCategoryPrimary, mapping);
 }
 
 /** The fields of a Category Rule that matching needs. */
@@ -65,9 +66,9 @@ export function resolveCategory(
   name: string,
   plaidCategoryPrimary: string | null | undefined,
   rules: readonly MatchableRule[],
-  categoryByName: ReadonlyMap<string, string>,
+  mapping: BankCategoryMapping,
 ): string | null {
-  return matchRule(name, rules)?.categoryId ?? defaultCategoryId(plaidCategoryPrimary, categoryByName);
+  return matchRule(name, rules)?.categoryId ?? defaultCategoryId(plaidCategoryPrimary, mapping);
 }
 
 export const MIN_PATTERN_LENGTH = 3;
@@ -143,7 +144,7 @@ export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
   rules: readonly MatchableRule[],
   candidate: CandidateRule,
-  categoryByName: ReadonlyMap<string, string>,
+  mapping: BankCategoryMapping,
 ): Recategorization[] {
   const previous = rules.find((r) => r.id === candidate.id);
   const patterns = [candidate.pattern, previous?.pattern].flatMap((p) => (p ? [p.toLowerCase()] : []));
@@ -157,7 +158,24 @@ export function ruleRecategorizations(
       const rule = row.categoryId === null ? matchRule(row.name, saved) : null;
       return rule ? [{ id: row.id, categoryId: rule.categoryId }] : [];
     }
-    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, categoryByName);
+    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping);
+    return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
+  });
+}
+
+/**
+ * Remap (KOI-335): re-resolve automatic rows against a changed Bank Category
+ * mapping; returns those whose category changes. Rules still win, and a Manual
+ * Category (blank or not) is never touched.
+ */
+export function bankCategoryRecategorizations(
+  rows: readonly CategorizableTransaction[],
+  rules: readonly MatchableRule[],
+  mapping: BankCategoryMapping,
+): Recategorization[] {
+  return rows.flatMap((row) => {
+    if (row.categoryOverridden) return [];
+    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, mapping);
     return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
   });
 }

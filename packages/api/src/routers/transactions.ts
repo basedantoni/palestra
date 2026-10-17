@@ -10,7 +10,7 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { resolveCategory } from "../lib/category-rules";
-import { loadCategoryByName, loadMatchableRules } from "../lib/category-rules-db";
+import { loadBankCategoryMapping, loadMatchableRules } from "../lib/category-rules-db";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
@@ -143,7 +143,7 @@ export const transactionsRouter = router({
         row.name,
         row.plaidCategoryPrimary,
         await loadMatchableRules(db, userId),
-        await loadCategoryByName(db, userId),
+        await loadBankCategoryMapping(db, userId),
       );
       await db.update(transaction).set({ categoryId, categoryOverridden: false }).where(owned);
       return { ok: true };

@@ -19,6 +19,8 @@ import {
 
 import { adminProcedure, router } from "../index";
 import { isManualCategory } from "../lib/category-rules";
+import { writeSeedMapping } from "../lib/category-rules-db";
+import { seedBankCategoryMapping } from "../lib/category-seed";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
 
@@ -86,13 +88,13 @@ export const adminRouter = router({
         categoryByNameByUser.set(c.userId, byName);
       }
 
+      // The default as it was then: the seeded category of the same name.
+      const mappingByUser = new Map(
+        [...categoryByNameByUser].map(([userId, byName]) => [userId, seedBankCategoryMapping(byName)]),
+      );
       const manualIds = rows
         .filter((r) =>
-          isManualCategory(
-            r.categoryId,
-            r.plaidCategoryPrimary,
-            categoryByNameByUser.get(r.userId) ?? new Map(),
-          ),
+          isManualCategory(r.categoryId, r.plaidCategoryPrimary, mappingByUser.get(r.userId) ?? new Map()),
         )
         .map((r) => r.id);
       // Chunked to stay well under Postgres' bind-parameter limit.
@@ -104,6 +106,20 @@ export const adminRouter = router({
           .where(inArray(transaction.id, manualIds.slice(i, i + CHUNK)));
       }
       return { processed: rows.length, manual: manualIds.length };
+    });
+  }),
+  // ---------------------------------------------------------------------------
+  // Backfill: give every existing user a Bank Category mapping (KOI-335), each
+  // PFC primary → their category of its seed name, unmapped when they have
+  // none. Idempotent: existing rows (a user's own choice) are kept. Run once
+  // after the migration; until then resolution sees no mapping for that user,
+  // and their next sync would seed it the same way.
+  // ---------------------------------------------------------------------------
+  backfillBankCategoryMappings: adminProcedure.mutation(async () => {
+    return db.transaction(async (tx) => {
+      const users = await tx.selectDistinct({ userId: category.userId }).from(category);
+      for (const { userId } of users) await writeSeedMapping(tx, userId);
+      return { users: users.length };
     });
   }),
   // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 }));
 
 import {
+  bankCategoryMapping,
   category,
   categoryRule,
   financialAccount,
@@ -94,16 +95,16 @@ describe("transactions.setCategory", () => {
 describe("transactions.resetCategory", () => {
   it("restores the Default Category and clears the manual flag, scoped to the caller", async () => {
     mockDb.onSelect(transaction, [{ name: "BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
-    mockDb.onSelect(category, [
-      { id: "cat-food", name: "Food & Drink" },
-      { id: "cat-shop", name: "Shopping" },
+    mockDb.onSelect(bankCategoryMapping, [
+      { pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" },
+      { pfcPrimary: "GENERAL_MERCHANDISE", categoryId: "cat-shop" },
     ]);
 
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 
     expect(mockDb.selected(transaction)).toEqual([[TXN_ID, USER_ID]]);
     expect(mockDb.selected(categoryRule)).toEqual([[USER_ID]]);
-    expect(mockDb.selected(category)).toEqual([[USER_ID]]);
+    expect(mockDb.selected(bankCategoryMapping)).toEqual([[USER_ID]]);
     const [update] = transactionUpdates();
     expect(update!.set).toEqual({ categoryId: "cat-food", categoryOverridden: false });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
@@ -111,7 +112,7 @@ describe("transactions.resetCategory", () => {
 
   it("leaves the transaction uncategorized when the user has no Default Category for it", async () => {
     mockDb.onSelect(transaction, [{ name: "BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
-    // No rules, no seeded categories: nothing queued.
+    // No rules, no mapping: nothing queued.
 
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 
@@ -124,7 +125,7 @@ describe("transactions.resetCategory", () => {
     mockDb.onSelect(categoryRule, [
       { id: "r1", pattern: "blue bottle", categoryId: "cat-coffee", createdAt: new Date() },
     ]);
-    mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+    mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" }]);
 
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 

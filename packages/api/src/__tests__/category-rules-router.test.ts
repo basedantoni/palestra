@@ -22,6 +22,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 }));
 
 import {
+  bankCategoryMapping,
   category,
   categoryRule,
   financialAccount,
@@ -143,9 +144,12 @@ const txn = (id: string, name: string, categoryId: string | null) => ({
   plaidCategoryPrimary: "FOOD_AND_DRINK",
   categoryId,
 });
-/** The selects plannedChanges runs after the rules: categories, then non-manual transactions. */
+/** The caller's Bank Category mapping: FOOD_AND_DRINK → cat-food. */
+const mappedFood = () => mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" }]);
+
+/** The selects plannedChanges runs after the rules: the mapping, then non-manual transactions. */
 function applyContext(rows: unknown[]) {
-  mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+  mappedFood();
   mockDb.onSelect(transaction, rows);
 }
 
@@ -363,7 +367,8 @@ describe("categoryRules.delete", () => {
   });
 });
 
-function syncWith(names: string[], rules: unknown[]) {
+/** One Plaid sync of `names` (all FOOD_AND_DRINK); `seeded` users already have a mapping. */
+function syncWith(names: string[], rules: unknown[], seeded = true) {
   mockDb.onSelect(plaidItem, [
     { id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: null, plaidEnv: env.PLAID_ENV },
   ]);
@@ -386,7 +391,7 @@ function syncWith(names: string[], rules: unknown[]) {
     },
   });
   mockDb.onSelect(financialAccount, [{ id: "fa-chk", plaidAccountId: "p_chk" }]);
-  mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+  if (seeded) mappedFood();
   rulesAre(rules);
 }
 
@@ -414,5 +419,33 @@ describe("syncPlaidItem with Category Rules", () => {
     const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as { set: Record<string, unknown> };
     expect(onConflict.set).not.toHaveProperty("categoryId");
+  });
+});
+
+describe("syncPlaidItem seeding (KOI-335)", () => {
+  it("seeds a new user's categories and Bank Category mapping, then resolves through it", async () => {
+    syncWith(["CHIPOTLE 42"], [], false);
+    // After the seed insert, the name lookup finds the seeded categories.
+    mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+
+    await syncPlaidItem(ITEM_ID);
+
+    expect((mockDb.inserted(category) as Array<{ name: string }>).map((c) => c.name)).toContain("Food & Drink");
+    expect(mockDb.inserted(bankCategoryMapping)).toContainEqual({
+      userId: USER_ID,
+      pfcPrimary: "FOOD_AND_DRINK",
+      categoryId: "cat-food",
+    });
+    expect(insertedCategoryIds()).toEqual(["cat-food"]);
+  });
+
+  it("never re-creates seeded categories for a user who is already seeded", async () => {
+    syncWith(["CHIPOTLE 42"], []);
+
+    await syncPlaidItem(ITEM_ID);
+
+    expect(mockDb.inserted(category)).toEqual([]);
+    expect(mockDb.inserted(bankCategoryMapping)).toEqual([]);
+    expect(insertedCategoryIds()).toEqual(["cat-food"]);
   });
 });
