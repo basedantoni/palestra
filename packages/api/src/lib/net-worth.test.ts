@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  accountBalanceHistory,
   balanceWithPending,
   carryForwardSeries,
   netWorthHistory,
@@ -168,13 +169,19 @@ describe("netWorthHistory: missing before first snapshot", () => {
     ]);
   });
 
-  it("leaves change null when the window starts partial, so linking doesn't read as a gain", () => {
-    const r = netWorthHistory(
-      [checking, brokerage],
-      [snap("chk", "2026-06-01", 2000), snap("inv", "2026-06-20", 50000), snap("chk", "2026-07-05", 2500)],
-      all("2026-07-05"),
-    );
+  const linkedLater = [snap("chk", "2026-06-01", 2000), snap("inv", "2026-06-20", 50000), snap("chk", "2026-07-05", 2500)];
+
+  it("measures change from the first non-partial point, so linking doesn't read as a gain", () => {
+    const r = netWorthHistory([checking, brokerage], linkedLater, all("2026-07-05"));
+    expect(r.points[0]!.partial).toBe(true);
     expect(r.current).toBe(52500);
+    // From 52000 on 06-20, when the brokerage was linked.
+    expect(r.change).toBe(500);
+  });
+
+  it("leaves change null when every point in the window is partial", () => {
+    const r = netWorthHistory([checking, brokerage], linkedLater, { from: "2026-06-05", to: "2026-06-10" });
+    expect(r.current).toBe(2000);
     expect(r.change).toBeNull();
   });
 
@@ -209,5 +216,26 @@ describe("balanceWithPending", () => {
 
   it("stays missing when Plaid reports no current balance", () => {
     expect(balanceWithPending("depository", null, 20)).toBeNull();
+  });
+});
+
+describe("accountBalanceHistory", () => {
+  it("plots a credit card's daily balance as the amount owed, with change from the window's first day", () => {
+    const r = accountBalanceHistory(
+      card,
+      [snap("cc", "2026-06-01", 300), snap("cc", "2026-06-03", 450), snap("chk", "2026-06-02", 9999)],
+      { from: "2026-06-02", to: "2026-06-04" },
+    );
+    expect(r.points.map((p) => [p.date, p.balance])).toEqual([
+      ["2026-06-02", 300],
+      ["2026-06-03", 450],
+      ["2026-06-04", 450],
+    ]);
+    expect(r.current).toBe(450);
+    expect(r.change).toBe(150);
+  });
+
+  it("returns no points and null current/change before the account's first snapshot", () => {
+    expect(accountBalanceHistory(checking, [], all("2026-06-04"))).toEqual({ points: [], current: null, change: null });
   });
 });

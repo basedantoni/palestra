@@ -67,8 +67,8 @@ describe("accounts.balanceHistory", () => {
     const r = await makeCaller().accounts.balanceHistory({ accountId: "cc", timeframe: "1M" });
 
     // A card's balance is what it owes, positive, as Plaid reports it.
-    expect(r.points[0]).toEqual({ date: "2026-10-10", balance: 800 });
-    expect(r.points.at(-1)).toEqual({ date: "2026-10-17", balance: 650.5 });
+    expect(r.points[0]).toMatchObject({ date: "2026-10-10", balance: 800 });
+    expect(r.points.at(-1)).toMatchObject({ date: "2026-10-17", balance: 650.5 });
     expect(r.points).toHaveLength(8);
     expect(r.current).toBe(650.5);
     expect(r.change).toBe(-149.5);
