@@ -6,7 +6,8 @@
  *  - `applyTransactionSyncDelta` maps the Plaid response to mutations
  *  - `classifyFlow` sets income/expense/transfer
  *  - `resolveCategory` assigns a new transaction's category: the matching
- *    Category Rule, else the Default Category from the seeded categories
+ *    Category Rule, else the Default Category from the Bank Category mapping
+ *    (written on first read by `loadBankCategoryMapping`)
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
  * Accounts the app has no row for (opened after linking, or shared during a
@@ -25,7 +26,6 @@ import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import {
-  category,
   financialAccount,
   plaidItem,
   transaction,
@@ -45,28 +45,10 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
-import { SEED_CATEGORIES } from "./category-seed";
 import { resolveCategory } from "./category-rules";
-import { loadCategoryByName, loadMatchableRules } from "./category-rules-db";
+import { loadBankCategoryMapping, loadMatchableRules } from "./category-rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
-
-/** Ensure the user's seeded categories exist; return a name → id map. */
-async function ensureSeedCategories(userId: string): Promise<Map<string, string>> {
-  await db
-    .insert(category)
-    .values(
-      SEED_CATEGORIES.map((name) => ({
-        id: randomUUID(),
-        userId,
-        name,
-        isSystem: true,
-      })),
-    )
-    .onConflictDoNothing();
-
-  return loadCategoryByName(db, userId);
-}
 
 /** Drain the full Plaid sync pagination for one item. */
 async function fetchSyncDelta(
@@ -146,7 +128,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     console.error(`[plaid] balance capture failed for plaid_item ${plaidItemId}:`, err);
   }
 
-  const categoryByName = await ensureSeedCategories(userId);
+  const mapping = await loadBankCategoryMapping(db, userId);
   const rules = await loadMatchableRules(db, userId);
 
   // Transaction upserts — fold in flow classification + category resolution.
@@ -155,7 +137,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     const accountId = accountIdByPlaid.get(up.plaidAccountId);
     if (!accountId) continue;
     const flow = classifyFlow(up.plaidCategoryPrimary);
-    const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, categoryByName);
+    const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping);
     await db
       .insert(transaction)
       .values({

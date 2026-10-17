@@ -2,10 +2,12 @@
  * Pure Net Worth history (KOI-293), per GLOSSARY.md (Net Worth, Balance
  * Snapshot) and ADR 0003.
  */
-import { addDays, addWeeks } from "date-fns";
+import { addDays, subMonths } from "date-fns";
+
+import { isLiability } from "@life-tracker/shared";
 
 import { cents } from "./cash-flow";
-import { isoWeekKey, toDateString } from "./date-utils";
+import { toDateString, todayUtc } from "./date-utils";
 
 export type AccountType = "depository" | "credit" | "investment" | "loan";
 
@@ -23,8 +25,8 @@ export interface NetWorthSnapshot {
 }
 
 export interface NetWorthPoint {
-  /** Monday of the ISO week, "yyyy-MM-dd". */
-  weekStart: string;
+  /** "yyyy-MM-dd" */
+  date: string;
   netWorth: number;
   assets: number;
   /** Total owed, positive. */
@@ -32,8 +34,6 @@ export interface NetWorthPoint {
   /** Some linked account's first snapshot comes after this point (missing, not $0). */
   partial: boolean;
 }
-
-const LIABILITY: ReadonlySet<AccountType> = new Set(["credit", "loan"]);
 
 /**
  * An account's balance with its pending transactions folded in. Plaid's
@@ -47,13 +47,30 @@ export function balanceWithPending(
   pending: number,
 ): number | null {
   if (current === null) return null;
-  return cents(LIABILITY.has(type) ? current + pending : current - pending);
+  return cents(isLiability(type) ? current + pending : current - pending);
 }
 
 const parseDay = (day: string) => {
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d, 12);
 };
+
+/** Balance chart chips, as Copilot draws them (research §3.3). */
+export const TIMEFRAMES = ["1M", "3M", "YTD", "1Y", "All"] as const;
+export type Timeframe = (typeof TIMEFRAMES)[number];
+
+const MONTHS_BACK = { "1M": 1, "3M": 3, "1Y": 12 } as const;
+
+/**
+ * First day ("yyyy-MM-dd") a chip's window plots, `today` included. 1M/3M/1Y
+ * go back N months (clamped to the shorter month's end, so Mar 31 → Feb 28)
+ * then forward a day; YTD is Jan 1; All is null: it starts at the first snapshot.
+ */
+export function timeframeStart(timeframe: Timeframe, today: string): string | null {
+  if (timeframe === "All") return null;
+  if (timeframe === "YTD") return `${today.slice(0, 4)}-01-01`;
+  return toDateString(addDays(subMonths(parseDay(today), MONTHS_BACK[timeframe]), 1));
+}
 
 /** Each of `accountIds`' snapshots, oldest first; snapshots of other accounts are dropped. */
 function snapshotsByAccount(snapshots: NetWorthSnapshot[], accountIds: Iterable<string>) {
@@ -82,16 +99,32 @@ export function carryForwardSeries(snapshots: NetWorthSnapshot[]): Array<{ asOfD
   });
 }
 
+/** Inclusive day range; `from` null starts at the first snapshot (the All chip). */
+export interface DayWindow {
+  from: string | null;
+  to: string;
+}
+
+/** A chip's window, ending today: the UTC day, as the Balance Snapshot day key is (ADR 0003). */
+export function timeframeWindow(timeframe: Timeframe, today = todayUtc()): DayWindow {
+  return { from: timeframeStart(timeframe, today), to: today };
+}
+
+/**
+ * Daily Net Worth over `window`: one point per day, no downsampling. `change`
+ * is like-for-like: how the accounts already linked on the window's first day
+ * moved since then. An account linked mid-window is left out of it, so linking
+ * never reads as a gain.
+ */
 export function netWorthHistory(
   accounts: NetWorthAccount[],
   snapshots: NetWorthSnapshot[],
-): { points: NetWorthPoint[]; current: number | null; change30d: number | null } {
+  window: DayWindow,
+): { points: NetWorthPoint[]; current: number | null; change: number | null } {
   const history = snapshotsByAccount(snapshots, accounts.map((a) => a.id));
 
-  const days = [...history.values()].flat().map((s) => s.asOfDate).toSorted();
-  const first = days[0];
-  const last = days.at(-1);
-  if (!first || !last) return { points: [], current: null, change30d: null };
+  const first = [...history.values()].flat().map((s) => s.asOfDate).toSorted()[0];
+  if (!first) return { points: [], current: null, change: null };
 
   // Accounts never snapshotted (e.g. Plaid null balance) neither count nor mark partial.
   const tracked = accounts.filter((a) => history.get(a.id)!.length > 0);
@@ -104,21 +137,48 @@ export function netWorthHistory(
     for (const a of tracked) {
       const snap = balanceAsOf(history.get(a.id)!, day);
       if (!snap) partial = true;
-      else if (LIABILITY.has(a.type)) liabilities += snap.balance;
+      else if (isLiability(a.type)) liabilities += snap.balance;
       else assets += snap.balance;
     }
     return { netWorth: cents(assets - liabilities), assets: cents(assets), liabilities: cents(liabilities), partial };
   };
 
-  // ponytail: findLast per account per week is O(weeks x snapshots); fine for years of daily data.
+  // ponytail: findLast per account per day is O(days x snapshots), ~4M steps for 1Y of 10 accounts;
+  // walk a cursor per account if All over many years gets slow.
   const points: NetWorthPoint[] = [];
-  for (let week = parseDay(isoWeekKey(parseDay(first))); toDateString(week) <= last; week = addWeeks(week, 1)) {
-    // Sunday ends the ISO week; carry-forward makes it equal to the week's last available day.
-    points.push({ weekStart: toDateString(week), ...at(toDateString(addDays(week, 6))) });
+  const start = window.from && window.from > first ? window.from : first;
+  for (let d = parseDay(start); toDateString(d) <= window.to; d = addDays(d, 1)) {
+    points.push({ date: toDateString(d), ...at(toDateString(d)) });
   }
 
-  // Before any snapshot (or before an account was linked) the baseline is partial: no change, not a fake gain.
-  const current = at(last).netWorth;
-  const monthAgo = at(toDateString(addDays(parseDay(last), -30)));
-  return { points, current, change30d: monthAgo.partial ? null : cents(current - monthAgo.netWorth) };
+  const last = points.at(-1)!;
+  const signed = (a: NetWorthAccount, day: string) => {
+    const balance = balanceAsOf(history.get(a.id)!, day)?.balance ?? 0;
+    return isLiability(a.type) ? -balance : balance;
+  };
+  const baseline = tracked.filter((a) => balanceAsOf(history.get(a.id)!, start));
+  const change = cents(baseline.reduce((sum, a) => sum + signed(a, last.date) - signed(a, start), 0));
+  return { points, current: last.netWorth, change };
+}
+
+/**
+ * One account's daily balance over `window`, as its Balance Snapshots report it
+ * (a credit/loan balance is the positive amount owed), with `change` by the
+ * same rule as Net Worth.
+ */
+export function accountBalanceHistory(
+  account: NetWorthAccount,
+  snapshots: NetWorthSnapshot[],
+  window: DayWindow,
+): { points: Array<{ date: string; balance: number; partial: boolean }>; current: number | null; change: number | null } {
+  const owed = isLiability(account.type);
+  const nw = netWorthHistory([account], snapshots, window);
+  const points = nw.points.map((p) => ({
+    date: p.date,
+    balance: owed ? p.liabilities : p.assets,
+    partial: p.partial,
+  }));
+  // Net Worth falls as the amount owed grows, so flip the sign back for a liability.
+  const change = nw.change === null ? null : owed ? cents(0 - nw.change) : nw.change;
+  return { points, current: points.at(-1)?.balance ?? null, change };
 }

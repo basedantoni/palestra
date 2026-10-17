@@ -30,6 +30,9 @@
   --chart-5: oklch(0.424 0.199 265.638);
   --chart-income: oklch(0.6 0.15 150);
   --chart-spend: oklch(0.6 0.21 27);
+  /* Balance lines: blue/orange, not green/red, which merge under deuteranopia (dataviz validator). */
+  --chart-assets: #2a78d6;
+  --chart-liabilities: #eb6834;
   /* Spend-by-category slots: green and red left out so they don't read as income/spend. */
   --chart-cat-1: #2a78d6;
   --chart-cat-2: #eb6834;
@@ -75,6 +78,8 @@
   --chart-5: oklch(0.424 0.199 265.638);
   --chart-income: oklch(0.72 0.16 150);
   --chart-spend: oklch(0.7 0.18 25);
+  --chart-assets: #3987e5;
+  --chart-liabilities: #d95926;
   --chart-cat-1: #3987e5;
   --chart-cat-2: #d95926;
   --chart-cat-3: #199e70;

@@ -1,6 +1,8 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
+import { accountsRouter } from "./accounts";
 import { analyticsRouter } from "./analytics";
 import { adminRouter } from "./admin";
+import { bankCategoriesRouter } from "./bank-categories";
 import { budgetsRouter } from "./budgets";
 import { categoriesRouter } from "./categories";
 import { categoryRulesRouter } from "./category-rules";
@@ -45,7 +47,9 @@ export const appRouter = router({
   whoopSleep: whoopSleepRouter,
   whoopRecovery: whoopRecoveryRouter,
   plaid: plaidRouter,
+  accounts: accountsRouter,
   categories: categoriesRouter,
+  bankCategories: bankCategoriesRouter,
   categoryRules: categoryRulesRouter,
   budgets: budgetsRouter,
   transactions: transactionsRouter,

@@ -12,3 +12,6 @@ export function signedUsd(n: number): string {
 
 /** Whether `n` displays as a negative dollar amount (for red text). */
 export const isNegativeUsd = (n: number) => shown(n) < 0;
+
+/** Liabilities (credit cards, loans): their balance is owed, and counts against Net Worth. */
+export const isLiability = (accountType: string) => accountType === "credit" || accountType === "loan";

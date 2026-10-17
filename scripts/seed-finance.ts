@@ -4,17 +4,18 @@
  * Creates the dev user (via Better-Auth, so the password hash is real), marks
  * onboarding done, and resets a "Fixture Bank" Plaid item with accounts and
  * transactions covering the awkward cases: repeated merchants, blank Manual
- * Category rows, pending rows, a transfer pair, and an unknown Plaid category,
+ * Category rows, pending rows, a transfer pair, and an unknown Bank Category,
  * plus a zero-account bank linked under the other PLAID_ENV (KOI-288).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
- * transactions) and the dev user's category rules, then re-inserts the same
- * rows with the same ids. Dates are relative to today, inside the current month.
+ * transactions), the dev user's category rules and Bank Category mapping, then
+ * re-inserts the same rows with the same ids. Dates are relative to today, inside the current month.
  *
  * Run: pnpm db:seed:finance
  */
 import { db } from "@life-tracker/db";
 import {
+  bankCategoryMapping,
   category,
   categoryRule,
   financialAccount,
@@ -28,6 +29,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
 import { SEED_CATEGORIES } from "../packages/api/src/lib/category-seed";
+import { writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
 import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
@@ -71,7 +73,7 @@ const FIXTURES: Fixture[] = [
   // Transfer pair: checking → savings, linked by transferPairId.
   { key: "transfer-out", account: "checking", amount: 500, daysAgo: 5, name: "ONLINE TRANSFER TO SAV ...4821", pfc: "TRANSFER_OUT", transferPair: "transfer-1" },
   { key: "transfer-in", account: "savings", amount: -500, daysAgo: 4, name: "ONLINE TRANSFER FROM CHK ...1094", pfc: "TRANSFER_IN", transferPair: "transfer-1" },
-  // Unknown Plaid category (not one of the 16 PFC primaries) → Uncategorized (no category), expense.
+  // Unknown Bank Category (not one of the 16) → Uncategorized (no category), expense.
   { key: "unknown-pfc", account: "checking", amount: 12.0, daysAgo: 2, name: "SQ *MYSTERY VENDOR", pfc: "SOME_NEW_PFC_PRIMARY" },
   { key: "null-pfc", account: "checking", amount: 3.0, daysAgo: 3, name: "POS DEBIT 8812", pfc: null },
   // Ordinary rows so the feed and budgets look normal.
@@ -125,12 +127,12 @@ async function seedFinance() {
       .insert(category)
       .values(SEED_CATEGORIES.map((name) => ({ id: id(`category:${name}`), userId, name, isSystem: true })))
       .onConflictDoNothing();
-    const categories = await tx.query.category.findMany({ where: eq(category.userId, userId) });
-    const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
 
     // Reset: cascades to the fixture accounts and their transactions.
     await tx.delete(plaidItem).where(inArray(plaidItem.itemId, [FIXTURE_ITEM_ID, STUCK_ITEM_ID]));
     await tx.delete(categoryRule).where(eq(categoryRule.userId, userId));
+    await tx.delete(bankCategoryMapping).where(eq(bankCategoryMapping.userId, userId));
+    const mapping = await writeSeedMapping(tx, userId);
 
     const plaidItemId = id("item");
     await tx.insert(plaidItem).values({
@@ -180,7 +182,7 @@ async function seedFinance() {
         pending: f.pending ?? false,
         flow: classifyFlow(f.pfc),
         plaidCategoryPrimary: f.pfc,
-        categoryId: f.blankManual ? null : defaultCategoryId(f.pfc, categoryIdByName),
+        categoryId: f.blankManual ? null : defaultCategoryId(f.pfc, mapping),
         categoryOverridden: f.blankManual ?? false,
         transferPairId: f.transferPair ? id(`pair:${f.transferPair}`) : null,
         isoCurrencyCode: "USD",

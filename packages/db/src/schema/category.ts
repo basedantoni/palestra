@@ -1,12 +1,12 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
 /**
- * User-owned spending category. Seeded from Plaid PFC on first connect
- * (`category-seed.ts`), and freely extendable by the user. `isSystem` marks the
- * seeded rows so the UI can distinguish them from custom ones.
+ * User-owned spending category. Seeded from the Bank Categories on first connect
+ * (`category-seed.ts`), and freely extendable, renamable and deletable by the
+ * user. `isSystem` only records which rows were seeded.
  */
 export const category = pgTable(
   "category",
@@ -35,6 +35,31 @@ export const categoryRelations = relations(category, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+/**
+ * Bank Category mapping (KOI-335): which category a Bank Category gives a
+ * transaction as its Default Category. Held by id, so renaming a category keeps
+ * it; deleting the category leaves the Bank Category unmapped (null), and its
+ * transactions are Uncategorized from their next resolve. A user with no rows
+ * gets them on first read (`loadBankCategoryMapping`), mapped by name to their
+ * categories (`category-seed.ts`).
+ */
+export const bankCategoryMapping = pgTable(
+  "bank_category_mapping",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    pfcPrimary: text("pfc_primary").notNull(),
+    categoryId: uuid("category_id").references(() => category.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.pfcPrimary] })],
+);
 
 /**
  * Category Rule (KOI-298): transactions whose bank description contains

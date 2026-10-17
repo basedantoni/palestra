@@ -5,6 +5,7 @@ import {
   defaultCategoryId,
   isManualCategory,
   matchRule,
+  bankCategoryRecategorizations,
   ruleRecategorizations,
   suggestPattern,
   resolveCategory,
@@ -12,51 +13,61 @@ import {
   withCandidateRule,
 } from "./category-rules";
 
-// "Uncategorized" here stands for a leftover or user-made category of that name
-// (cat-user-uncat): it must never become anyone's Default Category (KOI-301).
-const categoryByName = new Map([
-  ["Food & Drink", "cat-food"],
-  ["Shopping", "cat-shop"],
-  ["Uncategorized", "cat-user-uncat"],
+// The user's Bank Category mapping: Bank Category → category id, or null when
+// the user left it unmapped (Uncategorized).
+const mapping = new Map<string, string | null>([
+  ["FOOD_AND_DRINK", "cat-food"],
+  ["GENERAL_MERCHANDISE", "cat-shop"],
+  ["BANK_FEES", null],
 ]);
 
 describe("defaultCategoryId", () => {
-  it("maps the Plaid primary category to the user's seeded category", () => {
-    expect(defaultCategoryId("FOOD_AND_DRINK", categoryByName)).toBe("cat-food");
+  it("is the category the user mapped the Bank Category to", () => {
+    expect(defaultCategoryId("FOOD_AND_DRINK", mapping)).toBe("cat-food");
+    expect(defaultCategoryId("GENERAL_MERCHANDISE", mapping)).toBe("cat-shop");
+  });
+
+  it("follows the mapping by id, whatever the category is called", () => {
+    expect(defaultCategoryId("FOOD_AND_DRINK", new Map([["FOOD_AND_DRINK", "cat-renamed"]]))).toBe("cat-renamed");
+  });
+
+  it("is null (Uncategorized) for an unmapped Bank Category", () => {
+    expect(defaultCategoryId("BANK_FEES", mapping)).toBeNull();
   });
 
   it("is null (Uncategorized) for an unknown or missing primary", () => {
-    expect(defaultCategoryId("SOMETHING_NEW", categoryByName)).toBeNull();
-    expect(defaultCategoryId(null, categoryByName)).toBeNull();
-    expect(defaultCategoryId(undefined, categoryByName)).toBeNull();
+    expect(defaultCategoryId("SOMETHING_NEW", mapping)).toBeNull();
+    expect(defaultCategoryId(null, mapping)).toBeNull();
+    expect(defaultCategoryId(undefined, mapping)).toBeNull();
   });
 
-  it("is null when the user has no matching category", () => {
+  it("is null when the user has no mapping", () => {
     expect(defaultCategoryId("FOOD_AND_DRINK", new Map())).toBeNull();
   });
 });
 
 describe("isManualCategory", () => {
   it("is not manual when the category equals the Default Category", () => {
-    expect(isManualCategory("cat-food", "FOOD_AND_DRINK", categoryByName)).toBe(false);
+    expect(isManualCategory("cat-food", "FOOD_AND_DRINK", mapping)).toBe(false);
   });
 
   it("is manual when the category differs from the Default Category", () => {
-    expect(isManualCategory("cat-shop", "FOOD_AND_DRINK", categoryByName)).toBe(true);
+    expect(isManualCategory("cat-shop", "FOOD_AND_DRINK", mapping)).toBe(true);
   });
 
   it("is manual when the user cleared a category that had a default", () => {
-    expect(isManualCategory(null, "FOOD_AND_DRINK", categoryByName)).toBe(true);
+    expect(isManualCategory(null, "FOOD_AND_DRINK", mapping)).toBe(true);
   });
 
   it("is not manual when there is neither a category nor a default", () => {
     expect(isManualCategory(null, "FOOD_AND_DRINK", new Map())).toBe(false);
   });
 
-  it("treats an unknown primary's default as no category", () => {
-    expect(isManualCategory(null, "SOMETHING_NEW", categoryByName)).toBe(false);
-    expect(isManualCategory("cat-user-uncat", "SOMETHING_NEW", categoryByName)).toBe(true);
-    expect(isManualCategory("cat-food", "SOMETHING_NEW", categoryByName)).toBe(true);
+  it("treats an unknown or unmapped primary's default as no category", () => {
+    expect(isManualCategory(null, "SOMETHING_NEW", mapping)).toBe(false);
+    expect(isManualCategory("cat-food", "SOMETHING_NEW", mapping)).toBe(true);
+    expect(isManualCategory(null, "BANK_FEES", mapping)).toBe(false);
+    expect(isManualCategory("cat-shop", "BANK_FEES", mapping)).toBe(true);
   });
 });
 
@@ -102,13 +113,13 @@ describe("matchRule", () => {
 describe("resolveCategory", () => {
   it("uses the matching rule's category", () => {
     expect(
-      resolveCategory("STARBUCKS", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], categoryByName),
+      resolveCategory("STARBUCKS", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping),
     ).toBe("cat-coffee");
   });
 
   it("falls back to the Default Category when no rule matches", () => {
     expect(
-      resolveCategory("CHIPOTLE", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], categoryByName),
+      resolveCategory("CHIPOTLE", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping),
     ).toBe("cat-food");
   });
 });
@@ -173,14 +184,14 @@ describe("ruleRecategorizations", () => {
   it("fills a blank Manual Category when the rule matches it, clearing the manual flag", () => {
     const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-food" }]);
   });
 
   it("never touches a Manual Category with a real category", () => {
     const rows = [{ ...row("t1", "KFC", "cat-shop"), categoryOverridden: true }];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, categoryByName),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, mapping),
     ).toEqual([]);
   });
 
@@ -192,7 +203,7 @@ describe("ruleRecategorizations", () => {
         rows,
         [rule("r1", "kfc", "cat-food")],
         { id: "r1", pattern: "kfc express", categoryId: "cat-food" },
-        categoryByName,
+        mapping,
       ),
     ).toEqual([]);
   });
@@ -203,14 +214,14 @@ describe("ruleRecategorizations", () => {
       row("t2", "STARBUCKS #2", "cat-coffee"), // already right
     ];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, categoryByName),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
   });
 
   it("leaves rows the rule doesn't match alone, even if a deleted rule categorized them", () => {
     const rows = [row("t1", "STARBUCKS #1", "cat-food"), row("t2", "UBER TRIP", "cat-travel")];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, categoryByName),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
   });
 
@@ -218,7 +229,7 @@ describe("ruleRecategorizations", () => {
     const rules = [rule("r1", "starbucks", "cat-coffee")];
     const rows = [row("t1", "STARBUCKS #1", "cat-coffee"), row("t2", "STARBUCKS RESERVE", "cat-coffee")];
     expect(
-      ruleRecategorizations(rows, rules, { id: "r1", pattern: "starbucks reserve", categoryId: "cat-shop" }, categoryByName),
+      ruleRecategorizations(rows, rules, { id: "r1", pattern: "starbucks reserve", categoryId: "cat-shop" }, mapping),
     ).toEqual([
       { id: "t1", categoryId: "cat-food" },
       { id: "t2", categoryId: "cat-shop" },
@@ -229,8 +240,39 @@ describe("ruleRecategorizations", () => {
     const rules = [rule("r1", "amazon prime", "cat-subs")];
     const rows = [row("t1", "AMAZON PRIME*1", "cat-subs"), row("t2", "AMAZON MKTP", "cat-food")];
     expect(
-      ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, categoryByName),
+      ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, mapping),
     ).toEqual([{ id: "t2", categoryId: "cat-shop" }]);
+  });
+});
+
+describe("bankCategoryRecategorizations", () => {
+  const remapped = new Map<string, string | null>([["FOOD_AND_DRINK", "cat-dining"]]);
+
+  it("moves automatic rows to the newly mapped category", () => {
+    const rows = [row("t1", "CHIPOTLE", "cat-food"), row("t2", "SWEETGREEN", "cat-dining")];
+    expect(bankCategoryRecategorizations(rows, [], remapped)).toEqual([{ id: "t1", categoryId: "cat-dining" }]);
+  });
+
+  it("makes automatic rows Uncategorized when the Bank Category is unmapped", () => {
+    const rows = [row("t1", "CHIPOTLE", "cat-food")];
+    expect(bankCategoryRecategorizations(rows, [], new Map([["FOOD_AND_DRINK", null]]))).toEqual([
+      { id: "t1", categoryId: null },
+    ]);
+  });
+
+  it("lets a matching rule win over the mapping", () => {
+    const rows = [row("t1", "STARBUCKS #1", "cat-coffee"), row("t2", "CHIPOTLE", "cat-food")];
+    expect(bankCategoryRecategorizations(rows, [rule("r1", "starbucks", "cat-coffee")], remapped)).toEqual([
+      { id: "t2", categoryId: "cat-dining" },
+    ]);
+  });
+
+  it("never touches a Manual Category, blank or not", () => {
+    const rows = [
+      { ...row("t1", "CHIPOTLE", "cat-shop"), categoryOverridden: true },
+      { ...row("t2", "CHIPOTLE", null), categoryOverridden: true },
+    ];
+    expect(bankCategoryRecategorizations(rows, [], remapped)).toEqual([]);
   });
 });
 
