@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { AccountDetailSheet } from "./account-detail-sheet";
 import { RECONNECT_MESSAGE, isReconnecting, useReconnectBank } from "./use-reconnect-bank";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -83,6 +84,7 @@ export function AccountsList() {
   const invalidateFinance = useInvalidateFinance();
   const [pendingRemoval, setPendingRemoval] = useState<Account | null>(null);
   const [pendingBank, setPendingBank] = useState<BankItem | null>(null);
+  const [openAccount, setOpenAccount] = useState<Account | null>(null);
 
   const removeAccount = useMutation(
     trpc.plaid.removeAccount.mutationOptions({
@@ -136,6 +138,7 @@ export function AccountsList() {
           key={item.id}
           item={item}
           accounts={groupAccounts}
+          onOpen={setOpenAccount}
           onRemove={(a) => {
             removeAccount.reset();
             setPendingRemoval(a);
@@ -157,9 +160,11 @@ export function AccountsList() {
               via SnapTrade
             </Badge>
           </header>
-          <AccountRows accounts={groupAccounts} />
+          <AccountRows accounts={groupAccounts} onOpen={setOpenAccount} />
         </section>
       ))}
+
+      <AccountDetailSheet account={openAccount} onClose={() => setOpenAccount(null)} />
 
       <Dialog
         open={pendingRemoval !== null}
@@ -289,11 +294,13 @@ function groupSnaptradeByInstitution(accounts: Account[]): Map<string, Account[]
 function BankGroup({
   item,
   accounts,
+  onOpen,
   onRemove,
   onRemoveBank,
 }: {
   item: BankItem;
   accounts: Account[];
+  onOpen: (account: Account) => void;
   onRemove: (account: Account) => void;
   onRemoveBank: () => void;
 }) {
@@ -356,7 +363,7 @@ function BankGroup({
         </p>
       )}
       {message && <p className="border-t border-border px-4 py-1.5 text-xs">{message}</p>}
-      <AccountRows accounts={accounts} stale={broken} onRemove={onRemove} />
+      <AccountRows accounts={accounts} stale={broken} onOpen={onOpen} onRemove={onRemove} />
     </section>
   );
 }
@@ -372,27 +379,36 @@ function PendingNote({ account }: { account: Account }) {
   );
 }
 
-/** Account rows. No `onRemove` = no remove button (SnapTrade accounts are removed in SnapTrade). */
+/**
+ * Account rows; the name opens the balance history sheet. No `onRemove` = no
+ * remove button (SnapTrade accounts are removed in SnapTrade).
+ */
 function AccountRows({
   accounts,
   stale = false,
+  onOpen,
   onRemove,
 }: {
   accounts: Account[];
   stale?: boolean;
+  onOpen: (account: Account) => void;
   onRemove?: (account: Account) => void;
 }) {
   return (
     <ul className="divide-y divide-border">
       {accounts.map((a) => (
         <li key={a.id} className="flex items-center justify-between px-4 py-3">
-          <div className={`flex flex-col ${stale ? "opacity-60" : ""}`}>
+          <button
+            type="button"
+            onClick={() => onOpen(a)}
+            className={`flex min-w-0 flex-col text-left hover:underline ${stale ? "opacity-60" : ""}`}
+          >
             <span className="font-medium">{a.name}</span>
             <span className="text-xs text-muted-foreground">
               {a.type}
               {a.mask ? ` ····${a.mask}` : ""}
             </span>
-          </div>
+          </button>
           <div className="flex items-center gap-2">
             <span className={`flex flex-col items-end tabular-nums ${stale ? "opacity-60" : ""}`}>
               <span>
