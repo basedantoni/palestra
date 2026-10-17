@@ -26,6 +26,7 @@ import { Route as WorkoutsNewRouteImport } from './routes/workouts/new'
 import { Route as WorkoutsWorkoutIdRouteImport } from './routes/workouts/$workoutId'
 import { Route as TemplatesTemplateIdRouteImport } from './routes/templates/$templateId'
 import { Route as TcgWantsRouteImport } from './routes/tcg/wants'
+import { Route as TcgMarketPrototypeRouteImport } from './routes/tcg/market-prototype'
 import { Route as TcgCopiesRouteImport } from './routes/tcg/copies'
 import { Route as TcgBinderRouteImport } from './routes/tcg/binder'
 import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
@@ -121,6 +122,11 @@ const TcgWantsRoute = TcgWantsRouteImport.update({
   path: '/tcg/wants',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TcgMarketPrototypeRoute = TcgMarketPrototypeRouteImport.update({
+  id: '/tcg/market-prototype',
+  path: '/tcg/market-prototype',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TcgCopiesRoute = TcgCopiesRouteImport.update({
   id: '/tcg/copies',
   path: '/tcg/copies',
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/import/whoop': typeof ImportWhoopRoute
   '/tcg/binder': typeof TcgBinderRoute
   '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/market-prototype': typeof TcgMarketPrototypeRoute
   '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/import/whoop': typeof ImportWhoopRoute
   '/tcg/binder': typeof TcgBinderRoute
   '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/market-prototype': typeof TcgMarketPrototypeRoute
   '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -239,6 +247,7 @@ export interface FileRoutesById {
   '/import/whoop': typeof ImportWhoopRoute
   '/tcg/binder': typeof TcgBinderRoute
   '/tcg/copies': typeof TcgCopiesRoute
+  '/tcg/market-prototype': typeof TcgMarketPrototypeRoute
   '/tcg/wants': typeof TcgWantsRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
   '/workouts/$workoutId': typeof WorkoutsWorkoutIdRoute
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | '/import/whoop'
     | '/tcg/binder'
     | '/tcg/copies'
+    | '/tcg/market-prototype'
     | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -296,6 +306,7 @@ export interface FileRouteTypes {
     | '/import/whoop'
     | '/tcg/binder'
     | '/tcg/copies'
+    | '/tcg/market-prototype'
     | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -324,6 +335,7 @@ export interface FileRouteTypes {
     | '/import/whoop'
     | '/tcg/binder'
     | '/tcg/copies'
+    | '/tcg/market-prototype'
     | '/tcg/wants'
     | '/templates/$templateId'
     | '/workouts/$workoutId'
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   ImportWhoopRoute: typeof ImportWhoopRoute
   TcgBinderRoute: typeof TcgBinderRoute
   TcgCopiesRoute: typeof TcgCopiesRoute
+  TcgMarketPrototypeRoute: typeof TcgMarketPrototypeRoute
   TcgWantsRoute: typeof TcgWantsRoute
   TemplatesTemplateIdRoute: typeof TemplatesTemplateIdRoute
   WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
@@ -485,6 +498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TcgWantsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tcg/market-prototype': {
+      id: '/tcg/market-prototype'
+      path: '/tcg/market-prototype'
+      fullPath: '/tcg/market-prototype'
+      preLoaderRoute: typeof TcgMarketPrototypeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tcg/copies': {
       id: '/tcg/copies'
       path: '/tcg/copies'
@@ -579,6 +599,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImportWhoopRoute: ImportWhoopRoute,
   TcgBinderRoute: TcgBinderRoute,
   TcgCopiesRoute: TcgCopiesRoute,
+  TcgMarketPrototypeRoute: TcgMarketPrototypeRoute,
   TcgWantsRoute: TcgWantsRoute,
   TemplatesTemplateIdRoute: TemplatesTemplateIdRoute,
   WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,

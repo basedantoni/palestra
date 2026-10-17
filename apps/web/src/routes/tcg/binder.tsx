@@ -10,6 +10,7 @@ import { trpc } from "@/utils/trpc";
 
 import { useArtworkCards } from "./-components/artwork-card";
 import { artworkImage } from "./-components/card-image";
+import { MarketBinderAside, MarketBinderHeader, MarketBinderSheetTotal, MarketChrome, PocketSticker } from "./-components/market-watch-mounts";
 
 // The sheet lives in the URL so a reload or a shared link opens the same page.
 const binderSearchSchema = z.object({
@@ -63,7 +64,8 @@ function BinderPage() {
     <div className="mx-auto max-w-6xl space-y-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Binder</h1>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
+          <MarketBinderHeader />
           <Link to="/tcg" className="text-sm underline underline-offset-4">
             Cards
           </Link>
@@ -100,11 +102,17 @@ function BinderPage() {
                     aria-pressed={selected?.variantId === a.variantId}
                     title={name}
                     onClick={() => setSelectedId(a.variantId)}
-                    className={`aspect-[63/88] overflow-hidden rounded-sm bg-background transition ${
+                    className={`relative aspect-[63/88] overflow-hidden rounded-sm bg-background transition ${
                       selected?.variantId === a.variantId ? "ring-2 ring-primary" : "hover:scale-[1.02]"
                     }`}
                   >
                     <img src={artworkImage(a.printings)} alt="" className="size-full object-cover" />
+                    <PocketSticker
+                      variantId={a.variantId}
+                      langs={a.printings.map((p) => p.language)}
+                      name={a.nameEn ?? a.nameJa ?? a.variantId}
+                      imageUrl={a.printings[0]?.imageUrl}
+                    />
                   </button>
                 );
               })}
@@ -135,11 +143,21 @@ function BinderPage() {
             <p className="text-center text-xs text-muted-foreground">
               Page {sheet.page} of {sheet.pages} · {filled[0]!.variantId} → {filled.at(-1)!.variantId} · [ / ] to flip
             </p>
+            <MarketBinderSheetTotal
+              variantIds={filled.map((a) => ({ variantId: a.variantId, langs: a.printings.map((p) => p.language) }))}
+              totalOwned={owned?.length ?? 0}
+            />
           </div>
-          <aside className="md:sticky md:top-4 md:self-start">{selected && <ul>{renderCard(selected)}</ul>}</aside>
+          <aside className="md:sticky md:top-4 md:self-start">{selected && (
+              <>
+                <ul>{renderCard(selected)}</ul>
+                <MarketBinderAside artwork={selected} />
+              </>
+            )}</aside>
         </div>
       )}
       {dialogs}
+      <MarketChrome />
     </div>
   );
 }

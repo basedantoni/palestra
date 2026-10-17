@@ -16,6 +16,7 @@ import { CopyDialog } from "./-components/copy-dialog";
 import { invalidateBrowse } from "./-components/invalidate-browse";
 import { OfferDialog } from "./-components/offer-dialog";
 import { WantDialog } from "./-components/want-dialog";
+import { MarketChrome, MarketNavLink, MarketOnOffer, MarketOnWant, WantImageButton } from "./-components/market-watch-mounts";
 
 type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 type Offer = Want["offers"][number];
@@ -90,6 +91,7 @@ function WantsPage() {
     <div className="mx-auto max-w-3xl space-y-4 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Wants</h1>
+        <MarketNavLink />
         <Link to="/tcg" className="text-sm underline underline-offset-4">
           Browse cards
         </Link>
@@ -121,12 +123,14 @@ function WantsPage() {
             <li key={w.id} className="space-y-2 p-2">
               <div className="flex items-center gap-3">
                 {w.imageUrl && (
-                  <img
-                    src={cardImage(w.imageUrl)}
-                    alt={w.variantId}
-                    loading="lazy"
-                    className="aspect-[63/88] w-12 rounded-sm bg-muted object-cover"
-                  />
+                  <WantImageButton want={w}>
+                    <img
+                      src={cardImage(w.imageUrl)}
+                      alt={w.variantId}
+                      loading="lazy"
+                      className="aspect-[63/88] w-12 rounded-sm bg-muted object-cover"
+                    />
+                  </WantImageButton>
                 )}
                 <div className="min-w-0 flex-1 text-sm">
                   <div className="font-medium">{w.nameEn ?? w.nameJa}</div>
@@ -150,6 +154,7 @@ function WantsPage() {
                     {status === "open" && w.buyable && <Badge>Buyable</Badge>}
                     {w.belowMinimum && <Badge variant="destructive">Below {w.minCondition}</Badge>}
                   </div>
+                  <MarketOnWant want={w} />
                 </div>
                 {/* Offers change only while the Want is open. */}
                 {status === "open" && (
@@ -209,6 +214,7 @@ function WantsPage() {
                         <span className="text-muted-foreground">· {o.setName}</span>
                       </span>
                       <span className={o.price <= w.maxPrice ? "font-medium" : undefined}>{price(o.price)}</span>
+                      <MarketOnOffer want={w} offer={o} />
                       {fund && (
                         <span className={o.price <= fund.balance ? "text-muted-foreground" : "text-destructive"}>
                           {o.price <= fund.balance ? "within fund" : "over fund"}
@@ -288,6 +294,7 @@ function WantsPage() {
           onClose={() => setOffering(null)}
         />
       )}
+      <MarketChrome />
     </div>
   );
 }

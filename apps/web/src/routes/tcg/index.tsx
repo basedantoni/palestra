@@ -11,6 +11,8 @@ import { trpc } from "@/utils/trpc";
 import { ThemesDialog } from "./-components/art-taste";
 import { useArtworkCards } from "./-components/artwork-card";
 import { ArtworkSections } from "./-components/artwork-sections";
+import { MarketChrome, MarketNavLink, MarketPulse, MoversGrid } from "./-components/market-watch-mounts";
+import { useMarketVariant } from "./-components/market-watch-prototype";
 
 const VARIANT_KINDS = ["base", "parallel", "manga", "reprint"] as const;
 const TYPING_DEBOUNCE_MS = 300;
@@ -25,7 +27,7 @@ const tcgSearchSchema = z.object({
   conflict: z.boolean().optional().catch(undefined),
   minRating: z.number().int().min(0).max(5).optional().catch(undefined),
   theme: z.string().uuid().optional().catch(undefined),
-  sort: z.enum(["rating"]).optional().catch(undefined),
+  sort: z.enum(["rating", "movers"]).optional().catch(undefined),
   /** Only Artworks the user owns a Copy of: the collection view. */
   owned: z.boolean().optional().catch(undefined),
   /** Only Artworks printed in this language; with `owned`, owned in this language. */
@@ -58,8 +60,9 @@ function TcgPage() {
     language: search.lang,
     minRating: search.minRating,
     themeId: search.theme,
-    sort: search.sort,
+    sort: search.sort === "rating" ? ("rating" as const) : undefined,
   };
+  const variant = useMarketVariant();
 
   const update = (next: Partial<z.infer<typeof tcgSearchSchema>>) =>
     navigate({ search: (prev) => ({ ...prev, ...next }), replace: true });
@@ -70,6 +73,7 @@ function TcgPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cards</h1>
         <div className="flex gap-4">
+          <MarketNavLink />
           <Link to="/tcg/binder" className="text-sm underline underline-offset-4">
             Binder
           </Link>
@@ -81,6 +85,7 @@ function TcgPage() {
           </Link>
         </div>
       </div>
+      <MarketPulse />
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput label="Character" value={search.character} onChange={(character) => update({ character })} />
         <SearchInput label="Artist" value={search.artist} onChange={(artist) => update({ artist })} />
@@ -147,11 +152,12 @@ function TcgPage() {
         <select
           aria-label="Sort"
           value={search.sort ?? ""}
-          onChange={(e) => update({ sort: e.target.value === "rating" ? "rating" : undefined })}
+          onChange={(e) => update({ sort: (e.target.value || undefined) as "rating" | "movers" | undefined })}
           className="rounded-md border border-border bg-background px-2 py-1 text-xs"
         >
           <option value="">Sort: card number</option>
           <option value="rating">Sort: Art Rating</option>
+          {variant === "A" && <option value="movers">Sort: 7d move</option>}
         </select>
         <select
           aria-label="Language"
@@ -177,8 +183,13 @@ function TcgPage() {
         </label>
       </div>
 
-      <ArtworkSections filters={filters} renderCard={renderCard} />
+      {search.sort === "movers" && variant === "A" ? (
+        <MoversGrid renderCard={renderCard} />
+      ) : (
+        <ArtworkSections filters={filters} renderCard={renderCard} />
+      )}
       {dialogs}
+      <MarketChrome />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { CopyDialog } from "./-components/copy-dialog";
 import { invalidateBrowse } from "./-components/invalidate-browse";
+import { MarketChrome, MarketCopiesHeader, MarketOnCopy } from "./-components/market-watch-mounts";
 
 type CopyRow = RouterOutputs["tcg"]["copies"]["list"][number];
 
@@ -51,6 +52,7 @@ function CopiesPage() {
         </Link>
       </div>
 
+      <MarketCopiesHeader />
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !copies?.length ? (
@@ -69,6 +71,7 @@ function CopiesPage() {
               {c.belowMinimum && <Badge variant="destructive">Below Want minimum</Badge>}
               <span className="text-xs">{c.pricePaid == null ? "No price" : c.pricePaid.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span>
               <span className="text-xs text-muted-foreground">{c.acquiredOn}</span>
+              <MarketOnCopy copy={c} />
               <span className="ml-auto flex gap-1">
                 <Button size="xs" variant="outline" onClick={() => setEditing(c)}>
                   Edit
@@ -102,6 +105,7 @@ function CopiesPage() {
           }}
         />
       )}
+      <MarketChrome />
     </div>
   );
 }

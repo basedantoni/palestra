@@ -10,6 +10,7 @@ import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
 import { artworkImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
 import { invalidateBrowse } from "./invalidate-browse";
+import { MarketOnCard, MarketOnCardImage } from "./market-watch-mounts";
 import { WantDialog } from "./want-dialog";
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -82,12 +83,15 @@ function ArtworkCard({
   return (
     <li className="space-y-1">
       {image && (
-        <img
-          src={image}
-          alt={`${a.variantId} ${a.nameEn ?? a.nameJa ?? ""}`}
-          loading="lazy"
-          className="aspect-[63/88] w-full rounded-sm bg-muted object-cover"
-        />
+        <div className="relative">
+          <img
+            src={image}
+            alt={`${a.variantId} ${a.nameEn ?? a.nameJa ?? ""}`}
+            loading="lazy"
+            className="aspect-[63/88] w-full rounded-sm bg-muted object-cover"
+          />
+          <MarketOnCardImage artwork={a} />
+        </div>
       )}
       <div className="text-xs font-medium">{a.nameEn ?? a.nameJa}</div>
       <div className="flex items-center gap-1 text-xs">
@@ -109,6 +113,7 @@ function ArtworkCard({
           </Badge>
         )}
       </div>
+      <MarketOnCard artwork={a} />
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
         <span>{a.variantId}</span>
         <Badge variant="secondary">{a.variantKind}</Badge>
