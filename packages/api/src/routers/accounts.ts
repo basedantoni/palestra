@@ -6,14 +6,13 @@ import { db } from "@life-tracker/db";
 import { balanceSnapshot, financialAccount } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
-import { todayUtc } from "../lib/date-utils";
-import { accountBalanceHistory, TIMEFRAMES, timeframeStart } from "../lib/net-worth";
+import { accountBalanceHistory, TIMEFRAMES, timeframeWindow } from "../lib/net-worth";
 
 export const accountsRouter = router({
   /**
    * One account's daily balance over a chip's window ending today (the UTC
-   * Balance Snapshot day, ADR 0003), plus `change` from the window's first
-   * point. NOT_FOUND unless the caller owns the account.
+   * Balance Snapshot day, ADR 0003), plus `current` and `change` (see
+   * lib/net-worth.ts). NOT_FOUND unless the caller owns the account.
    */
   balanceHistory: protectedProcedure
     .input(z.object({ accountId: z.string(), timeframe: z.enum(TIMEFRAMES) }))
@@ -32,7 +31,6 @@ export const accountsRouter = router({
         })
         .from(balanceSnapshot)
         .where(eq(balanceSnapshot.accountId, account.id));
-      const today = todayUtc();
-      return accountBalanceHistory(account, snapshots, { from: timeframeStart(input.timeframe, today), to: today });
+      return accountBalanceHistory(account, snapshots, timeframeWindow(input.timeframe));
     }),
 });

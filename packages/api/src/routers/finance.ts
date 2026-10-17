@@ -9,8 +9,7 @@ import { protectedProcedure, router } from "../index";
 import { calendarMonthOf } from "../lib/budget-spend";
 import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
 import { categorySpend } from "../lib/category-spend";
-import { todayUtc } from "../lib/date-utils";
-import { netWorthHistory, TIMEFRAMES, timeframeStart } from "../lib/net-worth";
+import { netWorthHistory, TIMEFRAMES, timeframeWindow } from "../lib/net-worth";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { getUserTimezone } from "../lib/user-timezone";
 
@@ -82,13 +81,11 @@ export const financeRouter = router({
 
   /**
    * Daily Net Worth (linked accounts only) over a chip's window ending today,
-   * plus `current` and `change` from the window's first day. See
+   * plus `current` and `change` since its first non-partial day. See
    * lib/net-worth.ts and ADR 0003.
    */
   netWorthHistory: protectedProcedure.input(z.object({ timeframe: z.enum(TIMEFRAMES) })).query(async ({ ctx, input }) => {
     const userId = ctx.session.user.id;
-    // The Balance Snapshot day key is the UTC day (ADR 0003), so "today" is too.
-    const today = todayUtc();
     const [accounts, snapshots] = await Promise.all([
       db
         .select({ id: financialAccount.id, type: financialAccount.type })
@@ -104,6 +101,6 @@ export const financeRouter = router({
         .where(eq(balanceSnapshot.userId, userId)),
     ]);
     // ponytail: loads all history; carry-forward needs the last snapshot before the window anyway.
-    return netWorthHistory(accounts, snapshots, { from: timeframeStart(input.timeframe, today), to: today });
+    return netWorthHistory(accounts, snapshots, timeframeWindow(input.timeframe));
   }),
 });

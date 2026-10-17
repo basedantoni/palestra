@@ -15,6 +15,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { isLiability } from "@life-tracker/shared";
+
 import { AccountDetailSheet } from "./account-detail-sheet";
 import { RECONNECT_MESSAGE, isReconnecting, useReconnectBank } from "./use-reconnect-bank";
 
@@ -65,11 +67,6 @@ const STATUS_COPY: Record<string, { short: string; long: string }> = {
   },
 };
 const UNKNOWN_STATUS_COPY = STATUS_COPY.error!;
-
-/** Liabilities (credit cards, loans) count against net worth. */
-function isLiability(type: string): boolean {
-  return type === "credit" || type === "loan";
-}
 
 export function netWorth(accounts: Account[]): number {
   return accounts.reduce((sum, a) => {
