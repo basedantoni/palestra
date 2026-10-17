@@ -128,7 +128,7 @@ One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1
 _Avoid_: Variant (as a noun), art, illustration
 
 **Printing**:
-An Artwork released in one language (Japanese or English), with its set. What a seller sells and what a Copy is of.
+An Artwork released in one language (English, Japanese, Simplified Chinese, or Korean), with its set. What a seller sells and what a Copy is of.
 _Avoid_: Version, edition
 
 **Copy**:
@@ -154,7 +154,7 @@ _Avoid_: Album, collection view, page (say sheet)
 ### TCG — buying
 
 **Want**:
-The user's intent to acquire one Copy of an Artwork in an accepted language (Japanese, English, or either), bounded by a maximum delivered price and a minimum acceptable condition. It is open, ordered, fulfilled (a Copy arrived), or dropped.
+The user's intent to acquire one Copy of an Artwork in one or more accepted languages, bounded by a maximum delivered price and a minimum acceptable condition. It is open, ordered, fulfilled (a Copy arrived), or dropped.
 _Avoid_: Wishlist item, target
 
 **Offer**:
@@ -168,3 +168,17 @@ _Avoid_: Grade, quality
 **Card Fund**:
 Money available for TCG purchases: the Cards category's monthly budgets summed since a start month, minus that category's Budgeted Spend over the same months. Unspent budget carries forward, unlike finance budgets; a month with no Cards budget adds nothing.
 _Avoid_: Chase fund, TCG budget, balance
+
+### TCG — market
+
+**Marketplace**:
+A site where many sellers list Printings and which reports its own prices for them, such as TCGplayer or CardTrader. A single shop or seller is not a Marketplace.
+_Avoid_: Source, feed, shop, store
+
+**Market Price**:
+A Marketplace's own aggregate price for one Printing in one Condition on one day, in the currency the Marketplace reports. Not a seller's price: an Offer can sit well above or below it.
+_Avoid_: Price, market value, quote
+
+**Price History**:
+The daily Market Prices of one Printing from one Marketplace over time. Never blended across Marketplaces.
+_Avoid_: Price chart, price trend, history
