@@ -111,20 +111,10 @@ export function timeframeWindow(timeframe: Timeframe, today = todayUtc()): DayWi
 }
 
 /**
- * A daily series with its `current` (last) value and `change` since the first
- * non-partial point: a partial baseline (an account not linked yet) would read
- * as a gain. Null `change` when every point is partial.
- */
-function series<P extends { partial: boolean }>(points: P[], value: (p: P) => number) {
-  const base = points.find((p) => !p.partial);
-  const last = points.at(-1);
-  const current = last ? value(last) : null;
-  return { points, current, change: base && current !== null ? cents(current - value(base)) : null };
-}
-
-/**
  * Daily Net Worth over `window`: one point per day, no downsampling. `change`
- * is current minus the first non-partial point (see `series`).
+ * is like-for-like: how the accounts already linked on the window's first day
+ * moved since then. An account linked mid-window is left out of it, so linking
+ * never reads as a gain.
  */
 export function netWorthHistory(
   accounts: NetWorthAccount[],
@@ -161,7 +151,14 @@ export function netWorthHistory(
     points.push({ date: toDateString(d), ...at(toDateString(d)) });
   }
 
-  return series(points, (p) => p.netWorth);
+  const last = points.at(-1)!;
+  const signed = (a: NetWorthAccount, day: string) => {
+    const balance = balanceAsOf(history.get(a.id)!, day)?.balance ?? 0;
+    return isLiability(a.type) ? -balance : balance;
+  };
+  const baseline = tracked.filter((a) => balanceAsOf(history.get(a.id)!, start));
+  const change = cents(baseline.reduce((sum, a) => sum + signed(a, last.date) - signed(a, start), 0));
+  return { points, current: last.netWorth, change };
 }
 
 /**
@@ -175,10 +172,13 @@ export function accountBalanceHistory(
   window: DayWindow,
 ): { points: Array<{ date: string; balance: number; partial: boolean }>; current: number | null; change: number | null } {
   const owed = isLiability(account.type);
-  const points = netWorthHistory([account], snapshots, window).points.map((p) => ({
+  const nw = netWorthHistory([account], snapshots, window);
+  const points = nw.points.map((p) => ({
     date: p.date,
     balance: owed ? p.liabilities : p.assets,
     partial: p.partial,
   }));
-  return series(points, (p) => p.balance);
+  // Net Worth falls as the amount owed grows, so flip the sign back for a liability.
+  const change = nw.change === null ? null : owed ? cents(0 - nw.change) : nw.change;
+  return { points, current: points.at(-1)?.balance ?? null, change };
 }

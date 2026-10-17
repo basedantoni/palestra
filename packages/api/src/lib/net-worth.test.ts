@@ -171,18 +171,27 @@ describe("netWorthHistory: missing before first snapshot", () => {
 
   const linkedLater = [snap("chk", "2026-06-01", 2000), snap("inv", "2026-06-20", 50000), snap("chk", "2026-07-05", 2500)];
 
-  it("measures change from the first non-partial point, so linking doesn't read as a gain", () => {
-    const r = netWorthHistory([checking, brokerage], linkedLater, all("2026-07-05"));
+  it("measures change like-for-like: only accounts linked at the window's start, so linking doesn't read as a gain", () => {
+    const r = netWorthHistory([checking, brokerage], [...linkedLater, snap("inv", "2026-07-05", 51000)], all("2026-07-05"));
     expect(r.points[0]!.partial).toBe(true);
-    expect(r.current).toBe(52500);
-    // From 52000 on 06-20, when the brokerage was linked.
+    expect(r.current).toBe(53500);
+    // Checking 2000 → 2500; the brokerage, linked mid-window, is left out.
     expect(r.change).toBe(500);
   });
 
-  it("leaves change null when every point in the window is partial", () => {
+  it("measures change on a window that is partial throughout from the accounts it does have", () => {
     const r = netWorthHistory([checking, brokerage], linkedLater, { from: "2026-06-05", to: "2026-06-10" });
     expect(r.current).toBe(2000);
-    expect(r.change).toBeNull();
+    expect(r.change).toBe(0);
+  });
+
+  it("counts a liability's growing balance as a fall in change", () => {
+    const r = netWorthHistory(
+      [checking, card],
+      [snap("chk", "2026-06-01", 2000), snap("cc", "2026-06-01", 300), snap("cc", "2026-06-03", 500), snap("inv", "2026-06-02", 50000)],
+      all("2026-06-03"),
+    );
+    expect(r.change).toBe(-200);
   });
 
   it("ignores an account that has never been snapshotted, so it doesn't mark every day partial", () => {
