@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PFC_PRIMARIES, SEED_CATEGORIES, categoryNameForPfc, seedBankCategoryMapping } from "./category-seed";
 
 describe("categoryNameForPfc", () => {
-  it("maps known Plaid PFC primaries to friendly seed names", () => {
+  it("maps known Bank Categories to friendly seed names", () => {
     expect(categoryNameForPfc("FOOD_AND_DRINK")).toBe("Food & Drink");
     expect(categoryNameForPfc("RENT_AND_UTILITIES")).toBe("Rent & Utilities");
     expect(categoryNameForPfc("TRANSPORTATION")).toBe("Transportation");
@@ -18,7 +18,7 @@ describe("categoryNameForPfc", () => {
     expect(categoryNameForPfc("SOMETHING_NEW")).toBeNull();
   });
 
-  it("every Plaid PFC primary resolves to a name present in SEED_CATEGORIES", () => {
+  it("every Bank Category resolves to a name present in SEED_CATEGORIES", () => {
     const names = new Set(SEED_CATEGORIES);
     for (const primary of PFC_PRIMARIES) {
       expect(names.has(categoryNameForPfc(primary)!)).toBe(true);

@@ -4,7 +4,7 @@
  * reset, retroactive apply and remapping all share these functions.
  */
 
-/** The user's Bank Category mapping (KOI-335): PFC primary → category id, null when unmapped. */
+/** The user's Bank Category mapping (KOI-335): Bank Category → category id, null when unmapped. */
 export type BankCategoryMapping = ReadonlyMap<string, string | null>;
 
 /**

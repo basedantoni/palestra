@@ -157,8 +157,8 @@ describe("budgets.forMonth", () => {
     const rows = await makeCaller().budgets.forMonth({ monthKey: "2026-10" });
 
     expect(rows).toEqual([
-      { categoryId: FOOD, categoryName: "Food & Drink", isSystem: true, limit: 100, spent: 130, overspent: true },
-      { categoryId: FUN, categoryName: "Climbing", isSystem: false, limit: null, spent: 25, overspent: false },
+      { categoryId: FOOD, categoryName: "Food & Drink", limit: 100, spent: 130, overspent: true },
+      { categoryId: FUN, categoryName: "Climbing", limit: null, spent: 25, overspent: false },
     ]);
     expect(mockDb.selected(transaction)).toEqual([
       [USER_ID, "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"],
