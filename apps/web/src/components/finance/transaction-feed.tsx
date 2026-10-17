@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
+import { categoryLabel } from "./category-color";
 import { RuleForm } from "./category-rule-list";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -280,7 +281,7 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
             <option value="">Uncategorized</option>
             {(categories ?? []).map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {categoryLabel(c)}
               </option>
             ))}
           </select>

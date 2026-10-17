@@ -8,7 +8,7 @@ import { categorySpend, type CategorySpendRow, type CategorySpendTransaction, do
 const tx = (
   date: string,
   amount: number,
-  category: [string, string] | null,
+  category: [id: string, name: string, color?: string] | null,
   flow: CategorySpendTransaction["flow"] = "expense",
   excluded = false,
 ): CategorySpendTransaction => ({
@@ -18,9 +18,11 @@ const tx = (
   excluded,
   categoryId: category?.[0] ?? null,
   categoryName: category?.[1] ?? null,
+  categoryColor: category?.[2] ?? null,
+  categoryEmoji: null,
 });
 
-const groceries: [string, string] = ["c-groc", "Groceries"];
+const groceries: [string, string, string] = ["c-groc", "Groceries", "aqua"];
 const dining: [string, string] = ["c-dine", "Dining"];
 const shopping: [string, string] = ["c-shop", "Shopping"];
 
@@ -43,9 +45,9 @@ describe("categorySpend", () => {
       june,
     );
     expect(rows).toEqual([
-      { categoryId: "c-groc", name: "Groceries", spend: 150, share: 0.5 },
-      { categoryId: null, name: "Uncategorized", spend: 100, share: 1 / 3 },
-      { categoryId: "c-dine", name: "Dining", spend: 50, share: 1 / 6 },
+      { categoryId: "c-groc", name: "Groceries", color: "aqua", emoji: null, spend: 150, share: 0.5 },
+      { categoryId: null, name: "Uncategorized", color: null, emoji: null, spend: 100, share: 1 / 3 },
+      { categoryId: "c-dine", name: "Dining", color: null, emoji: null, spend: 50, share: 1 / 6 },
     ]);
   });
 
@@ -70,7 +72,7 @@ describe("categorySpend", () => {
 
   it("has no share when no category has positive spend", () => {
     expect(categorySpend([tx("2026-06-09", -90, shopping)], june)).toEqual([
-      { categoryId: "c-shop", name: "Shopping", spend: -90, share: null },
+      { categoryId: "c-shop", name: "Shopping", color: null, emoji: null, spend: -90, share: null },
     ]);
   });
 
@@ -138,6 +140,8 @@ describe("categorySpend over a period", () => {
 const row = (name: string, spend: number, categoryId: string | null = `c-${name}`): CategorySpendRow => ({
   categoryId,
   name,
+  color: null,
+  emoji: null,
   spend,
   share: null,
 });
@@ -167,8 +171,8 @@ describe("donutSlices", () => {
 
   it("leaves out negative categories, with no Other when nothing is left over", () => {
     expect(donutSlices([row("a", 100), row("b", 50), row("refunded", -40)])).toEqual([
-      { key: "c-a", name: "a", spend: 100 },
-      { key: "c-b", name: "b", spend: 50 },
+      { key: "c-a", name: "a", color: null, spend: 100 },
+      { key: "c-b", name: "b", color: null, spend: 50 },
     ]);
   });
 

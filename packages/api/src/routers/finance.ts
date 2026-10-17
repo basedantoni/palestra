@@ -72,6 +72,8 @@ export const financeRouter = router({
           date: transaction.date,
           categoryId: transaction.categoryId,
           categoryName: category.name,
+          categoryColor: category.color,
+          categoryEmoji: category.emoji,
         })
         .from(transaction)
         .leftJoin(category, eq(category.id, transaction.categoryId))

@@ -6,12 +6,16 @@ import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
+import { CATEGORY_COLORS, nextCategoryColor } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { ownedCategory } from "../lib/category-rules-db";
 import { UNCATEGORIZED } from "../lib/category-spend";
 
 const categoryName = z.string().trim().min(1).max(60);
+
+/** A category's emoji, or null to clear it; `assertSingleEmoji` checks it. */
+const categoryEmoji = z.string().trim().min(1).max(32).nullable();
 
 /**
  * "Uncategorized" means no category, so a real category of that name would
@@ -27,13 +31,23 @@ function assertNameNotReserved(name: string): void {
   }
 }
 
+/** One emoji: a single grapheme that is a pictograph or a flag. A TRPCError, like the reserved-name check. */
+function assertSingleEmoji(emoji: string): void {
+  const graphemes = [...new Intl.Segmenter().segment(emoji)].length;
+  if (graphemes !== 1 || !/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(emoji)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Pick a single emoji" });
+  }
+}
+
 export const categoriesRouter = router({
-  /** The user's categories, with how many transactions each holds. */
+  /** The user's categories in their manual order, with how many transactions each holds. */
   list: protectedProcedure.query(async ({ ctx }) => {
     return db
       .select({
         id: category.id,
         name: category.name,
+        color: category.color,
+        emoji: category.emoji,
         isSystem: category.isSystem,
         transactionCount: sql<number>`count(${transaction.id})::int`,
       })
@@ -41,32 +55,80 @@ export const categoriesRouter = router({
       .leftJoin(transaction, eq(transaction.categoryId, category.id))
       .where(eq(category.userId, ctx.session.user.id))
       .groupBy(category.id)
-      .orderBy(category.name);
+      .orderBy(category.sortOrder, category.name);
   }),
 
+  /** A new category goes last, in the least-used palette color. */
   create: protectedProcedure
     .input(z.object({ name: categoryName }))
     .mutation(async ({ ctx, input }) => {
       assertNameNotReserved(input.name);
+      const userId = ctx.session.user.id;
+      const existing = await db
+        .select({ color: category.color, sortOrder: category.sortOrder })
+        .from(category)
+        .where(eq(category.userId, userId));
       const id = randomUUID();
       await db
         .insert(category)
-        .values({ id, userId: ctx.session.user.id, name: input.name, isSystem: false })
+        .values({
+          id,
+          userId,
+          name: input.name,
+          isSystem: false,
+          color: nextCategoryColor(existing.map((c) => c.color)),
+          sortOrder: Math.max(-1, ...existing.map((c) => c.sortOrder)) + 1,
+        })
         .onConflictDoNothing();
       return { id };
     }),
 
-  /** Rename any owned category, seeded or custom. */
-  rename: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), name: categoryName }))
+  /** Rename, recolor, or set or clear the emoji of any owned category, seeded or custom. */
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: categoryName.optional(),
+        color: z.enum(CATEGORY_COLORS).optional(),
+        emoji: categoryEmoji.optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      assertNameNotReserved(input.name);
+      const { id, ...changes } = input;
+      if (changes.name !== undefined) assertNameNotReserved(changes.name);
+      if (changes.emoji) assertSingleEmoji(changes.emoji);
       const userId = ctx.session.user.id;
-      await ownedCategory(db, userId, input.id);
+      await ownedCategory(db, userId, id);
+      if (Object.values(changes).every((v) => v === undefined)) return { ok: true };
       await db
         .update(category)
-        .set({ name: input.name })
-        .where(and(eq(category.id, input.id), eq(category.userId, userId)));
+        .set(changes)
+        .where(and(eq(category.id, id), eq(category.userId, userId)));
+      return { ok: true };
+    }),
+
+  /**
+   * Set the manual order: `ids` is every one of the user's categories, first
+   * to last. A list missing or adding any is rejected, so a stale screen can't
+   * scramble the order.
+   */
+  reorder: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      await db.transaction(async (tx) => {
+        const owned = await tx.select({ id: category.id }).from(category).where(eq(category.userId, userId));
+        const ownedIds = new Set(owned.map((c) => c.id));
+        if (new Set(input.ids).size !== input.ids.length || input.ids.length !== ownedIds.size || !input.ids.every((id) => ownedIds.has(id))) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "The category list changed; reload and try again" });
+        }
+        for (const [sortOrder, id] of input.ids.entries()) {
+          await tx
+            .update(category)
+            .set({ sortOrder })
+            .where(and(eq(category.id, id), eq(category.userId, userId)));
+        }
+      });
       return { ok: true };
     }),
 

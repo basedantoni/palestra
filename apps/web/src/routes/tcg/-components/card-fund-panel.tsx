@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { categoryLabel } from "@/components/finance/category-color";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useFinanceToday } from "@/hooks/use-finance-today";
@@ -94,7 +95,7 @@ function FundSettingsDialog({ settings, onClose }: { settings: Settings | null; 
               </option>
               {categories?.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {categoryLabel(c)}
                 </option>
               ))}
             </select>
