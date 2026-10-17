@@ -2,10 +2,10 @@
  * Pure Net Worth history (KOI-293), per GLOSSARY.md (Net Worth, Balance
  * Snapshot) and ADR 0003.
  */
-import { addDays, addWeeks } from "date-fns";
+import { addDays, subMonths } from "date-fns";
 
 import { cents } from "./cash-flow";
-import { isoWeekKey, toDateString } from "./date-utils";
+import { toDateString } from "./date-utils";
 
 export type AccountType = "depository" | "credit" | "investment" | "loan";
 
@@ -23,8 +23,8 @@ export interface NetWorthSnapshot {
 }
 
 export interface NetWorthPoint {
-  /** Monday of the ISO week, "yyyy-MM-dd". */
-  weekStart: string;
+  /** "yyyy-MM-dd" */
+  date: string;
   netWorth: number;
   assets: number;
   /** Total owed, positive. */
@@ -55,6 +55,23 @@ const parseDay = (day: string) => {
   return new Date(y, m - 1, d, 12);
 };
 
+/** Balance chart chips, as Copilot draws them (research §3.3). */
+export const TIMEFRAMES = ["1M", "3M", "YTD", "1Y", "All"] as const;
+export type Timeframe = (typeof TIMEFRAMES)[number];
+
+const MONTHS_BACK = { "1M": 1, "3M": 3, "1Y": 12 } as const;
+
+/**
+ * First day ("yyyy-MM-dd") a chip's window plots, `today` included. 1M/3M/1Y
+ * go back N months (clamped to the shorter month's end, so Mar 31 → Feb 28)
+ * then forward a day; YTD is Jan 1; All is null: it starts at the first snapshot.
+ */
+export function timeframeStart(timeframe: Timeframe, today: string): string | null {
+  if (timeframe === "All") return null;
+  if (timeframe === "YTD") return `${today.slice(0, 4)}-01-01`;
+  return toDateString(addDays(subMonths(parseDay(today), MONTHS_BACK[timeframe]), 1));
+}
+
 /** Each of `accountIds`' snapshots, oldest first; snapshots of other accounts are dropped. */
 function snapshotsByAccount(snapshots: NetWorthSnapshot[], accountIds: Iterable<string>) {
   const history = new Map([...accountIds].map((id) => [id, [] as NetWorthSnapshot[]]));
@@ -82,16 +99,25 @@ export function carryForwardSeries(snapshots: NetWorthSnapshot[]): Array<{ asOfD
   });
 }
 
+/** Inclusive day range; `from` null starts at the first snapshot (the All chip). */
+export interface DayWindow {
+  from: string | null;
+  to: string;
+}
+
+/**
+ * Daily Net Worth over `window`: one point per day, no downsampling. `change`
+ * is current minus the window's first point, null when that point is partial.
+ */
 export function netWorthHistory(
   accounts: NetWorthAccount[],
   snapshots: NetWorthSnapshot[],
-): { points: NetWorthPoint[]; current: number | null; change30d: number | null } {
+  window: DayWindow,
+): { points: NetWorthPoint[]; current: number | null; change: number | null } {
   const history = snapshotsByAccount(snapshots, accounts.map((a) => a.id));
 
-  const days = [...history.values()].flat().map((s) => s.asOfDate).toSorted();
-  const first = days[0];
-  const last = days.at(-1);
-  if (!first || !last) return { points: [], current: null, change30d: null };
+  const first = [...history.values()].flat().map((s) => s.asOfDate).toSorted()[0];
+  if (!first) return { points: [], current: null, change: null };
 
   // Accounts never snapshotted (e.g. Plaid null balance) neither count nor mark partial.
   const tracked = accounts.filter((a) => history.get(a.id)!.length > 0);
@@ -110,15 +136,37 @@ export function netWorthHistory(
     return { netWorth: cents(assets - liabilities), assets: cents(assets), liabilities: cents(liabilities), partial };
   };
 
-  // ponytail: findLast per account per week is O(weeks x snapshots); fine for years of daily data.
+  // ponytail: findLast per account per day is O(days x snapshots), ~4M steps for 1Y of 10 accounts;
+  // walk a cursor per account if All over many years gets slow.
   const points: NetWorthPoint[] = [];
-  for (let week = parseDay(isoWeekKey(parseDay(first))); toDateString(week) <= last; week = addWeeks(week, 1)) {
-    // Sunday ends the ISO week; carry-forward makes it equal to the week's last available day.
-    points.push({ weekStart: toDateString(week), ...at(toDateString(addDays(week, 6))) });
+  const start = window.from && window.from > first ? window.from : first;
+  for (let d = parseDay(start); toDateString(d) <= window.to; d = addDays(d, 1)) {
+    points.push({ date: toDateString(d), ...at(toDateString(d)) });
   }
 
-  // Before any snapshot (or before an account was linked) the baseline is partial: no change, not a fake gain.
-  const current = at(last).netWorth;
-  const monthAgo = at(toDateString(addDays(parseDay(last), -30)));
-  return { points, current, change30d: monthAgo.partial ? null : cents(current - monthAgo.netWorth) };
+  // A partial baseline (an account not linked yet) gives no change, not a fake gain.
+  const base = points[0];
+  const current = points.at(-1)?.netWorth ?? null;
+  const change = base && !base.partial && current !== null ? cents(current - base.netWorth) : null;
+  return { points, current, change };
+}
+
+/**
+ * One account's daily balance over `window`, as its Balance Snapshots report it
+ * (a credit/loan balance is the positive amount owed). `change` is measured
+ * from the window's first point.
+ */
+export function accountBalanceHistory(
+  account: NetWorthAccount,
+  snapshots: NetWorthSnapshot[],
+  window: DayWindow,
+): { points: Array<{ date: string; balance: number }>; current: number | null; change: number | null } {
+  const owed = LIABILITY.has(account.type);
+  const points = netWorthHistory([account], snapshots, window).points.map((p) => ({
+    date: p.date,
+    balance: owed ? p.liabilities : p.assets,
+  }));
+  const first = points[0]?.balance;
+  const current = points.at(-1)?.balance ?? null;
+  return { points, current, change: first === undefined || current === null ? null : cents(current - first) };
 }

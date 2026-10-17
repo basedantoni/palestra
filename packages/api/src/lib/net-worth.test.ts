@@ -6,7 +6,37 @@ import {
   netWorthHistory,
   type NetWorthAccount,
   type NetWorthSnapshot,
+  timeframeStart,
 } from "./net-worth";
+
+describe("timeframeStart", () => {
+  it("starts 1M, 3M and 1Y at -N months +1 day, so the window is inclusive of today", () => {
+    expect(timeframeStart("1M", "2026-10-17")).toBe("2026-09-18");
+    expect(timeframeStart("3M", "2026-10-17")).toBe("2026-07-18");
+    expect(timeframeStart("1Y", "2026-10-17")).toBe("2025-10-18");
+  });
+
+  it("clamps to the shorter month's end before adding the day", () => {
+    // Mar 31 - 1 month = Feb 28 (no Feb 31), + 1 day = Mar 1.
+    expect(timeframeStart("1M", "2026-03-31")).toBe("2026-03-01");
+    expect(timeframeStart("1M", "2026-03-29")).toBe("2026-03-01");
+    // Leap year: Mar 31 - 1 month = Feb 29.
+    expect(timeframeStart("1M", "2024-03-31")).toBe("2024-03-01");
+    expect(timeframeStart("1M", "2024-03-30")).toBe("2024-03-01");
+    // May 31 - 3 months = Feb 28.
+    expect(timeframeStart("3M", "2026-05-31")).toBe("2026-03-01");
+    // Feb 29 - 1 year = Feb 28.
+    expect(timeframeStart("1Y", "2028-02-29")).toBe("2027-03-01");
+    // Jan 31 - 1 month crosses the year: Dec 31, + 1 day = Jan 1.
+    expect(timeframeStart("1M", "2027-01-31")).toBe("2027-01-01");
+  });
+
+  it("starts YTD on Jan 1 of today's year, and All at the first snapshot (null)", () => {
+    expect(timeframeStart("YTD", "2026-10-17")).toBe("2026-01-01");
+    expect(timeframeStart("YTD", "2026-01-01")).toBe("2026-01-01");
+    expect(timeframeStart("All", "2026-10-17")).toBeNull();
+  });
+});
 
 const checking: NetWorthAccount = { id: "chk", type: "depository" };
 const brokerage: NetWorthAccount = { id: "inv", type: "investment" };
@@ -19,9 +49,10 @@ const snap = (accountId: string, asOfDate: string, balance: number): NetWorthSna
   balance,
 });
 
-// 2026-06-01 is a Monday.
+const all = (to: string) => ({ from: null, to });
+
 describe("netWorthHistory: liabilities", () => {
-  it("flips credit and loan balances so debt lowers net worth", () => {
+  it("subtracts credit and loan balances so debt lowers net worth", () => {
     const { points, current } = netWorthHistory(
       [checking, brokerage, card, mortgage],
       [
@@ -30,85 +61,74 @@ describe("netWorthHistory: liabilities", () => {
         snap("cc", "2026-06-03", 1200), // Plaid: positive = owed
         snap("loan", "2026-06-03", 15000),
       ],
+      all("2026-06-03"),
     );
     expect(points).toEqual([
-      { weekStart: "2026-06-01", netWorth: 8800, assets: 25000, liabilities: 16200, partial: false },
+      { date: "2026-06-03", netWorth: 8800, assets: 25000, liabilities: 16200, partial: false },
     ]);
     expect(current).toBe(8800);
   });
 });
 
-const netWorths = (r: ReturnType<typeof netWorthHistory>) =>
-  r.points.map((p) => [p.weekStart, p.netWorth, p.partial]);
+const netWorths = (r: ReturnType<typeof netWorthHistory>) => r.points.map((p) => [p.date, p.netWorth, p.partial]);
 
-describe("netWorthHistory: weekly bucketing", () => {
-  it("emits one point per ISO week using the last day in that week, oldest first", () => {
-    const r = netWorthHistory(
-      [checking],
-      [
-        // Out of order on purpose: input order must not matter.
-        snap("chk", "2026-06-14", 1300), // Sun: last day of the week of Jun 8
-        snap("chk", "2026-06-01", 1000), // Mon
-        snap("chk", "2026-06-05", 1100), // Fri: last day of week of Jun 1
-        snap("chk", "2026-06-08", 1200), // Mon
-        snap("chk", "2026-06-15", 1400), // Mon: next week
-      ],
-    );
-    expect(netWorths(r)).toEqual([
-      ["2026-06-01", 1100, false],
-      ["2026-06-08", 1300, false],
-      ["2026-06-15", 1400, false],
-    ]);
-    expect(r.current).toBe(1400);
-  });
-
-  it("returns no points and null current with no snapshots", () => {
-    expect(netWorthHistory([checking], [])).toEqual({ points: [], current: null, change30d: null });
-  });
-});
-
-describe("netWorthHistory: carry-forward", () => {
-  it("carries each account's last balance through weeks with no snapshot", () => {
+describe("netWorthHistory: daily carry-forward", () => {
+  it("emits one point per day through `to`, carrying each account's last balance over missed days", () => {
     const r = netWorthHistory(
       [checking, card],
       [
+        // Out of order on purpose: input order must not matter.
+        snap("cc", "2026-06-03", 800),
         snap("chk", "2026-06-01", 3000),
         snap("cc", "2026-06-01", 500),
-        // Week of Jun 8: nothing at all (cron missed). Week of Jun 15: card only.
-        snap("cc", "2026-06-16", 800),
-        snap("chk", "2026-06-24", 3500),
+        snap("chk", "2026-06-04", 3500),
       ],
+      all("2026-06-05"),
     );
     expect(netWorths(r)).toEqual([
       ["2026-06-01", 2500, false],
-      ["2026-06-08", 2500, false], // gap week carries forward, no dip to $0
-      ["2026-06-15", 2200, false], // checking carried at 3000
-      ["2026-06-22", 2700, false], // card carried at 800
+      ["2026-06-02", 2500, false], // cron missed: carried, no dip to $0
+      ["2026-06-03", 2200, false], // checking carried at 3000
+      ["2026-06-04", 2700, false], // card carried at 800
+      ["2026-06-05", 2700, false], // after the last snapshot, up to today
     ]);
+    expect(r.current).toBe(2700);
+  });
+
+  it("returns no points and null current/change with no snapshots", () => {
+    expect(netWorthHistory([checking], [], all("2026-06-05"))).toEqual({ points: [], current: null, change: null });
+  });
+
+  it("plots a year as one point per day, with no downsampling", () => {
+    const r = netWorthHistory([checking], [snap("chk", "2025-01-01", 100)], { from: "2025-10-18", to: "2026-10-17" });
+    expect(r.points).toHaveLength(365);
+    expect(r.points[0]!.date).toBe("2025-10-18");
+    expect(r.points.at(-1)!.date).toBe("2026-10-17");
   });
 });
 
-describe("netWorthHistory: change30d", () => {
-  it("is current minus net worth 30 days before the latest snapshot, carried forward", () => {
-    const r = netWorthHistory(
-      [checking, card],
-      [
-        snap("chk", "2026-06-01", 4000),
-        snap("cc", "2026-06-01", 1000),
-        snap("chk", "2026-06-04", 4200), // in force on Jun 5 (30 days before Jul 5)
-        snap("chk", "2026-06-10", 9999), // after Jun 5: not used for the baseline
-        snap("chk", "2026-07-05", 5000),
-        snap("cc", "2026-07-05", 300),
-      ],
-    );
-    // Jun 5: 4200 - 1000 = 3200. Jul 5: 5000 - 300 = 4700.
-    expect(r.current).toBe(4700);
-    expect(r.change30d).toBe(1500);
+describe("netWorthHistory: window", () => {
+  const snaps = [snap("chk", "2026-06-01", 1000), snap("chk", "2026-06-03", 1300), snap("chk", "2026-06-05", 1200)];
+
+  it("starts at `from`, carrying in the balance from before the window", () => {
+    const r = netWorthHistory([checking], snaps, { from: "2026-06-02", to: "2026-06-05" });
+    expect(netWorths(r)).toEqual([
+      ["2026-06-02", 1000, false],
+      ["2026-06-03", 1300, false],
+      ["2026-06-04", 1300, false],
+      ["2026-06-05", 1200, false],
+    ]);
   });
 
-  it("is null with under 30 days of history", () => {
-    const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 1000), snap("chk", "2026-06-20", 1500)]);
-    expect(r.change30d).toBeNull();
+  it("starts at the first snapshot when `from` is earlier or null (All)", () => {
+    const r = netWorthHistory([checking], snaps, { from: "2026-01-01", to: "2026-06-02" });
+    expect(r.points.map((p) => p.date)).toEqual(["2026-06-01", "2026-06-02"]);
+    expect(netWorthHistory([checking], snaps, all("2026-06-02")).points).toEqual(r.points);
+  });
+
+  it("has change = current minus the window's first point", () => {
+    const r = netWorthHistory([checking], snaps, { from: "2026-06-02", to: "2026-06-05" });
+    expect(r.change).toBe(200);
   });
 });
 
@@ -130,46 +150,43 @@ describe("carryForwardSeries (goal balance history)", () => {
 });
 
 describe("netWorthHistory: missing before first snapshot", () => {
-  it("marks points before a newly linked account's first snapshot partial instead of counting it as $0", () => {
+  it("marks days before a newly linked account's first snapshot partial instead of counting it as $0", () => {
     const r = netWorthHistory(
       [checking, brokerage],
       [
         snap("chk", "2026-06-01", 2000),
-        snap("chk", "2026-06-08", 2100),
-        // Brokerage linked in week 3 with 50k already in it.
-        snap("inv", "2026-06-17", 50000),
-        snap("chk", "2026-06-17", 2200),
+        // Brokerage linked on day 3 with 50k already in it.
+        snap("inv", "2026-06-03", 50000),
+        snap("chk", "2026-06-03", 2200),
       ],
+      all("2026-06-03"),
     );
     expect(r.points).toEqual([
-      { weekStart: "2026-06-01", netWorth: 2000, assets: 2000, liabilities: 0, partial: true },
-      { weekStart: "2026-06-08", netWorth: 2100, assets: 2100, liabilities: 0, partial: true },
-      { weekStart: "2026-06-15", netWorth: 52200, assets: 52200, liabilities: 0, partial: false },
+      { date: "2026-06-01", netWorth: 2000, assets: 2000, liabilities: 0, partial: true },
+      { date: "2026-06-02", netWorth: 2000, assets: 2000, liabilities: 0, partial: true },
+      { date: "2026-06-03", netWorth: 52200, assets: 52200, liabilities: 0, partial: false },
     ]);
   });
 
-  it("leaves change30d null when 30 days ago was partial, so linking doesn't read as a gain", () => {
+  it("leaves change null when the window starts partial, so linking doesn't read as a gain", () => {
     const r = netWorthHistory(
       [checking, brokerage],
       [snap("chk", "2026-06-01", 2000), snap("inv", "2026-06-20", 50000), snap("chk", "2026-07-05", 2500)],
+      all("2026-07-05"),
     );
     expect(r.current).toBe(52500);
-    expect(r.change30d).toBeNull();
+    expect(r.change).toBeNull();
   });
 
-  it("ignores an account that has never been snapshotted, so it doesn't mark every point partial", () => {
+  it("ignores an account that has never been snapshotted, so it doesn't mark every day partial", () => {
     // Plaid returned a null balance for the card, so it has no snapshots at all.
-    const r = netWorthHistory(
-      [checking, card],
-      [snap("chk", "2026-06-01", 2000), snap("chk", "2026-07-05", 2500)],
-    );
+    const r = netWorthHistory([checking, card], [snap("chk", "2026-06-01", 2000), snap("chk", "2026-06-03", 2500)], all("2026-06-03"));
     expect(r.points.every((p) => !p.partial)).toBe(true);
-    expect(r.current).toBe(2500);
-    expect(r.change30d).toBe(500);
+    expect(r.change).toBe(500);
   });
 
   it("ignores snapshots of accounts that are no longer linked", () => {
-    const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 2000), snap("gone", "2026-06-01", 9999)]);
+    const r = netWorthHistory([checking], [snap("chk", "2026-06-01", 2000), snap("gone", "2026-05-01", 9999)], all("2026-06-01"));
     expect(netWorths(r)).toEqual([["2026-06-01", 2000, false]]);
   });
 });
