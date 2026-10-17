@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { CATEGORY_COLORS } from "@life-tracker/shared";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -13,13 +15,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { categoryColor, categoryLabel } from "./category-color";
+
 type CategoryRow = RouterOutputs["categories"]["list"][number];
 
 /**
- * Categories tab on the budgets page (KOI-287): every category with its
- * transaction count; any category, seeded or custom, can be renamed or deleted
- * (optionally moving its transactions). Below, the Bank Category mapping
- * (KOI-335).
+ * Categories tab on the budgets page (KOI-287): every category, in its manual
+ * order, with its color, emoji and transaction count; any category, seeded or
+ * custom, can be recolored, renamed, moved up or down, or deleted (optionally
+ * moving its transactions). Below, the Bank Category mapping (KOI-335).
  */
 export function CategoryList() {
   const queryClient = useQueryClient();
@@ -44,15 +48,23 @@ export function CategoryList() {
     }
   };
   const create = useMutation(trpc.categories.create.mutationOptions({ onSuccess: () => (setNewName(""), refresh()) }));
-  const rename = useMutation(trpc.categories.rename.mutationOptions({ onSettled: () => setRenaming(null), onSuccess: refresh }));
+  const update = useMutation(trpc.categories.update.mutationOptions({ onSettled: () => setRenaming(null), onSuccess: refresh }));
+  const reorder = useMutation(trpc.categories.reorder.mutationOptions({ onSettled: refresh }));
+  const move = (from: number, to: number) => {
+    const ids = categories!.map((c) => c.id);
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    reorder.mutate({ ids });
+  };
 
   if (!categories) return <div className="text-muted-foreground">Loading categories…</div>;
 
   return (
     <div className="space-y-3">
       <ul className="divide-y divide-border border border-border">
-        {categories.map((c) => (
-          <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+        {categories.map((c, i) => (
+          <li key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+            <ColorPicker category={c} onPick={(color) => update.mutate({ id: c.id, color })} />
+            <EmojiInput category={c} onSave={(emoji, revert) => update.mutate({ id: c.id, emoji }, { onError: revert })} />
             {renaming === c.id ? (
               <input
                 autoFocus
@@ -61,20 +73,40 @@ export function CategoryList() {
                 maxLength={60}
                 onBlur={(e) => {
                   const name = e.target.value.trim();
-                  if (name && name !== c.name) rename.mutate({ id: c.id, name });
+                  if (name && name !== c.name) update.mutate({ id: c.id, name });
                   else setRenaming(null);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   if (e.key === "Escape") setRenaming(null);
                 }}
-                className="rounded-md border border-border bg-background px-1.5 py-0.5"
+                className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5"
               />
             ) : (
-              <span>{c.name}</span>
+              <span className="min-w-0 flex-1 truncate">{c.name}</span>
             )}
-            <span className="flex items-center gap-2 text-xs text-muted-foreground">
-              {c.transactionCount} {c.transactionCount === 1 ? "txn" : "txns"}
+            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <span className="mr-1">
+                {c.transactionCount} {c.transactionCount === 1 ? "txn" : "txns"}
+              </span>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={i === 0 || reorder.isPending}
+                onClick={() => move(i, i - 1)}
+                aria-label={`Move ${c.name} up`}
+              >
+                <ArrowUp />
+              </Button>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                disabled={i === categories.length - 1 || reorder.isPending}
+                onClick={() => move(i, i + 1)}
+                aria-label={`Move ${c.name} down`}
+              >
+                <ArrowDown />
+              </Button>
               <Button size="icon-xs" variant="ghost" onClick={() => setRenaming(c.id)} aria-label={`Rename ${c.name}`}>
                 <Pencil />
               </Button>
@@ -85,7 +117,8 @@ export function CategoryList() {
           </li>
         ))}
       </ul>
-      {rename.error && <p className="text-xs text-destructive">{rename.error.message}</p>}
+      {update.error && <p className="text-xs text-destructive">{update.error.message}</p>}
+      {reorder.error && <p className="text-xs text-destructive">{reorder.error.message}</p>}
 
       <form
         className="flex gap-2"
@@ -119,6 +152,75 @@ export function CategoryList() {
         />
       )}
     </div>
+  );
+}
+
+/** A category's color chip, opening the palette to pick another. */
+function ColorPicker({ category, onPick }: { category: CategoryRow; onPick: (color: (typeof CATEGORY_COLORS)[number]) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Color for ${category.name}: ${category.color ?? "none"}`}
+            className="size-5 shrink-0 rounded-md ring-offset-2 ring-offset-background hover:ring-2 hover:ring-ring"
+            style={{ background: categoryColor(category.color) }}
+          />
+        }
+      />
+      <PopoverContent className="w-auto p-2" align="start">
+        <div role="radiogroup" aria-label={`Color for ${category.name}`} className="grid grid-cols-7 gap-1.5">
+          {CATEGORY_COLORS.map((token) => (
+            <button
+              key={token}
+              type="button"
+              role="radio"
+              aria-checked={category.color === token}
+              aria-label={token}
+              title={token}
+              onClick={() => {
+                if (token !== category.color) onPick(token);
+                setOpen(false);
+              }}
+              className="flex size-7 items-center justify-center rounded-md text-white hover:ring-2 hover:ring-ring"
+              style={{ background: categoryColor(token) }}
+            >
+              {category.color === token && <Check className="size-4" />}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** A one-emoji field; saves on blur, clearing it removes the emoji, and a rejected one reverts. */
+function EmojiInput({
+  category,
+  onSave,
+}: {
+  category: CategoryRow;
+  onSave: (emoji: string | null, revert: () => void) => void;
+}) {
+  return (
+    <input
+      // Remount when the saved emoji changes, so the field shows it.
+      key={category.emoji ?? ""}
+      defaultValue={category.emoji ?? ""}
+      placeholder="＋"
+      aria-label={`Emoji for ${category.name}`}
+      onBlur={(e) => {
+        const input = e.target;
+        const emoji = input.value.trim() || null;
+        if (emoji !== category.emoji) onSave(emoji, () => (input.value = category.emoji ?? ""));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-8 shrink-0 rounded-md border border-transparent bg-transparent text-center hover:border-border focus:border-border"
+    />
   );
 }
 
@@ -166,7 +268,7 @@ function BankCategoryMapping({ categories, onChanged }: { categories: CategoryRo
                 <option value="">Uncategorized</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {categoryLabel(c)}
                   </option>
                 ))}
               </select>
@@ -220,7 +322,7 @@ function DeleteCategoryDialog({
               <option value="">Uncategorized</option>
               {others.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {categoryLabel(c)}
                 </option>
               ))}
             </select>

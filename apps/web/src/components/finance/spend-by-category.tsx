@@ -8,12 +8,9 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/utils/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { categoryColor, CategorySwatch } from "./category-color";
 import { CurrencyTooltip, usd } from "./currency-tooltip";
 import { TransactionPeriodPicker } from "./transaction-period-picker";
-
-/** Donut slots in rank order; "Other" is neutral. */
-const SLOT_COLORS = [1, 2, 3, 4, 5, 6].map((n) => `var(--chart-cat-${n})`);
-const OTHER_COLOR = "var(--chart-cat-other)";
 
 const pct = (share: number | null) => (share === null ? "—" : `${Math.round(share * 100)}%`);
 
@@ -69,11 +66,8 @@ function Breakdown({ rows, periodSearch }: { rows: CategorySpendRow[]; periodSea
     );
   }
 
-  const slices = donutSlices(rows).map((s, i) => ({
-    ...s,
-    color: s.key === "other" ? OTHER_COLOR : (SLOT_COLORS[i] ?? OTHER_COLOR),
-  }));
-  const colorOf = new Map(slices.map((s) => [s.key, s.color]));
+  // Each slice wears its category's own color (KOI-336); Uncategorized and "Other" are neutral.
+  const slices = donutSlices(rows).map((s) => ({ ...s, fill: categoryColor(s.color) }));
   const total = rows.reduce((s, r) => s + r.spend, 0);
 
   return (
@@ -95,14 +89,14 @@ function Breakdown({ rows, periodSearch }: { rows: CategorySpendRow[]; periodSea
                 isAnimationActive={false}
               >
                 {slices.map((s) => (
-                  <Cell key={s.key} fill={s.color} />
+                  <Cell key={s.key} fill={s.fill} />
                 ))}
               </Pie>
               <Tooltip
                 content={({ active, payload }) => {
                   const s = payload?.[0]?.payload as (typeof slices)[number] | undefined;
                   if (!active || !s) return null;
-                  return <CurrencyTooltip title={s.name} rows={[{ label: "Spend", value: s.spend, color: s.color }]} />;
+                  return <CurrencyTooltip title={s.name} rows={[{ label: "Spend", value: s.spend, color: s.fill }]} />;
                 }}
               />
             </PieChart>
@@ -116,8 +110,6 @@ function Breakdown({ rows, periodSearch }: { rows: CategorySpendRow[]; periodSea
       <ul className="divide-y rounded-md border">
         {rows.map((r) => {
           const key = r.categoryId ?? "uncategorized";
-          // Positive categories past the top slots are in the "Other" slice.
-          const color = colorOf.get(key) ?? (r.spend > 0 ? OTHER_COLOR : undefined);
           return (
             <li key={key}>
               <Link
@@ -125,11 +117,11 @@ function Breakdown({ rows, periodSearch }: { rows: CategorySpendRow[]; periodSea
                 search={{ ...periodSearch, category: key }}
                 className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted/50"
               >
-                <span
-                  className={cn("size-2.5 shrink-0 rounded-sm", !color && "border border-dashed border-muted-foreground")}
-                  style={color ? { background: color } : undefined}
-                />
-                <span className={cn("min-w-0 flex-1 truncate", r.categoryId === null && "italic")}>{r.name}</span>
+                <CategorySwatch color={r.color} uncategorized={r.categoryId === null} />
+                <span className={cn("min-w-0 flex-1 truncate", r.categoryId === null && "italic")}>
+                  {r.emoji && <span className="mr-1 not-italic">{r.emoji}</span>}
+                  {r.name}
+                </span>
                 <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{pct(r.share)}</span>
                 {/* A refund-negative category is good news: signed, not red. */}
                 <span className="w-20 text-right tabular-nums">{usd.format(r.spend)}</span>

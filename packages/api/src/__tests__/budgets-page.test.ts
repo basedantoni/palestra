@@ -192,7 +192,7 @@ describe("categories rename/delete", () => {
   it("renames a seeded category", async () => {
     mockDb.onSelect(category, [BUILT_IN]);
 
-    await makeCaller().categories.rename({ id: FOOD, name: "Eating out" });
+    await makeCaller().categories.update({ id: FOOD, name: "Eating out" });
 
     expect(mockDb.updated(category)).toEqual([{ set: { name: "Eating out" }, where: [FOOD, USER_ID] }]);
   });
@@ -200,7 +200,7 @@ describe("categories rename/delete", () => {
   it("renames a custom category the caller owns", async () => {
     mockDb.onSelect(category, [CUSTOM]);
 
-    await makeCaller().categories.rename({ id: FUN, name: "Bouldering" });
+    await makeCaller().categories.update({ id: FUN, name: "Bouldering" });
 
     expect(mockDb.selected(category)).toEqual([[FUN, USER_ID]]);
     expect(mockDb.updated(category)).toEqual([{ set: { name: "Bouldering" }, where: [FUN, USER_ID] }]);
@@ -216,7 +216,7 @@ describe("categories rename/delete", () => {
   });
 
   it("refuses to rename a category to Uncategorized", async () => {
-    await expect(makeCaller().categories.rename({ id: FUN, name: "Uncategorized" })).rejects.toMatchObject({
+    await expect(makeCaller().categories.update({ id: FUN, name: "Uncategorized" })).rejects.toMatchObject({
       code: "BAD_REQUEST",
     });
     expect(mockDb.updated(category)).toEqual([]);
@@ -309,5 +309,73 @@ describe("budgets.carryOverPreview", () => {
 describe("month keys", () => {
   it.each(["2026-13", "2026-00"])("rejects %s", async (monthKey) => {
     await expect(makeCaller().budgets.forMonth({ monthKey })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});
+
+describe("category color, emoji and order (KOI-336)", () => {
+  it("creates a category last, in the least-used palette color", async () => {
+    mockDb.onSelect(category, [
+      { color: "blue", sortOrder: 0 },
+      { color: "orange", sortOrder: 4 },
+      { color: null, sortOrder: 2 },
+    ]);
+
+    await makeCaller().categories.create({ name: "Golf" });
+
+    expect(mockDb.inserted(category)).toEqual([
+      expect.objectContaining({ name: "Golf", color: "aqua", sortOrder: 5, isSystem: false }),
+    ]);
+  });
+
+  it("sets a color and an emoji, and clears an emoji with null", async () => {
+    mockDb.onSelect(category, [{ id: FUN }], [{ id: FUN }]);
+
+    await makeCaller().categories.update({ id: FUN, color: "plum", emoji: "⛳" });
+    await makeCaller().categories.update({ id: FUN, emoji: null });
+
+    expect(mockDb.updated(category)).toEqual([
+      { set: { color: "plum", emoji: "⛳" }, where: [FUN, USER_ID] },
+      { set: { emoji: null }, where: [FUN, USER_ID] },
+    ]);
+  });
+
+  it.each(["teal", "#ff0000"])("rejects a color outside the palette: %s", async (color) => {
+    await expect(makeCaller().categories.update({ id: FUN, color: color as never })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+  });
+
+  it.each(["ab", "⛳⛳", "1"])("rejects an emoji that isn't a single emoji: %s", async (emoji) => {
+    await expect(makeCaller().categories.update({ id: FUN, emoji })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Pick a single emoji",
+    });
+  });
+
+  it.each(["👨‍👩‍👧", "🇺🇸", "❤️"])("accepts a single multi-codepoint emoji: %s", async (emoji) => {
+    mockDb.onSelect(category, [{ id: FUN }]);
+    await makeCaller().categories.update({ id: FUN, emoji });
+    expect(mockDb.updated(category)).toEqual([{ set: { emoji }, where: [FUN, USER_ID] }]);
+  });
+
+  it("writes the manual order", async () => {
+    mockDb.onSelect(category, [{ id: FOOD }, { id: FUN }]);
+
+    await makeCaller().categories.reorder({ ids: [FUN, FOOD] });
+
+    expect(mockDb.updated(category)).toEqual([
+      { set: { sortOrder: 0 }, where: [FUN, USER_ID] },
+      { set: { sortOrder: 1 }, where: [FOOD, USER_ID] },
+    ]);
+  });
+
+  it.each([
+    ["misses a category", [FUN]],
+    ["repeats one", [FUN, FUN]],
+  ])("rejects an order that %s", async (_, ids) => {
+    mockDb.onSelect(category, [{ id: FOOD }, { id: FUN }]);
+
+    await expect(makeCaller().categories.reorder({ ids })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mockDb.updated(category)).toEqual([]);
   });
 });

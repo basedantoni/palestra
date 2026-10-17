@@ -7,6 +7,8 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { Button } from "@/components/ui/button";
 
+import { categoryLabel } from "./category-color";
+
 type RuleRow = RouterOutputs["categoryRules"]["list"][number];
 type CategoryRow = RouterOutputs["categories"]["list"][number];
 
@@ -176,7 +178,7 @@ export function RuleForm({
           </option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {categoryLabel(c)}
             </option>
           ))}
         </select>

@@ -85,7 +85,7 @@ describe("bank_category_mapping", () => {
   it("keeps the mapping on a renamed seeded category", async () => {
     const categoryId = await seedMappedCategory();
 
-    await makeCaller().categories.rename({ id: categoryId, name: "Dining" });
+    await makeCaller().categories.update({ id: categoryId, name: "Dining" });
 
     const [renamed] = await db.select().from(category).where(eq(category.id, categoryId));
     expect(renamed!.name).toBe("Dining");
@@ -174,7 +174,7 @@ const categoryNames = async () =>
 describe("a user with categories but no mapping yet (before the backfill)", () => {
   it("doesn't re-create a renamed seeded category on sync, and maps the rest by name", async () => {
     const ids = await seedPreBackfillUser();
-    await makeCaller().categories.rename({ id: ids.get("Food & Drink")!, name: "Dining" });
+    await makeCaller().categories.update({ id: ids.get("Food & Drink")!, name: "Dining" });
 
     await syncNewFoodTransaction();
 
