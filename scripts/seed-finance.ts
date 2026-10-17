@@ -8,13 +8,14 @@
  * plus a zero-account bank linked under the other PLAID_ENV (KOI-288).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
- * transactions) and the dev user's category rules, then re-inserts the same
- * rows with the same ids. Dates are relative to today, inside the current month.
+ * transactions), the dev user's category rules and Bank Category mapping, then
+ * re-inserts the same rows with the same ids. Dates are relative to today, inside the current month.
  *
  * Run: pnpm db:seed:finance
  */
 import { db } from "@life-tracker/db";
 import {
+  bankCategoryMapping,
   category,
   categoryRule,
   financialAccount,
@@ -27,7 +28,7 @@ import { env } from "@life-tracker/env/server";
 import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
-import { SEED_CATEGORIES } from "../packages/api/src/lib/category-seed";
+import { SEED_CATEGORIES, seedBankCategoryMapping } from "../packages/api/src/lib/category-seed";
 import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
@@ -126,11 +127,15 @@ async function seedFinance() {
       .values(SEED_CATEGORIES.map((name) => ({ id: id(`category:${name}`), userId, name, isSystem: true })))
       .onConflictDoNothing();
     const categories = await tx.query.category.findMany({ where: eq(category.userId, userId) });
-    const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
+    const mapping = seedBankCategoryMapping(new Map(categories.map((c) => [c.name, c.id])));
 
     // Reset: cascades to the fixture accounts and their transactions.
     await tx.delete(plaidItem).where(inArray(plaidItem.itemId, [FIXTURE_ITEM_ID, STUCK_ITEM_ID]));
     await tx.delete(categoryRule).where(eq(categoryRule.userId, userId));
+    await tx.delete(bankCategoryMapping).where(eq(bankCategoryMapping.userId, userId));
+    await tx
+      .insert(bankCategoryMapping)
+      .values([...mapping].map(([pfcPrimary, categoryId]) => ({ userId, pfcPrimary, categoryId })));
 
     const plaidItemId = id("item");
     await tx.insert(plaidItem).values({
@@ -180,7 +185,7 @@ async function seedFinance() {
         pending: f.pending ?? false,
         flow: classifyFlow(f.pfc),
         plaidCategoryPrimary: f.pfc,
-        categoryId: f.blankManual ? null : defaultCategoryId(f.pfc, categoryIdByName),
+        categoryId: f.blankManual ? null : defaultCategoryId(f.pfc, mapping),
         categoryOverridden: f.blankManual ?? false,
         transferPairId: f.transferPair ? id(`pair:${f.transferPair}`) : null,
         isoCurrencyCode: "USD",

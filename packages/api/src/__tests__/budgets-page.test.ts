@@ -188,13 +188,13 @@ describe("categories rename/delete", () => {
   const CUSTOM = { id: FUN, isSystem: false };
   const BUILT_IN = { id: FOOD, isSystem: true };
 
-  it("refuses to rename a built-in category", async () => {
+  // The Bank Category mapping holds seeded categories by id, so they are no longer locked (KOI-335).
+  it("renames a seeded category", async () => {
     mockDb.onSelect(category, [BUILT_IN]);
 
-    await expect(makeCaller().categories.rename({ id: FOOD, name: "Eating out" })).rejects.toMatchObject({
-      code: "PRECONDITION_FAILED",
-    });
-    expect(mockDb.updated(category)).toEqual([]);
+    await makeCaller().categories.rename({ id: FOOD, name: "Eating out" });
+
+    expect(mockDb.updated(category)).toEqual([{ set: { name: "Eating out" }, where: [FOOD, USER_ID] }]);
   });
 
   it("renames a custom category the caller owns", async () => {
@@ -222,13 +222,12 @@ describe("categories rename/delete", () => {
     expect(mockDb.updated(category)).toEqual([]);
   });
 
-  it("refuses to delete a built-in category", async () => {
+  it("deletes a seeded category", async () => {
     mockDb.onSelect(category, [BUILT_IN]);
 
-    await expect(makeCaller().categories.remove({ id: FOOD })).rejects.toMatchObject({
-      code: "PRECONDITION_FAILED",
-    });
-    expect(mockDb.deleted(category)).toEqual([]);
+    await makeCaller().categories.remove({ id: FOOD });
+
+    expect(mockDb.deleted(category)).toEqual([[FOOD, USER_ID]]);
   });
 
   it("returns NOT_FOUND for a category the caller doesn't own", async () => {

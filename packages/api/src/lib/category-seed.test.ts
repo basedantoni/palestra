@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PFC_PRIMARIES, SEED_CATEGORIES, categoryNameForPfc } from "./category-seed";
+import { PFC_PRIMARIES, SEED_CATEGORIES, categoryNameForPfc, seedBankCategoryMapping } from "./category-seed";
 
 describe("categoryNameForPfc", () => {
   it("maps known Plaid PFC primaries to friendly seed names", () => {
@@ -29,5 +29,24 @@ describe("categoryNameForPfc", () => {
     expect(new Set(SEED_CATEGORIES).size).toBe(SEED_CATEGORIES.length);
     // Uncategorized means no category (glossary), never a real one (KOI-301).
     expect(SEED_CATEGORIES).not.toContain("Uncategorized");
+  });
+});
+
+describe("seedBankCategoryMapping", () => {
+  const categoryByName = new Map([
+    ["Food & Drink", "cat-food"],
+    ["Transfers", "cat-transfers"],
+  ]);
+
+  it("maps every Bank Category, by name, to the user's category of that name", () => {
+    const mapping = seedBankCategoryMapping(categoryByName);
+    expect([...mapping.keys()]).toEqual([...PFC_PRIMARIES]);
+    expect(mapping.get("FOOD_AND_DRINK")).toBe("cat-food");
+    expect(mapping.get("TRANSFER_IN")).toBe("cat-transfers");
+    expect(mapping.get("TRANSFER_OUT")).toBe("cat-transfers");
+  });
+
+  it("leaves a Bank Category unmapped when the user has no category of its name", () => {
+    expect(seedBankCategoryMapping(categoryByName).get("TRAVEL")).toBeNull();
   });
 });

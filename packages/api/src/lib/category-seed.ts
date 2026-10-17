@@ -2,8 +2,9 @@
  * Plaid Personal Finance Category (primary) → seed category mapping (KOI-107).
  *
  * Gives the finance module a non-empty starting set of user-owned categories
- * and auto-assigns each imported transaction by mapping its PFC primary. Pure;
- * the seeding routine and per-transaction assignment both call this.
+ * and the user's starting Bank Category mapping (KOI-335). Pure. Names are only
+ * used to seed: once seeded, the mapping holds categories by id, so the user
+ * can rename, delete or remap freely.
  */
 
 /** The 16 Plaid PFC primary values. */
@@ -72,4 +73,9 @@ export const SEED_CATEGORIES: string[] = [
 export function categoryNameForPfc(pfcPrimary: string | null | undefined): string | null {
   if (!pfcPrimary) return null;
   return PFC_TO_NAME[pfcPrimary] ?? null;
+}
+
+/** The starting Bank Category mapping: every PFC primary → the user's category of its seed name, else null. */
+export function seedBankCategoryMapping(categoryByName: ReadonlyMap<string, string>): Map<string, string | null> {
+  return new Map(PFC_PRIMARIES.map((pfc) => [pfc, categoryByName.get(categoryNameForPfc(pfc)!) ?? null]));
 }
