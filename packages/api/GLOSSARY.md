@@ -36,7 +36,7 @@ _Avoid_: Payment (for credit card payoffs)
 The two legs of one transfer, one outflow and one equal inflow on different accounts.
 
 **Excluded**:
-A transaction the user has removed from all totals while keeping it in the ledger.
+A transaction removed from all totals while kept in the ledger: one the user excluded by hand, or one in an Excluded Category.
 _Avoid_: Hidden, ignored
 
 **Net**:
@@ -51,21 +51,60 @@ A calendar month of the bank's posting date. All finance figures bucket by this.
 
 ### Finance — categorization
 
-**Category Rule**:
-A user-defined instruction that assigns a category to every transaction whose bank description contains a given pattern, ignoring case. When several rules match, the one with the longest pattern wins. Applies whatever the transaction's flow.
-_Avoid_: Filter, auto-category, mapping
+**Category**:
+What a piece of spend was for, named by the user. Only expense-flow transactions carry one; income and transfers never do. A category is either top-level or a Subcategory.
+_Avoid_: Type (flow covers how money moves)
+
+**Parent Category**:
+A top-level category with Subcategories under it. Its spend is its own transactions plus all its Subcategories'.
+_Avoid_: Group
+
+**Subcategory**:
+A category filed under one Parent Category, such as Golf under Entertainment. A Subcategory can't have Subcategories of its own.
+_Avoid_: Child category, tag
+
+**Excluded Category**:
+A category whose transactions are all Excluded, such as reimbursable or business spend. Excluding a Parent Category excludes its Subcategories too.
+
+**Bank Category**:
+The bank's own classification of a transaction, kept as received.
+_Avoid_: Plaid category
+
+**Rule**:
+A user-defined instruction that sets a category, a flow, or both on every transaction whose bank description matches its Pattern. It matches exactly (the whole description) or by containing the Pattern, both ignoring case and accents. An exact match beats any containing match; among containing matches, the longest Pattern wins. A rule that makes a transaction income or transfer sets no category. Saving a rule applies it to future transactions, and to existing ones unless the user chooses future only.
+_Avoid_: Category rule, filter, auto-category, mapping
 
 **Pattern**:
-The text a category rule looks for inside a transaction's bank description.
+The text a Rule compares against a transaction's bank description.
 _Avoid_: Keyword, query, match string
 
 **Manual Category**:
-A category the user chose by hand for one transaction, including choosing Uncategorized. No category rule or default category replaces it until the user resets the transaction to automatic — except that applying a matching category rule fills one left Uncategorized.
+A category the user chose by hand for one transaction, including choosing Uncategorized. No Rule or Default Category replaces it until the user resets the transaction to automatic, except that applying a matching Rule fills one left Uncategorized. Every Split's category is a Manual Category.
 _Avoid_: Override (unqualified), custom category
 
 **Default Category**:
-The category derived from the bank's own classification when a transaction first arrives. A matching category rule takes precedence over it. When the bank's classification maps to no category, there is no Default Category and the transaction is Uncategorized.
+The category the user has mapped a transaction's Bank Category to, applied when it first arrives. A matching Rule takes precedence over it. When the Bank Category is mapped to no category, there is no Default Category and the transaction is Uncategorized.
 _Avoid_: Plaid category, auto category
+
+**Split**:
+One piece of a transaction, with its own amount and category, sharing the original's date, account and flow. The Splits of a transaction sum to it exactly and replace it in every total. Only posted expense transactions outside a Transfer Pair can be split.
+_Avoid_: Child transaction, line item
+
+**Unreviewed**:
+A posted transaction the user hasn't confirmed yet. Every newly arrived posted transaction starts unreviewed, however it was categorized; marking it reviewed or editing it by hand clears that.
+_Avoid_: New, unread, pending (pending is the bank's state)
+
+### Finance — budgets
+
+**Budget**:
+A spending limit on one category for one Month, measured against that category's Budgeted Spend. A Parent Category's budget covers its Subcategories' spend too, and may contain their own budgets.
+
+**Total Budget**:
+The sum of a Month's budgets, counting a Subcategory's budget only when its Parent Category has none.
+
+**Pace**:
+A straight path from zero on a Month's first day to its Total Budget on its last; Budgeted Spend so far is over or under pace.
+_Avoid_: Perfect path, target line
 
 ### Finance — position
 
