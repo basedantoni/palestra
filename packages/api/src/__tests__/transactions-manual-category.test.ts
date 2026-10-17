@@ -171,7 +171,7 @@ describe("syncPlaidItem upsert", () => {
       },
     });
     mockDb.onSelect(financialAccount, [{ id: "fa-chk", plaidAccountId: "p_chk" }]);
-    mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+    mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" }]);
 
     await syncPlaidItem(ITEM_ID);
 

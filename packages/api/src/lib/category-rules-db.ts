@@ -6,6 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 
+import { TRPCError } from "@trpc/server";
 import { type SQL, and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
@@ -37,6 +38,25 @@ export function loadMatchableRules(conn: Conn, userId: string): Promise<Matchabl
     .where(eq(categoryRule.userId, userId));
 }
 
+/**
+ * Asserts the user owns the category, else NOT_FOUND with `message`. Seeded
+ * ones are as editable as custom ones: the Bank Category mapping holds them by
+ * id, not name (KOI-335).
+ */
+export async function ownedCategory(
+  conn: Conn,
+  userId: string,
+  id: string,
+  message = "Category not found",
+): Promise<void> {
+  const [row] = await conn
+    .select({ id: category.id })
+    .from(category)
+    .where(and(eq(category.id, id), eq(category.userId, userId)))
+    .limit(1);
+  if (!row) throw new TRPCError({ code: "NOT_FOUND", message });
+}
+
 export async function loadCategoryByName(conn: Conn, userId: string): Promise<Map<string, string>> {
   const rows = await conn
     .select({ id: category.id, name: category.name })
@@ -45,21 +65,36 @@ export async function loadCategoryByName(conn: Conn, userId: string): Promise<Ma
   return new Map(rows.map((r) => [r.name, r.id]));
 }
 
-/** The user's Bank Category mapping (KOI-335); a PFC primary with no row is unmapped. */
-export async function loadBankCategoryMapping(conn: Conn, userId: string): Promise<Map<string, string | null>> {
+/**
+ * The user's Bank Category mapping (KOI-335); a Bank Category with no row is
+ * unmapped. Every reader (sync, reset, rules, remapping) goes through here, so
+ * a user with no mapping rows gets them written first: one with categories
+ * (seeded before KOI-335) is mapped by name, keeping their categories as they
+ * are, so a seeded category they renamed or deleted is never re-created; only
+ * a user with no categories at all gets the seed categories too.
+ */
+export async function loadBankCategoryMapping(conn: Conn, userId: string): Promise<BankCategoryMapping> {
   const rows = await conn
     .select({ pfcPrimary: bankCategoryMapping.pfcPrimary, categoryId: bankCategoryMapping.categoryId })
     .from(bankCategoryMapping)
     .where(eq(bankCategoryMapping.userId, userId));
-  return new Map(rows.map((r) => [r.pfcPrimary, r.categoryId]));
+  if (rows.length > 0) return new Map(rows.map((r) => [r.pfcPrimary, r.categoryId]));
+  if ((await loadCategoryByName(conn, userId)).size === 0) {
+    await conn
+      .insert(category)
+      .values(SEED_CATEGORIES.map((name) => ({ id: randomUUID(), userId, name, isSystem: true })))
+      .onConflictDoNothing();
+  }
+  return writeSeedMapping(conn, userId);
 }
 
 /**
  * Map every Bank Category to the user's category of its seed name, keeping any
  * row that already exists (so a user's own mapping survives). Idempotent: the
- * seed and the KOI-335 backfill both use it. Returns the name-based mapping.
+ * lazy seed, the dev seed and the KOI-335 backfill all use it. Returns the
+ * name-based mapping.
  */
-export async function writeSeedMapping(conn: Conn, userId: string): Promise<Map<string, string | null>> {
+export async function writeSeedMapping(conn: Conn, userId: string): Promise<BankCategoryMapping> {
   const seeded = seedBankCategoryMapping(await loadCategoryByName(conn, userId));
   await conn
     .insert(bankCategoryMapping)
@@ -68,61 +103,43 @@ export async function writeSeedMapping(conn: Conn, userId: string): Promise<Map<
   return seeded;
 }
 
-/**
- * Seed a new user's categories and Bank Category mapping; returns the mapping.
- * Any mapping row marks the user as seeded, so a seeded category the user
- * renamed or deleted is never re-created (deleting one leaves its row, unmapped).
- */
-export async function ensureSeeded(conn: Conn, userId: string): Promise<BankCategoryMapping> {
-  const mapping = await loadBankCategoryMapping(conn, userId);
-  if (mapping.size > 0) return mapping;
-  await conn
-    .insert(category)
-    .values(SEED_CATEGORIES.map((name) => ({ id: randomUUID(), userId, name, isSystem: true })))
-    .onConflictDoNothing();
-  return writeSeedMapping(conn, userId);
-}
+/** What the pure recategorizations read of a transaction. */
+const categorizableColumns = {
+  id: transaction.id,
+  name: transaction.name,
+  plaidCategoryPrimary: transaction.plaidCategoryPrimary,
+  categoryId: transaction.categoryId,
+  categoryOverridden: transaction.categoryOverridden,
+};
 
-/** Automatic rows of one Bank Category: what remapping it may re-resolve. */
+/**
+ * The user's rows of one Bank Category, for remapping it. Manual ones included:
+ * `bankCategoryRecategorizations` skips them, and `remapMayCategorize` guards the write.
+ */
 export function loadBankCategoryTransactions(
   conn: Conn,
   userId: string,
-  pfcPrimary: string,
+  bankCategory: string,
 ): Promise<CategorizableTransaction[]> {
   return conn
-    .select({
-      id: transaction.id,
-      name: transaction.name,
-      plaidCategoryPrimary: transaction.plaidCategoryPrimary,
-      categoryId: transaction.categoryId,
-      categoryOverridden: transaction.categoryOverridden,
-    })
+    .select(categorizableColumns)
     .from(transaction)
-    .where(
-      and(
-        eq(transaction.userId, userId),
-        eq(transaction.plaidCategoryPrimary, pfcPrimary),
-        eq(transaction.categoryOverridden, false),
-      ),
-    );
+    .where(and(eq(transaction.userId, userId), eq(transaction.plaidCategoryPrimary, bankCategory)));
 }
 
 /** A rule may set these: automatic, or a blank (Uncategorized) Manual Category (ADR 0004). */
 const ruleMayCategorize = or(eq(transaction.categoryOverridden, false), isNull(transaction.categoryId));
 
-/** A remap may set only automatic rows; every Manual Category stays (KOI-335). */
+/**
+ * A remap may set only automatic rows; every Manual Category stays (KOI-335).
+ * Re-checked in the UPDATE so a hand-pick committed after the rows were read wins.
+ */
 export const remapMayCategorize = eq(transaction.categoryOverridden, false);
 
 /** The user's transactions a rule may categorize; a hand-picked real category is never loaded. */
 export function loadRuleApplicableTransactions(conn: Conn, userId: string): Promise<CategorizableTransaction[]> {
   return conn
-    .select({
-      id: transaction.id,
-      name: transaction.name,
-      plaidCategoryPrimary: transaction.plaidCategoryPrimary,
-      categoryId: transaction.categoryId,
-      categoryOverridden: transaction.categoryOverridden,
-    })
+    .select(categorizableColumns)
     .from(transaction)
     .where(and(eq(transaction.userId, userId), ruleMayCategorize));
 }

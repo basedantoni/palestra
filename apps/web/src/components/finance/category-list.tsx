@@ -123,8 +123,8 @@ export function CategoryList() {
 }
 
 /** FOOD_AND_DRINK → "Food and drink". */
-function bankCategoryLabel(pfcPrimary: string): string {
-  const words = pfcPrimary.toLowerCase().replaceAll("_", " ");
+function bankCategoryLabel(bankCategory: string): string {
+  const words = bankCategory.toLowerCase().replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
@@ -154,13 +154,13 @@ function BankCategoryMapping({ categories, onChanged }: { categories: CategoryRo
       ) : (
         <ul className="divide-y divide-border border border-border">
           {mapping.map((m) => (
-            <li key={m.pfcPrimary} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-              <label htmlFor={`bank-category-${m.pfcPrimary}`}>{bankCategoryLabel(m.pfcPrimary)}</label>
+            <li key={m.bankCategory} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <label htmlFor={`bank-category-${m.bankCategory}`}>{bankCategoryLabel(m.bankCategory)}</label>
               <select
-                id={`bank-category-${m.pfcPrimary}`}
+                id={`bank-category-${m.bankCategory}`}
                 value={m.categoryId ?? ""}
                 disabled={setMapping.isPending}
-                onChange={(e) => setMapping.mutate({ pfcPrimary: m.pfcPrimary, categoryId: e.target.value || null })}
+                onChange={(e) => setMapping.mutate({ bankCategory: m.bankCategory, categoryId: e.target.value || null })}
                 className="max-w-[55%] rounded-md border border-border bg-background px-2 py-1 text-sm"
               >
                 <option value="">Uncategorized</option>

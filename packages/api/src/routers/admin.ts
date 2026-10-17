@@ -110,10 +110,10 @@ export const adminRouter = router({
   }),
   // ---------------------------------------------------------------------------
   // Backfill: give every existing user a Bank Category mapping (KOI-335), each
-  // PFC primary → their category of its seed name, unmapped when they have
+  // Bank Category → their category of its seed name, unmapped when they have
   // none. Idempotent: existing rows (a user's own choice) are kept. Run once
-  // after the migration; until then resolution sees no mapping for that user,
-  // and their next sync would seed it the same way.
+  // after the migration; until then, the first read of a user's mapping
+  // (`loadBankCategoryMapping`) writes it the same way, lazily.
   // ---------------------------------------------------------------------------
   backfillBankCategoryMappings: adminProcedure.mutation(async () => {
     return db.transaction(async (tx) => {

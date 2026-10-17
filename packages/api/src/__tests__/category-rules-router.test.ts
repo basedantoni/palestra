@@ -425,8 +425,8 @@ describe("syncPlaidItem with Category Rules", () => {
 describe("syncPlaidItem seeding (KOI-335)", () => {
   it("seeds a new user's categories and Bank Category mapping, then resolves through it", async () => {
     syncWith(["CHIPOTLE 42"], [], false);
-    // After the seed insert, the name lookup finds the seeded categories.
-    mockDb.onSelect(category, [{ id: "cat-food", name: "Food & Drink" }]);
+    // No categories yet, so the seed inserts them; then the name lookup finds them.
+    mockDb.onSelect(category, [], [{ id: "cat-food", name: "Food & Drink" }]);
 
     await syncPlaidItem(ITEM_ID);
 
