@@ -4,8 +4,10 @@
  */
 import { addDays, subMonths } from "date-fns";
 
+import { isLiability } from "@life-tracker/shared";
+
 import { cents } from "./cash-flow";
-import { toDateString } from "./date-utils";
+import { toDateString, todayUtc } from "./date-utils";
 
 export type AccountType = "depository" | "credit" | "investment" | "loan";
 
@@ -33,8 +35,6 @@ export interface NetWorthPoint {
   partial: boolean;
 }
 
-const LIABILITY: ReadonlySet<AccountType> = new Set(["credit", "loan"]);
-
 /**
  * An account's balance with its pending transactions folded in. Plaid's
  * `current` counts only posted transactions while the transaction list shows
@@ -47,7 +47,7 @@ export function balanceWithPending(
   pending: number,
 ): number | null {
   if (current === null) return null;
-  return cents(LIABILITY.has(type) ? current + pending : current - pending);
+  return cents(isLiability(type) ? current + pending : current - pending);
 }
 
 const parseDay = (day: string) => {
@@ -105,9 +105,26 @@ export interface DayWindow {
   to: string;
 }
 
+/** A chip's window, ending today: the UTC day, as the Balance Snapshot day key is (ADR 0003). */
+export function timeframeWindow(timeframe: Timeframe, today = todayUtc()): DayWindow {
+  return { from: timeframeStart(timeframe, today), to: today };
+}
+
+/**
+ * A daily series with its `current` (last) value and `change` since the first
+ * non-partial point: a partial baseline (an account not linked yet) would read
+ * as a gain. Null `change` when every point is partial.
+ */
+function series<P extends { partial: boolean }>(points: P[], value: (p: P) => number) {
+  const base = points.find((p) => !p.partial);
+  const last = points.at(-1);
+  const current = last ? value(last) : null;
+  return { points, current, change: base && current !== null ? cents(current - value(base)) : null };
+}
+
 /**
  * Daily Net Worth over `window`: one point per day, no downsampling. `change`
- * is current minus the window's first point, null when that point is partial.
+ * is current minus the first non-partial point (see `series`).
  */
 export function netWorthHistory(
   accounts: NetWorthAccount[],
@@ -130,7 +147,7 @@ export function netWorthHistory(
     for (const a of tracked) {
       const snap = balanceAsOf(history.get(a.id)!, day);
       if (!snap) partial = true;
-      else if (LIABILITY.has(a.type)) liabilities += snap.balance;
+      else if (isLiability(a.type)) liabilities += snap.balance;
       else assets += snap.balance;
     }
     return { netWorth: cents(assets - liabilities), assets: cents(assets), liabilities: cents(liabilities), partial };
@@ -144,29 +161,24 @@ export function netWorthHistory(
     points.push({ date: toDateString(d), ...at(toDateString(d)) });
   }
 
-  // A partial baseline (an account not linked yet) gives no change, not a fake gain.
-  const base = points[0];
-  const current = points.at(-1)?.netWorth ?? null;
-  const change = base && !base.partial && current !== null ? cents(current - base.netWorth) : null;
-  return { points, current, change };
+  return series(points, (p) => p.netWorth);
 }
 
 /**
  * One account's daily balance over `window`, as its Balance Snapshots report it
- * (a credit/loan balance is the positive amount owed). `change` is measured
- * from the window's first point.
+ * (a credit/loan balance is the positive amount owed), with `change` by the
+ * same rule as Net Worth.
  */
 export function accountBalanceHistory(
   account: NetWorthAccount,
   snapshots: NetWorthSnapshot[],
   window: DayWindow,
-): { points: Array<{ date: string; balance: number }>; current: number | null; change: number | null } {
-  const owed = LIABILITY.has(account.type);
+): { points: Array<{ date: string; balance: number; partial: boolean }>; current: number | null; change: number | null } {
+  const owed = isLiability(account.type);
   const points = netWorthHistory([account], snapshots, window).points.map((p) => ({
     date: p.date,
     balance: owed ? p.liabilities : p.assets,
+    partial: p.partial,
   }));
-  const first = points[0]?.balance;
-  const current = points.at(-1)?.balance ?? null;
-  return { points, current, change: first === undefined || current === null ? null : cents(current - first) };
+  return series(points, (p) => p.balance);
 }

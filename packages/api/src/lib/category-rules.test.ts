@@ -13,7 +13,7 @@ import {
   withCandidateRule,
 } from "./category-rules";
 
-// The user's Bank Category mapping: PFC primary → category id, or null when
+// The user's Bank Category mapping: Bank Category → category id, or null when
 // the user left it unmapped (Uncategorized).
 const mapping = new Map<string, string | null>([
   ["FOOD_AND_DRINK", "cat-food"],

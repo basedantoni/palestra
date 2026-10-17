@@ -8,23 +8,8 @@ import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
+import { ownedCategory } from "../lib/category-rules-db";
 import { UNCATEGORIZED } from "../lib/category-spend";
-
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
-/**
- * Asserts the user owns the category. Seeded ones are as editable as custom
- * ones: the Bank Category mapping holds them by id, not name (KOI-335).
- */
-async function ownedCategory(conn: Db | Tx, userId: string, id: string): Promise<void> {
-  const [row] = await conn
-    .select({ id: category.id })
-    .from(category)
-    .where(and(eq(category.id, id), eq(category.userId, userId)))
-    .limit(1);
-  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Category not found" });
-}
 
 const categoryName = z.string().trim().min(1).max(60);
 
@@ -101,15 +86,10 @@ export const categoriesRouter = router({
       await db.transaction(async (tx) => {
         await ownedCategory(tx, userId, input.id);
         if (input.moveToCategoryId) {
-          const [target] = await tx
-            .select({ id: category.id })
-            .from(category)
-            .where(and(eq(category.id, input.moveToCategoryId), eq(category.userId, userId)))
-            .limit(1);
-          if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Target category not found" });
+          await ownedCategory(tx, userId, input.moveToCategoryId, "Target category not found");
           await tx
             .update(transaction)
-            .set({ categoryId: target.id })
+            .set({ categoryId: input.moveToCategoryId })
             .where(and(eq(transaction.userId, userId), eq(transaction.categoryId, input.id)));
         }
         await tx.delete(category).where(and(eq(category.id, input.id), eq(category.userId, userId)));

@@ -7,7 +7,7 @@
  *  - `classifyFlow` sets income/expense/transfer
  *  - `resolveCategory` assigns a new transaction's category: the matching
  *    Category Rule, else the Default Category from the Bank Category mapping
- *    (seeded with the categories on a new user's first sync)
+ *    (written on first read by `loadBankCategoryMapping`)
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
  * Accounts the app has no row for (opened after linking, or shared during a
@@ -46,7 +46,7 @@ import {
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
 import { resolveCategory } from "./category-rules";
-import { ensureSeeded, loadMatchableRules } from "./category-rules-db";
+import { loadBankCategoryMapping, loadMatchableRules } from "./category-rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -128,7 +128,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
     console.error(`[plaid] balance capture failed for plaid_item ${plaidItemId}:`, err);
   }
 
-  const mapping = await ensureSeeded(db, userId);
+  const mapping = await loadBankCategoryMapping(db, userId);
   const rules = await loadMatchableRules(db, userId);
 
   // Transaction upserts — fold in flow classification + category resolution.

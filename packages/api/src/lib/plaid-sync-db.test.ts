@@ -14,7 +14,7 @@ vi.mock("./plaid-client", () => ({
 }));
 vi.mock("./plaid-balance-db", () => ({ persistAccountBalances: vi.fn() }));
 vi.mock("./category-rules-db", () => ({
-  ensureSeeded: vi.fn(async () => new Map()),
+  loadBankCategoryMapping: vi.fn(async () => new Map()),
   loadMatchableRules: vi.fn(),
 }));
 

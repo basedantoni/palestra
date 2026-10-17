@@ -6,11 +6,10 @@ import { trpc } from "@/utils/trpc";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { BalanceLineChart, type Timeframe, TimeframeChips } from "./balance-line";
-import { isNegativeUsd, signedUsd } from "./currency-tooltip";
+import { isLiability } from "@life-tracker/shared";
 
-/** Cents, matching the accounts list rows. */
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+import { BalanceLineChart, type Timeframe, TimeframeChips } from "./balance-line";
+import { isNegativeUsd, signedUsd, usd } from "./currency-tooltip";
 
 export interface AccountSummary {
   id: string;
@@ -18,8 +17,6 @@ export interface AccountSummary {
   type: string;
   mask: string | null;
 }
-
-const isLiability = (type: string) => type === "credit" || type === "loan";
 
 /** An account's daily balance line with the timeframe chips and a change chip. */
 export function AccountDetailSheet({ account, onClose }: { account: AccountSummary | null; onClose: () => void }) {
