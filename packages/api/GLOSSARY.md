@@ -137,7 +137,7 @@ A site where many sellers list Printings and which reports its own prices for th
 _Avoid_: Source, feed, shop, store
 
 **Market Price**:
-A Marketplace's own aggregate price for one Printing in one Condition on one day, in the currency the Marketplace reports. Not a seller's price: an Offer can sit well above or below it.
+One Marketplace's price for one Printing in one Condition on one day, in the currency the Marketplace reports: its own aggregate where it publishes one, otherwise its lowest ask that day. Not a seller's price: an Offer can sit well above or below it.
 _Avoid_: Price, market value, quote
 
 **Price History**:
