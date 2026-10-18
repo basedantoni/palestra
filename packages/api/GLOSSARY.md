@@ -137,8 +137,16 @@ A site where many sellers list Printings and which reports its own prices for th
 _Avoid_: Source, feed, shop, store
 
 **Market Price**:
-One Marketplace's price for one Printing in one Condition on one day, in the currency the Marketplace reports: its own aggregate where it publishes one, otherwise its lowest ask that day. Not a seller's price: an Offer can sit well above or below it.
+One Marketplace's price for one Printing in one Condition on one day, in the currency the Marketplace reports: its own aggregate where it publishes one, otherwise its lowest Listing that day. Not a seller's price: an Offer can sit well above or below it.
 _Avoid_: Price, market value, quote
+
+**Marketplace Product**:
+A Marketplace's own identity for something it sells, such as a TCGplayer product or a CardTrader blueprint. It is of at most one Artwork; one Artwork can have several (a reprint, an errata or a promo stamp of the same art). One with no Artwork gets no Market Price.
+_Avoid_: Blueprint, SKU, product
+
+**Listing**:
+One seller's ask for a Marketplace Product in one language and Condition. Graded, signed and altered Listings never count.
+_Avoid_: Offer, ask, sale
 
 **Price History**:
 The daily Market Prices of one Printing from one Marketplace over time. Never blended across Marketplaces.
