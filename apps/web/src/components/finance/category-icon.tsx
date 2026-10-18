@@ -47,7 +47,9 @@ import {
 import type { CategoryIcon } from "@life-tracker/shared";
 import { cn } from "@/lib/utils";
 
-import { CategorySwatch, categoryColor } from "./category-color";
+/** The CSS color of a category's palette token (KOI-336); a category with none is neutral. */
+export const categoryColor = (token: string | null) =>
+  token ? `var(--chart-cat-${token})` : "var(--chart-cat-other)";
 
 /** Every picker icon's component; named imports, so only these 42 are bundled. */
 export const CATEGORY_ICON_COMPONENTS: Record<CategoryIcon, LucideIcon> = {
@@ -110,7 +112,11 @@ export function CategoryMark({
   if (!Icon) {
     return (
       <span className={cn("flex size-4 shrink-0 items-center justify-center", className)}>
-        <CategorySwatch color={category?.color ?? null} uncategorized={!category} />
+        <span
+          aria-hidden
+          className={cn("size-2.5 shrink-0 rounded-sm", !category && "border border-dashed border-muted-foreground")}
+          style={category ? { background: categoryColor(category.color) } : undefined}
+        />
       </span>
     );
   }

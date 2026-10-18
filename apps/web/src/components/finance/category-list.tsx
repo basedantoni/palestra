@@ -16,8 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { categoryColor } from "./category-color";
-import { CATEGORY_ICON_COMPONENTS, CategoryMark } from "./category-icon";
+import { CATEGORY_ICON_COMPONENTS, CategoryMark, categoryColor } from "./category-icon";
 import { CategoryPicker } from "./category-picker";
 
 type CategoryRow = RouterOutputs["categories"]["list"][number];

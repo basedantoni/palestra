@@ -8,8 +8,7 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/utils/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { categoryColor } from "./category-color";
-import { CategoryMark } from "./category-icon";
+import { CategoryMark, categoryColor } from "./category-icon";
 import { CurrencyTooltip, usd } from "./currency-tooltip";
 import { TransactionPeriodPicker } from "./transaction-period-picker";
 

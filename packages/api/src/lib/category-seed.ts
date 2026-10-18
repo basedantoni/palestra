@@ -73,7 +73,6 @@ export const SEED_CATEGORIES: string[] = [
  * KOI-336 migration backfilled existing users with the same colors.
  */
 export function seedCategoryColor(name: string): CategoryColor | null {
-  if (name === "Income" || name === "Transfers") return null;
   return CATEGORY_COLORS[SEED_CATEGORIES.indexOf(name) - 2] ?? null;
 }
 
