@@ -1,7 +1,10 @@
 # Over-engineering review on request: ask `palestra-bot` to review a PR and it
 # posts a ponytail-review (prompt: .github/ponytail-review.md) via OpenRouter.
-# Setup: machine user `palestra-bot` as repo collaborator; secrets BOT_PAT
-# (its token, pull requests write) and OPENROUTER_API_KEY. Swap MODEL freely.
+# Setup: machine user `palestra-bot` as repo collaborator; secret BOT_PAT (its
+# token, pull requests write). OpenRouter auth is keyless: the job's GitHub OIDC
+# token is exchanged under an OpenRouter workload identity policy with issuer
+# https://token.actions.githubusercontent.com, audience `openrouter`, subject
+# `repo:basedantoni/palestra:pull_request`. Swap MODEL freely.
 name: ponytail-review
 
 on:
@@ -14,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,10 +27,20 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.BOT_PAT }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_POLICY_ID: 00000000-0000-0000-0000-000000000000 # TODO: federation policy UUID
           MODEL: anthropic/claude-sonnet-5.5
           PR: ${{ github.event.pull_request.number }}
         run: |
+          github_jwt=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=openrouter" | jq -er .value)
+          OPENROUTER_API_KEY=$(curl -sS https://openrouter.ai/api/v1/oauth/token \
+            --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+            --data-urlencode "subject_token=$github_jwt" \
+            --data-urlencode "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
+            --data-urlencode "federation_policy_id=$OPENROUTER_POLICY_ID" \
+            | jq -er '.access_token // error("OpenRouter exchange: \(.error_description)")')
+          echo "::add-mask::$OPENROUTER_API_KEY"
+
           gh pr diff "$PR" > pr.diff
           # ponytail: diff capped at 200k chars, chunk per file if big PRs get truncated
           jq -n --rawfile skill .github/ponytail-review.md --rawfile diff pr.diff --arg model "$MODEL" \
