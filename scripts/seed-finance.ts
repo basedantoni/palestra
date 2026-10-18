@@ -5,7 +5,9 @@
  * onboarding done, and resets a "Fixture Bank" Plaid item with accounts and
  * transactions covering the awkward cases: repeated merchants, blank Manual
  * Category rows, pending rows, a transfer pair, and an unknown Bank Category,
- * plus a zero-account bank linked under the other PLAID_ENV (KOI-288).
+ * plus a zero-account bank linked under the other PLAID_ENV (KOI-288), and a
+ * Parent Category with a Subcategory (Golf under Entertainment), both budgeted
+ * this month (KOI-337).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
  * transactions), the dev user's category rules and Bank Category mapping, then
@@ -16,6 +18,7 @@
 import { db } from "@life-tracker/db";
 import {
   bankCategoryMapping,
+  budget,
   category,
   categoryRule,
   financialAccount,
@@ -29,7 +32,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
 import { SEED_CATEGORIES, seedCategoryColor, seedCategoryIcon } from "../packages/api/src/lib/category-seed";
-import { writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
+import { loadCategoryByName, writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
 import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
@@ -55,6 +58,8 @@ type Fixture = {
   pending?: boolean;
   /** Manual Category with no category picked (categoryOverridden, categoryId null). */
   blankManual?: boolean;
+  /** Manual Category picked by hand: a Subcategory the Bank Category can't map to. */
+  manualCategory?: "Golf";
   transferPair?: string;
 };
 
@@ -80,7 +85,12 @@ const FIXTURES: Fixture[] = [
   { key: "paycheck", account: "checking", amount: -2400, daysAgo: 7, name: "ACME CORP PAYROLL", pfc: "INCOME" },
   { key: "rent", account: "checking", amount: 1650, daysAgo: 8, name: "ZELLE TO LANDLORD", pfc: "RENT_AND_UTILITIES" },
   { key: "netflix", account: "credit", amount: 15.49, daysAgo: 9, name: "NETFLIX.COM", merchantName: "Netflix", pfc: "ENTERTAINMENT" },
+  // A Subcategory's spend, rolled into its parent's (Entertainment) budget.
+  { key: "topgolf", account: "credit", amount: 85, daysAgo: 5, name: "TOPGOLF AUSTIN", merchantName: "Topgolf", pfc: "ENTERTAINMENT", manualCategory: "Golf" },
 ];
+
+/** This month's limits on the Parent Category and its Subcategory. */
+const BUDGETS = { Entertainment: 150, Golf: 100 };
 
 const ACCOUNTS = [
   { key: "checking", name: "Fixture Checking", mask: "1094", type: "depository", subtype: "checking", balance: 3210.55 },
@@ -144,6 +154,21 @@ async function seedFinance() {
     await tx.delete(bankCategoryMapping).where(eq(bankCategoryMapping.userId, userId));
     const mapping = await writeSeedMapping(tx, userId);
 
+    // Golf under Entertainment: a Subcategory stores no color.
+    const entertainmentId = (await loadCategoryByName(tx, userId)).get("Entertainment")!;
+    await tx
+      .insert(category)
+      .values({ id: id("category:Golf"), userId, name: "Golf", parentId: entertainmentId, sortOrder: SEED_CATEGORIES.length })
+      .onConflictDoUpdate({ target: [category.userId, category.name], set: { parentId: entertainmentId, color: null } });
+    const categoryByName = await loadCategoryByName(tx, userId);
+    const monthKey = fixtureDate(0).toISOString().slice(0, 7);
+    for (const [name, limitAmount] of Object.entries(BUDGETS)) {
+      await tx
+        .insert(budget)
+        .values({ id: id(`budget:${name}:${monthKey}`), userId, categoryId: categoryByName.get(name)!, monthKey, limitAmount })
+        .onConflictDoUpdate({ target: [budget.userId, budget.categoryId, budget.monthKey], set: { limitAmount } });
+    }
+
     const plaidItemId = id("item");
     await tx.insert(plaidItem).values({
       id: plaidItemId,
@@ -192,8 +217,12 @@ async function seedFinance() {
         pending: f.pending ?? false,
         flow: classifyFlow(f.pfc),
         plaidCategoryPrimary: f.pfc,
-        categoryId: f.blankManual ? null : defaultCategoryId(f.pfc, mapping),
-        categoryOverridden: f.blankManual ?? false,
+        categoryId: f.manualCategory
+          ? categoryByName.get(f.manualCategory)!
+          : f.blankManual
+            ? null
+            : defaultCategoryId(f.pfc, mapping),
+        categoryOverridden: !!(f.blankManual || f.manualCategory),
         transferPairId: f.transferPair ? id(`pair:${f.transferPair}`) : null,
         isoCurrencyCode: "USD",
       })),

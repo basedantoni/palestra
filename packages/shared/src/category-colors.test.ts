@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { CATEGORY_COLORS, nextCategoryColor, subcategoryTint, TINT_CAP } from "./category-colors";
+import { CATEGORY_COLORS, categoryTree, nextCategoryColor, subcategoryTint, TINT_CAP } from "./category-colors";
 
 // The palette's hexes and the card surface, per mode, read from the web stylesheet.
 const css = readFileSync(new URL("../../../apps/web/src/index.css", import.meta.url), "utf8");
@@ -84,5 +84,40 @@ describe("nextCategoryColor", () => {
   it("takes the least-used token, earliest on a tie, ignoring uncolored rows", () => {
     expect(nextCategoryColor(["blue", "orange", null])).toBe("aqua");
     expect(nextCategoryColor([...CATEGORY_COLORS, "blue"])).toBe("orange");
+  });
+});
+
+const cat = (id: string, parentId: string | null, color: string | null = null) => ({ id, parentId, color });
+
+describe("categoryTree", () => {
+  it("puts each Subcategory under its parent, keeping the manual order at each level", () => {
+    const tree = categoryTree([
+      cat("golf", "fun"),
+      cat("food", null, "orange"),
+      cat("fun", null, "blue"),
+      cat("movies", "fun"),
+      cat("groceries", "food"),
+    ]);
+
+    expect(tree.map((c) => c.id)).toEqual(["food", "groceries", "fun", "golf", "movies"]);
+  });
+
+  it("colors a Subcategory with its parent's token, tinted by its place among siblings", () => {
+    const tree = categoryTree([cat("fun", null, "blue"), cat("golf", "fun"), cat("movies", "fun")]);
+
+    expect(tree).toEqual([
+      { id: "fun", parentId: null, color: "blue", tint: null },
+      { id: "golf", parentId: "fun", color: "blue", tint: 24 },
+      { id: "movies", parentId: "fun", color: "blue", tint: 39 },
+    ]);
+  });
+
+  it("leaves a Subcategory of an uncolored parent neutral", () => {
+    expect(categoryTree([cat("fun", null), cat("golf", "fun")])[1]).toEqual({
+      id: "golf",
+      parentId: "fun",
+      color: null,
+      tint: null,
+    });
   });
 });

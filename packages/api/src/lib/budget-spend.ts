@@ -41,13 +41,57 @@ export function spendByCategory(transactions: SpendTransaction[], monthKey: stri
   return spent;
 }
 
-/** One category's spend for each of `monthKeys`, in order (0 when none). */
-export function spendHistory(transactions: SpendTransaction[], categoryId: string, monthKeys: string[]): number[] {
+/**
+ * The spend of `categoryIds` together for each of `monthKeys`, in order (0
+ * when none): one category, or a Parent Category and its Subcategories.
+ */
+export function spendHistory(transactions: SpendTransaction[], categoryIds: string[], monthKeys: string[]): number[] {
+  const ids = new Set(categoryIds);
   const byMonth = new Map<string, number>();
   for (const t of transactions) {
-    if (!isBudgetSpend(t) || t.categoryId !== categoryId) continue;
+    if (!isBudgetSpend(t) || !ids.has(t.categoryId)) continue;
     const month = calendarMonthOf(t.date);
     byMonth.set(month, (byMonth.get(month) ?? 0) + t.amount);
   }
   return monthKeys.map((m) => byMonth.get(m) ?? 0);
+}
+
+/** Where a category sits in the two-level tree: top level (parentId null) or a Subcategory. */
+export interface CategoryNode {
+  id: string;
+  parentId: string | null;
+}
+
+/**
+ * Per-category spend with each Parent Category's rolled up: its own spend plus
+ * all its Subcategories'. Subcategories keep their own.
+ */
+export function rollUpSpend(spent: Map<string, number>, categories: CategoryNode[]): Map<string, number> {
+  const rolled = new Map(spent);
+  for (const c of categories) {
+    const own = spent.get(c.id);
+    if (c.parentId && own !== undefined) rolled.set(c.parentId, (rolled.get(c.parentId) ?? 0) + own);
+  }
+  return rolled;
+}
+
+/**
+ * A Month's Total Budget and the Budgeted Spend it covers: every top-level
+ * budget, plus a Subcategory's only when its parent has none that month, so
+ * no limit or spend counts twice. `spent` is each budget's rolled-up spend.
+ */
+export function totalBudget(
+  budgets: Array<{ categoryId: string; limitAmount: number; spent: number }>,
+  categories: CategoryNode[],
+): { limitAmount: number; spent: number } {
+  const parentOf = new Map(categories.map((c) => [c.id, c.parentId]));
+  const budgeted = new Set(budgets.map((b) => b.categoryId));
+  const counted = budgets.filter((b) => {
+    const parentId = parentOf.get(b.categoryId);
+    return !parentId || !budgeted.has(parentId);
+  });
+  return {
+    limitAmount: counted.reduce((sum, b) => sum + b.limitAmount, 0),
+    spent: counted.reduce((sum, b) => sum + b.spent, 0),
+  };
 }

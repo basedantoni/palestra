@@ -1,8 +1,9 @@
-/** Budget Spend query pieces (month key input, transaction columns, month date bounds), shared by the budgets and TCG fund routers. */
-import { gte, lt, type SQL } from "drizzle-orm";
+/** Budget Spend query pieces (month key input, transaction columns, month date bounds, category tree), shared by the budgets and TCG fund routers. */
+import { and, eq, gte, lt, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
-import { transaction } from "@life-tracker/db/schema/index";
+import { db } from "@life-tracker/db";
+import { category, transaction } from "@life-tracker/db/schema/index";
 import { addMonths, MONTH_KEY_REGEX } from "@life-tracker/shared";
 
 export const monthKeySchema = z.string().regex(MONTH_KEY_REGEX, "monthKey must be YYYY-MM");
@@ -25,4 +26,13 @@ export function monthRange(fromMonth: string, toMonth: string): SQL[] {
     gte(transaction.date, new Date(`${fromMonth}-01T00:00:00.000Z`)),
     lt(transaction.date, new Date(`${addMonths(toMonth, 1)}-01T00:00:00.000Z`)),
   ];
+}
+
+/** The user's category and its Subcategories' ids: what its rolled-up Budgeted Spend covers. */
+export async function categoryTreeIds(userId: string, categoryId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: category.id })
+    .from(category)
+    .where(and(eq(category.userId, userId), or(eq(category.id, categoryId), eq(category.parentId, categoryId))));
+  return rows.map((r) => r.id);
 }

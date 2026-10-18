@@ -11,7 +11,7 @@ export function BudgetGrid() {
   const { data, isLoading } = useQuery(trpc.budgets.forMonth.queryOptions({ monthKey }));
 
   if (isLoading) return <div className="text-muted-foreground">Loading budgets…</div>;
-  const rows = (data ?? []).filter((r) => r.limit !== null);
+  const rows = (data?.categories ?? []).filter((r) => r.limit !== null);
   if (rows.length === 0) {
     return <div className="text-muted-foreground">No budgets set for this month.</div>;
   }

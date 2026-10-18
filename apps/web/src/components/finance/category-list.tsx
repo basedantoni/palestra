@@ -24,8 +24,10 @@ type CategoryRow = RouterOutputs["categories"]["list"][number];
 /**
  * Categories tab on the budgets page (KOI-287): every category, in its manual
  * order, with its color, icon and transaction count; any category, seeded or
- * custom, can be recolored, renamed, moved up or down, or deleted (optionally
- * moving its transactions). Below, the Bank Category mapping (KOI-335).
+ * custom, can be recolored, renamed, moved up or down among its siblings,
+ * filed under a parent (KOI-337), or deleted (optionally moving its
+ * transactions). Subcategories sit indented under their parent in a tint of
+ * its color. Below, the Bank Category mapping (KOI-335).
  */
 export function CategoryList() {
   const queryClient = useQueryClient();
@@ -52,72 +54,105 @@ export function CategoryList() {
   const create = useMutation(trpc.categories.create.mutationOptions({ onSuccess: () => (setNewName(""), refresh()) }));
   const update = useMutation(trpc.categories.update.mutationOptions({ onSettled: () => setRenaming(null), onSuccess: refresh }));
   const reorder = useMutation(trpc.categories.reorder.mutationOptions({ onSettled: refresh }));
-  const move = (from: number, to: number) => {
+  // Swapping two siblings in the tree-ordered list swaps their sortOrders and
+  // leaves every other category's place among its own siblings unchanged.
+  const swap = (a: number, b: number) => {
     const ids = categories!.map((c) => c.id);
-    ids.splice(to, 0, ...ids.splice(from, 1));
+    [ids[a], ids[b]] = [ids[b]!, ids[a]!];
     reorder.mutate({ ids });
   };
 
   if (!categories) return <div className="text-muted-foreground">Loading categories…</div>;
 
+  const topLevel = categories.filter((c) => !c.parentId);
+  const hasSubcategories = (id: string) => categories.some((c) => c.parentId === id);
+  const siblingIndexes = (c: CategoryRow) =>
+    categories.flatMap((s, i) => (s.parentId === c.parentId ? [i] : []));
+
   return (
     <div className="space-y-3">
       <ul className="divide-y divide-border border border-border">
-        {categories.map((c, i) => (
-          <li key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-            <ColorPicker category={c} onPick={(color) => update.mutate({ id: c.id, color })} />
-            <IconPicker category={c} onPick={(icon) => update.mutate({ id: c.id, icon })} />
-            {renaming === c.id ? (
-              <input
-                autoFocus
-                aria-label={`New name for ${c.name}`}
-                defaultValue={c.name}
-                maxLength={60}
-                onBlur={(e) => {
-                  const name = e.target.value.trim();
-                  if (name && name !== c.name) update.mutate({ id: c.id, name });
-                  else setRenaming(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  if (e.key === "Escape") setRenaming(null);
-                }}
-                className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5"
-              />
-            ) : (
-              <span className="min-w-0 flex-1 truncate">{c.name}</span>
-            )}
-            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              <span className="mr-1">
-                {c.transactionCount} {c.transactionCount === 1 ? "txn" : "txns"}
+        {categories.map((c, i) => {
+          const siblings = siblingIndexes(c);
+          const prev = siblings[siblings.indexOf(i) - 1];
+          const next = siblings[siblings.indexOf(i) + 1];
+          return (
+            <li key={c.id} className={cn("flex items-center gap-2 px-3 py-2 text-sm", c.parentId && "ps-9")}>
+              {c.parentId ? (
+                <span
+                  role="img"
+                  aria-label={`Color for ${c.name}: a tint of its parent's`}
+                  className="size-5 shrink-0 rounded-md"
+                  style={{ background: categoryColor(c.color, c.tint) }}
+                />
+              ) : (
+                <ColorPicker category={c} onPick={(color) => update.mutate({ id: c.id, color })} />
+              )}
+              <IconPicker category={c} onPick={(icon) => update.mutate({ id: c.id, icon })} />
+              {renaming === c.id ? (
+                <input
+                  autoFocus
+                  aria-label={`New name for ${c.name}`}
+                  defaultValue={c.name}
+                  maxLength={60}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== c.name) update.mutate({ id: c.id, name });
+                    else setRenaming(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") setRenaming(null);
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5"
+                />
+              ) : (
+                <span className="min-w-0 flex-1 truncate">{c.name}</span>
+              )}
+              <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                {!hasSubcategories(c.id) && (
+                  <CategoryPicker
+                    aria-label={`Parent of ${c.name}`}
+                    size="xs"
+                    categories={topLevel.filter((p) => p.id !== c.id)}
+                    value={c.parentId ?? ""}
+                    disabled={update.isPending}
+                    onChange={(parentId) => update.mutate({ id: c.id, parentId: parentId || null })}
+                    extras={[{ value: "", label: "No parent" }]}
+                    className="w-28"
+                  />
+                )}
+                <span className="mx-1">
+                  {c.transactionCount} {c.transactionCount === 1 ? "txn" : "txns"}
+                </span>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  disabled={prev === undefined || reorder.isPending}
+                  onClick={() => swap(i, prev!)}
+                  aria-label={`Move ${c.name} up`}
+                >
+                  <ArrowUp />
+                </Button>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  disabled={next === undefined || reorder.isPending}
+                  onClick={() => swap(i, next!)}
+                  aria-label={`Move ${c.name} down`}
+                >
+                  <ArrowDown />
+                </Button>
+                <Button size="icon-xs" variant="ghost" onClick={() => setRenaming(c.id)} aria-label={`Rename ${c.name}`}>
+                  <Pencil />
+                </Button>
+                <Button size="icon-xs" variant="ghost" onClick={() => setDeleting(c)} aria-label={`Delete ${c.name}`}>
+                  <Trash2 />
+                </Button>
               </span>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                disabled={i === 0 || reorder.isPending}
-                onClick={() => move(i, i - 1)}
-                aria-label={`Move ${c.name} up`}
-              >
-                <ArrowUp />
-              </Button>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                disabled={i === categories.length - 1 || reorder.isPending}
-                onClick={() => move(i, i + 1)}
-                aria-label={`Move ${c.name} down`}
-              >
-                <ArrowDown />
-              </Button>
-              <Button size="icon-xs" variant="ghost" onClick={() => setRenaming(c.id)} aria-label={`Rename ${c.name}`}>
-                <Pencil />
-              </Button>
-              <Button size="icon-xs" variant="ghost" onClick={() => setDeleting(c)} aria-label={`Delete ${c.name}`}>
-                <Trash2 />
-              </Button>
-            </span>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
       {update.error && <p className="text-xs text-destructive">{update.error.message}</p>}
       {reorder.error && <p className="text-xs text-destructive">{reorder.error.message}</p>}
@@ -148,6 +183,7 @@ export function CategoryList() {
       {deleting && (
         <DeleteCategoryDialog
           category={deleting}
+          subcategoryCount={categories.filter((c) => c.parentId === deleting.id).length}
           others={categories.filter((c) => c.id !== deleting.id)}
           onClose={() => setDeleting(null)}
           onDeleted={refresh}
@@ -245,7 +281,7 @@ function IconPicker({ category, onPick }: { category: CategoryRow; onPick: (icon
                   "flex size-8 items-center justify-center rounded-md hover:bg-muted",
                   selected && "bg-muted ring-2 ring-ring",
                 )}
-                style={{ color: categoryColor(category.color) }}
+                style={{ color: categoryColor(category.color, category.tint) }}
               >
                 <Icon aria-hidden className="size-4" />
               </button>
@@ -316,11 +352,13 @@ function BankCategoryMapping({ categories, onChanged }: { categories: CategoryRo
 
 function DeleteCategoryDialog({
   category,
+  subcategoryCount,
   others,
   onClose,
   onDeleted,
 }: {
   category: CategoryRow;
+  subcategoryCount: number;
   others: CategoryRow[];
   onClose: () => void;
   onDeleted: () => void;
@@ -342,6 +380,8 @@ function DeleteCategoryDialog({
           <DialogDescription>
             {category.transactionCount} {category.transactionCount === 1 ? "transaction uses" : "transactions use"} it, and
             its budgets will be removed.
+            {subcategoryCount > 0 &&
+              ` Its ${subcategoryCount === 1 ? "Subcategory moves" : `${subcategoryCount} Subcategories move`} to the top level in its color.`}
           </DialogDescription>
         </DialogHeader>
         {category.transactionCount > 0 && (

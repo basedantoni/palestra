@@ -1,5 +1,16 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
@@ -11,6 +22,10 @@ import { user } from "./auth";
  * an enum, so the palette can change without a migration; null renders neutral.
  * `icon` is likewise a lucide icon name from `CATEGORY_ICONS`.
  * Lists order by `sortOrder`, then name.
+ *
+ * `parentId` files a Subcategory under a Parent Category (KOI-337). The tree is
+ * two levels deep, enforced by `categories.update`, not the database; a
+ * Subcategory stores no color (it renders as a tint of its parent's).
  */
 export const category = pgTable(
   "category",
@@ -20,6 +35,7 @@ export const category = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    parentId: uuid("parent_id").references((): AnyPgColumn => category.id, { onDelete: "set null" }),
     isSystem: boolean("is_system").default(false).notNull(),
     color: text("color"),
     icon: text("icon"),
@@ -32,6 +48,7 @@ export const category = pgTable(
   },
   (table) => [
     index("category_userId_idx").on(table.userId),
+    index("category_parentId_idx").on(table.parentId),
     uniqueIndex("category_userId_name_unique_idx").on(table.userId, table.name),
   ],
 );

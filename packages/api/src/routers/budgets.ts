@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq, gte, lt, lte, max } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { budget, category, transaction } from "@life-tracker/db/schema/index";
-import { addMonths, todayInTimeZone } from "@life-tracker/shared";
+import { addMonths, categoryTree, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { spendByCategory, spendHistory } from "../lib/budget-spend";
-import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
+import { rollUpSpend, spendByCategory, spendHistory, totalBudget } from "../lib/budget-spend";
+import { categoryTreeIds, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { getUserTimezone } from "../lib/user-timezone";
 
 /**
@@ -45,15 +45,23 @@ async function carryOverSource(
 
 export const budgetsRouter = router({
   /**
-   * Every category for a month with its limit (null = not budgeted) and spend
-   * (non-excluded expenses, by the bank's calendar month).
+   * Every category for a month, as its tree (each parent followed by its
+   * Subcategories, KOI-337), with its limit (null = not budgeted) and spend
+   * (non-excluded expenses, by the bank's calendar month; a parent's includes
+   * its Subcategories'), plus the month's Total Budget and the spend it covers.
    */
   forMonth: protectedProcedure
     .input(z.object({ monthKey: monthKeySchema }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const categories = await db
-        .select({ id: category.id, name: category.name, color: category.color, icon: category.icon })
+        .select({
+          id: category.id,
+          name: category.name,
+          parentId: category.parentId,
+          color: category.color,
+          icon: category.icon,
+        })
         .from(category)
         .where(eq(category.userId, userId))
         .orderBy(category.sortOrder, category.name);
@@ -66,24 +74,34 @@ export const budgetsRouter = router({
         .from(transaction)
         .where(and(eq(transaction.userId, userId), ...monthRange(input.monthKey, input.monthKey)));
 
-      const spent = spendByCategory(txns, input.monthKey);
+      const spent = rollUpSpend(spendByCategory(txns, input.monthKey), categories);
       const limitById = new Map(limits.map((l) => [l.categoryId, l.limitAmount]));
-      return categories.map((c) => {
+      const rows = categoryTree(categories).map((c) => {
         const limit = limitById.get(c.id) ?? null;
         const categorySpent = spent.get(c.id) ?? 0;
         return {
           categoryId: c.id,
           categoryName: c.name,
+          parentId: c.parentId,
           color: c.color,
+          tint: c.tint,
           icon: c.icon,
           limit,
           spent: categorySpent,
           overspent: limit !== null && categorySpent > limit,
         };
       });
+      const total = totalBudget(
+        limits.map((l) => ({ ...l, spent: spent.get(l.categoryId) ?? 0 })),
+        categories,
+      );
+      return { categories: rows, total };
     }),
 
-  /** One category's spend and limit for the `months` months ending at `monthKey`. */
+  /**
+   * One category's spend (a parent's including its Subcategories') and limit
+   * for the `months` months ending at `monthKey`.
+   */
   history: protectedProcedure
     .input(
       z.object({
@@ -109,18 +127,19 @@ export const budgetsRouter = router({
             lte(budget.monthKey, input.monthKey),
           ),
         );
+      const categoryIds = await categoryTreeIds(userId, input.categoryId);
       const txns = await db
         .select(spendColumns)
         .from(transaction)
         .where(
           and(
             eq(transaction.userId, userId),
-            eq(transaction.categoryId, input.categoryId),
+            inArray(transaction.categoryId, categoryIds),
             ...monthRange(first, input.monthKey),
           ),
         );
 
-      const spent = spendHistory(txns, input.categoryId, monthKeys);
+      const spent = spendHistory(txns, categoryIds, monthKeys);
       const limitByMonth = new Map(limits.map((l) => [l.monthKey, l.limitAmount]));
       return monthKeys.map((monthKey, i) => ({
         monthKey,

@@ -154,12 +154,13 @@ describe("budgets.forMonth", () => {
     mockDb.onSelect(budget, [{ categoryId: FOOD, limitAmount: 100 }]);
     mockDb.onSelect(transaction, [spendRow(FOOD, 130, "2026-10-03"), spendRow(FUN, 25, "2026-10-04")]);
 
-    const rows = await makeCaller().budgets.forMonth({ monthKey: "2026-10" });
+    const { categories, total } = await makeCaller().budgets.forMonth({ monthKey: "2026-10" });
 
-    expect(rows).toEqual([
-      { categoryId: FOOD, categoryName: "Food & Drink", limit: 100, spent: 130, overspent: true },
-      { categoryId: FUN, categoryName: "Climbing", limit: null, spent: 25, overspent: false },
+    expect(categories).toEqual([
+      { categoryId: FOOD, categoryName: "Food & Drink", tint: null, limit: 100, spent: 130, overspent: true },
+      { categoryId: FUN, categoryName: "Climbing", tint: null, limit: null, spent: 25, overspent: false },
     ]);
+    expect(total).toEqual({ limitAmount: 100, spent: 130 });
     expect(mockDb.selected(transaction)).toEqual([
       [USER_ID, "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"],
     ]);
@@ -168,6 +169,7 @@ describe("budgets.forMonth", () => {
 
 describe("budgets.history", () => {
   it("returns spend and limit for the category over the months ending at monthKey", async () => {
+    mockDb.onSelect(category, [{ id: FOOD }]); // the category with its Subcategories (none)
     mockDb.onSelect(budget, [{ monthKey: "2026-09", limitAmount: 100 }]);
     mockDb.onSelect(transaction, [spendRow(FOOD, 40, "2026-08-10"), spendRow(FOOD, 120, "2026-09-02")]);
 
