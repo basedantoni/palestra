@@ -5,7 +5,7 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-import { CategorySwatch } from "./category-color";
+import { CategoryMark } from "./category-icon";
 import { monthLabel } from "./month-label";
 
 type BudgetRow = RouterOutputs["budgets"]["forMonth"][number];
@@ -122,11 +122,8 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
             }`}
           >
             <div className="flex items-center gap-2 text-sm font-medium">
-              <CategorySwatch color={r.color} />
-              <span className="truncate">
-                {r.emoji && <span className="mr-1">{r.emoji}</span>}
-                {r.categoryName}
-              </span>
+              <CategoryMark category={r} />
+              <span className="truncate">{r.categoryName}</span>
             </div>
             {r.limit !== null ? (
               <>

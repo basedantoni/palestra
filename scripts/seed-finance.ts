@@ -28,7 +28,7 @@ import { env } from "@life-tracker/env/server";
 import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
-import { SEED_CATEGORIES, seedCategoryColor } from "../packages/api/src/lib/category-seed";
+import { SEED_CATEGORIES, seedCategoryColor, seedCategoryIcon } from "../packages/api/src/lib/category-seed";
 import { writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
 import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
@@ -132,6 +132,7 @@ async function seedFinance() {
           name,
           isSystem: true,
           color: seedCategoryColor(name),
+          icon: seedCategoryIcon(name),
           sortOrder,
         })),
       )

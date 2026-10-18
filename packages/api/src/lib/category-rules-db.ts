@@ -20,7 +20,7 @@ import {
   type Recategorization,
   ruleRecategorizations,
 } from "./category-rules";
-import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor } from "./category-seed";
+import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -89,6 +89,7 @@ export async function loadBankCategoryMapping(conn: Conn, userId: string): Promi
           name,
           isSystem: true,
           color: seedCategoryColor(name),
+          icon: seedCategoryIcon(name),
           sortOrder,
         })),
       )

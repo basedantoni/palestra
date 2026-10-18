@@ -1,5 +1,5 @@
 {
-  "id": "8fad195f-f9b8-4029-a6a8-71c945b1a95a",
+  "id": "52906e1c-92a8-4695-ace5-1efe119b611e",
   "prevId": "601ee882-b4c1-4d83-aba6-4667da0fa32f",
   "version": "7",
   "dialect": "postgresql",
@@ -814,8 +814,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "emoji": {
-          "name": "emoji",
+        "icon": {
+          "name": "icon",
           "type": "text",
           "primaryKey": false,
           "notNull": false

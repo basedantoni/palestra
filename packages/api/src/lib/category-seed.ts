@@ -1,4 +1,4 @@
-import { CATEGORY_COLORS, type CategoryColor } from "@life-tracker/shared";
+import { CATEGORY_COLORS, type CategoryColor, type CategoryIcon } from "@life-tracker/shared";
 
 /**
  * Bank Category → seed category mapping (KOI-107).
@@ -75,6 +75,29 @@ export const SEED_CATEGORIES: string[] = [
 export function seedCategoryColor(name: string): CategoryColor | null {
   if (name === "Income" || name === "Transfers") return null;
   return CATEGORY_COLORS[SEED_CATEGORIES.indexOf(name) - 2] ?? null;
+}
+
+/** Each seed's icon (KOI-336); the KOI-336 migration backfilled existing users with the same. */
+const SEED_ICONS: Record<string, CategoryIcon> = {
+  Income: "banknote",
+  Transfers: "arrow-left-right",
+  "Food & Drink": "utensils",
+  Shopping: "shopping-bag",
+  Transportation: "car",
+  "Rent & Utilities": "house",
+  Home: "hammer",
+  Entertainment: "film",
+  Travel: "plane",
+  Medical: "heart-pulse",
+  "Personal Care": "scissors",
+  Services: "wrench",
+  "Loan Payments": "hand-coins",
+  "Bank Fees": "receipt",
+  "Government & Non-Profit": "landmark",
+};
+
+export function seedCategoryIcon(name: string): CategoryIcon | null {
+  return SEED_ICONS[name] ?? null;
 }
 
 /**

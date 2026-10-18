@@ -6,16 +6,13 @@ import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
-import { CATEGORY_COLORS, nextCategoryColor } from "@life-tracker/shared";
+import { CATEGORY_COLORS, CATEGORY_ICONS, nextCategoryColor } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
 import { ownedCategory } from "../lib/category-rules-db";
 import { UNCATEGORIZED } from "../lib/category-spend";
 
 const categoryName = z.string().trim().min(1).max(60);
-
-/** A category's emoji, or null to clear it; `assertSingleEmoji` checks it. */
-const categoryEmoji = z.string().trim().min(1).max(32).nullable();
 
 /**
  * "Uncategorized" means no category, so a real category of that name would
@@ -31,14 +28,6 @@ function assertNameNotReserved(name: string): void {
   }
 }
 
-/** One emoji: a single grapheme that is a pictograph or a flag. A TRPCError, like the reserved-name check. */
-function assertSingleEmoji(emoji: string): void {
-  const graphemes = [...new Intl.Segmenter().segment(emoji)].length;
-  if (graphemes !== 1 || !/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(emoji)) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Pick a single emoji" });
-  }
-}
-
 export const categoriesRouter = router({
   /** The user's categories in their manual order, with how many transactions each holds. */
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -47,7 +36,7 @@ export const categoriesRouter = router({
         id: category.id,
         name: category.name,
         color: category.color,
-        emoji: category.emoji,
+        icon: category.icon,
         isSystem: category.isSystem,
         transactionCount: sql<number>`count(${transaction.id})::int`,
       })
@@ -83,20 +72,19 @@ export const categoriesRouter = router({
       return { id };
     }),
 
-  /** Rename, recolor, or set or clear the emoji of any owned category, seeded or custom. */
+  /** Rename, recolor, or set or clear the icon of any owned category, seeded or custom. */
   update: protectedProcedure
     .input(
       z.object({
         id: z.string().uuid(),
         name: categoryName.optional(),
         color: z.enum(CATEGORY_COLORS).optional(),
-        emoji: categoryEmoji.optional(),
+        icon: z.enum(CATEGORY_ICONS).nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       if (changes.name !== undefined) assertNameNotReserved(changes.name);
-      if (changes.emoji) assertSingleEmoji(changes.emoji);
       const userId = ctx.session.user.id;
       await ownedCategory(db, userId, id);
       if (Object.values(changes).every((v) => v === undefined)) return { ok: true };

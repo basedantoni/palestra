@@ -312,7 +312,7 @@ describe("month keys", () => {
   });
 });
 
-describe("category color, emoji and order (KOI-336)", () => {
+describe("category color, icon and order (KOI-336)", () => {
   it("creates a category last, in the least-used palette color", async () => {
     mockDb.onSelect(category, [
       { color: "blue", sortOrder: 0 },
@@ -327,15 +327,15 @@ describe("category color, emoji and order (KOI-336)", () => {
     ]);
   });
 
-  it("sets a color and an emoji, and clears an emoji with null", async () => {
+  it("sets a color and an icon, and clears an icon with null", async () => {
     mockDb.onSelect(category, [{ id: FUN }], [{ id: FUN }]);
 
-    await makeCaller().categories.update({ id: FUN, color: "plum", emoji: "⛳" });
-    await makeCaller().categories.update({ id: FUN, emoji: null });
+    await makeCaller().categories.update({ id: FUN, color: "plum", icon: "dumbbell" });
+    await makeCaller().categories.update({ id: FUN, icon: null });
 
     expect(mockDb.updated(category)).toEqual([
-      { set: { color: "plum", emoji: "⛳" }, where: [FUN, USER_ID] },
-      { set: { emoji: null }, where: [FUN, USER_ID] },
+      { set: { color: "plum", icon: "dumbbell" }, where: [FUN, USER_ID] },
+      { set: { icon: null }, where: [FUN, USER_ID] },
     ]);
   });
 
@@ -345,17 +345,11 @@ describe("category color, emoji and order (KOI-336)", () => {
     });
   });
 
-  it.each(["ab", "⛳⛳", "1"])("rejects an emoji that isn't a single emoji: %s", async (emoji) => {
-    await expect(makeCaller().categories.update({ id: FUN, emoji })).rejects.toMatchObject({
+  it.each(["rocket", "⛳"])("rejects an icon outside the picker's set: %s", async (icon) => {
+    await expect(makeCaller().categories.update({ id: FUN, icon: icon as never })).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Pick a single emoji",
     });
-  });
-
-  it.each(["👨‍👩‍👧", "🇺🇸", "❤️"])("accepts a single multi-codepoint emoji: %s", async (emoji) => {
-    mockDb.onSelect(category, [{ id: FUN }]);
-    await makeCaller().categories.update({ id: FUN, emoji });
-    expect(mockDb.updated(category)).toEqual([{ set: { emoji }, where: [FUN, USER_ID] }]);
+    expect(mockDb.updated(category)).toEqual([]);
   });
 
   it("writes the manual order", async () => {

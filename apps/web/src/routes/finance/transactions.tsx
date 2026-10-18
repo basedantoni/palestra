@@ -6,7 +6,7 @@ import { periodToSearch, searchToPeriod, transactionPeriodSearchSchema } from "@
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc } from "@/utils/trpc";
-import { categoryLabel } from "@/components/finance/category-color";
+import { CategoryPicker } from "@/components/finance/category-picker";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { TransactionPeriodPicker } from "@/components/finance/transaction-period-picker";
 
@@ -92,19 +92,18 @@ function TransactionsPage() {
             </button>
           );
         })}
-        <select
+        <CategoryPicker
+          size="xs"
+          aria-label="Filter by category"
+          className="ml-auto"
+          categories={categories}
           value={search.category ?? ""}
-          onChange={(e) => update({ category: e.target.value || undefined })}
-          className="ml-auto rounded-md border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option value="">All categories</option>
-          <option value={UNCATEGORIZED}>Uncategorized</option>
-          {(categories ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {categoryLabel(c)}
-            </option>
-          ))}
-        </select>
+          onChange={(category) => update({ category: category || undefined })}
+          extras={[
+            { value: "", label: "All categories" },
+            { value: UNCATEGORIZED, label: "Uncategorized", uncategorized: true },
+          ]}
+        />
       </div>
       <TransactionFeed filters={filters} />
     </div>

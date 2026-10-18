@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Check, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { CATEGORY_COLORS } from "@life-tracker/shared";
+import { CATEGORY_COLORS, CATEGORY_ICONS, type CategoryIcon } from "@life-tracker/shared";
+import { cn } from "@/lib/utils";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -15,13 +16,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { categoryColor, categoryLabel } from "./category-color";
+import { categoryColor } from "./category-color";
+import { CATEGORY_ICON_COMPONENTS, CategoryMark } from "./category-icon";
+import { CategoryPicker } from "./category-picker";
 
 type CategoryRow = RouterOutputs["categories"]["list"][number];
 
 /**
  * Categories tab on the budgets page (KOI-287): every category, in its manual
- * order, with its color, emoji and transaction count; any category, seeded or
+ * order, with its color, icon and transaction count; any category, seeded or
  * custom, can be recolored, renamed, moved up or down, or deleted (optionally
  * moving its transactions). Below, the Bank Category mapping (KOI-335).
  */
@@ -64,7 +67,7 @@ export function CategoryList() {
         {categories.map((c, i) => (
           <li key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm">
             <ColorPicker category={c} onPick={(color) => update.mutate({ id: c.id, color })} />
-            <EmojiInput category={c} onSave={(emoji, revert) => update.mutate({ id: c.id, emoji }, { onError: revert })} />
+            <IconPicker category={c} onPick={(icon) => update.mutate({ id: c.id, icon })} />
             {renaming === c.id ? (
               <input
                 autoFocus
@@ -196,31 +199,67 @@ function ColorPicker({ category, onPick }: { category: CategoryRow; onPick: (col
   );
 }
 
-/** A one-emoji field; saves on blur, clearing it removes the emoji, and a rejected one reverts. */
-function EmojiInput({
-  category,
-  onSave,
-}: {
-  category: CategoryRow;
-  onSave: (emoji: string | null, revert: () => void) => void;
-}) {
+/** "gamepad-2" → "gamepad 2": a readable name for an icon button. */
+const iconLabel = (icon: string) => icon.replaceAll("-", " ");
+
+/**
+ * A category's icon, in its color, opening the 7 × 6 grid of `CATEGORY_ICONS`
+ * to pick another; "No icon" clears it. With none, the trigger is a dashed plus.
+ */
+function IconPicker({ category, onPick }: { category: CategoryRow; onPick: (icon: CategoryIcon | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const pick = (icon: CategoryIcon | null) => {
+    if (icon !== category.icon) onPick(icon);
+    setOpen(false);
+  };
   return (
-    <input
-      // Remount when the saved emoji changes, so the field shows it.
-      key={category.emoji ?? ""}
-      defaultValue={category.emoji ?? ""}
-      placeholder="＋"
-      aria-label={`Emoji for ${category.name}`}
-      onBlur={(e) => {
-        const input = e.target;
-        const emoji = input.value.trim() || null;
-        if (emoji !== category.emoji) onSave(emoji, () => (input.value = category.emoji ?? ""));
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-      className="w-8 shrink-0 rounded-md border border-transparent bg-transparent text-center hover:border-border focus:border-border"
-    />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Icon for ${category.name}: ${category.icon ? iconLabel(category.icon) : "none"}`}
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted",
+              !category.icon && "border border-dashed border-border text-muted-foreground",
+            )}
+          />
+        }
+      >
+        {category.icon ? <CategoryMark category={category} /> : <Plus aria-hidden className="size-3.5" />}
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="start">
+        <div role="radiogroup" aria-label={`Icon for ${category.name}`} className="grid grid-cols-7 gap-1">
+          {CATEGORY_ICONS.map((icon) => {
+            const Icon = CATEGORY_ICON_COMPONENTS[icon];
+            const selected = category.icon === icon;
+            return (
+              <button
+                key={icon}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={iconLabel(icon)}
+                title={iconLabel(icon)}
+                onClick={() => pick(icon)}
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-md hover:bg-muted",
+                  selected && "bg-muted ring-2 ring-ring",
+                )}
+                style={{ color: categoryColor(category.color) }}
+              >
+                <Icon aria-hidden className="size-4" />
+              </button>
+            );
+          })}
+        </div>
+        {category.icon && (
+          <Button size="xs" variant="ghost" className="mt-2 w-full" onClick={() => pick(null)}>
+            No icon
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -258,20 +297,15 @@ function BankCategoryMapping({ categories, onChanged }: { categories: CategoryRo
           {mapping.map((m) => (
             <li key={m.bankCategory} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
               <label htmlFor={`bank-category-${m.bankCategory}`}>{bankCategoryLabel(m.bankCategory)}</label>
-              <select
+              <CategoryPicker
                 id={`bank-category-${m.bankCategory}`}
+                categories={categories}
                 value={m.categoryId ?? ""}
                 disabled={setMapping.isPending}
-                onChange={(e) => setMapping.mutate({ bankCategory: m.bankCategory, categoryId: e.target.value || null })}
-                className="max-w-[55%] rounded-md border border-border bg-background px-2 py-1 text-sm"
-              >
-                <option value="">Uncategorized</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {categoryLabel(c)}
-                  </option>
-                ))}
-              </select>
+                onChange={(categoryId) => setMapping.mutate({ bankCategory: m.bankCategory, categoryId: categoryId || null })}
+                extras={[{ value: "", label: "Uncategorized", uncategorized: true }]}
+                className="max-w-[55%]"
+              />
             </li>
           ))}
         </ul>
@@ -314,18 +348,13 @@ function DeleteCategoryDialog({
         {category.transactionCount > 0 && (
           <label className="space-y-1 text-xs">
             <span className="text-muted-foreground">Move its transactions to</span>
-            <select
+            <CategoryPicker
+              categories={others}
               value={moveTo}
-              onChange={(e) => setMoveTo(e.target.value)}
-              className="block w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
-            >
-              <option value="">Uncategorized</option>
-              {others.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {categoryLabel(c)}
-                </option>
-              ))}
-            </select>
+              onChange={setMoveTo}
+              extras={[{ value: "", label: "Uncategorized", uncategorized: true }]}
+              className="w-full"
+            />
           </label>
         )}
         {remove.error && <p className="text-xs text-destructive">{remove.error.message}</p>}

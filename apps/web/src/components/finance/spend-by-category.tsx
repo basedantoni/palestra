@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/utils/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { categoryColor, CategorySwatch } from "./category-color";
+import { categoryColor } from "./category-color";
+import { CategoryMark } from "./category-icon";
 import { CurrencyTooltip, usd } from "./currency-tooltip";
 import { TransactionPeriodPicker } from "./transaction-period-picker";
 
@@ -117,11 +118,8 @@ function Breakdown({ rows, periodSearch }: { rows: CategorySpendRow[]; periodSea
                 search={{ ...periodSearch, category: key }}
                 className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted/50"
               >
-                <CategorySwatch color={r.color} uncategorized={r.categoryId === null} />
-                <span className={cn("min-w-0 flex-1 truncate", r.categoryId === null && "italic")}>
-                  {r.emoji && <span className="mr-1 not-italic">{r.emoji}</span>}
-                  {r.name}
-                </span>
+                <CategoryMark category={r.categoryId === null ? null : r} />
+                <span className={cn("min-w-0 flex-1 truncate", r.categoryId === null && "italic")}>{r.name}</span>
                 <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{pct(r.share)}</span>
                 {/* A refund-negative category is good news: signed, not red. */}
                 <span className="w-20 text-right tabular-nums">{usd.format(r.spend)}</span>

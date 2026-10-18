@@ -9,7 +9,7 @@ export interface CategorySpendTransaction extends CashFlowTransaction {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
-  categoryEmoji: string | null;
+  categoryIcon: string | null;
 }
 
 export interface CategorySpendRow {
@@ -18,7 +18,8 @@ export interface CategorySpendRow {
   name: string;
   /** Palette token; null for Uncategorized or an uncolored category. */
   color: string | null;
-  emoji: string | null;
+  /** Lucide icon name (`CATEGORY_ICONS`); null for none. */
+  icon: string | null;
   /** Net of refunds, so it can be negative. */
   spend: number;
   /** Fraction of the positive categories' total Spend (negative for a net-refund row); null when there is none. */
@@ -44,7 +45,7 @@ export function categorySpend(
     const row = byCategory.get(t.categoryId) ?? {
       name: t.categoryName ?? UNCATEGORIZED,
       color: t.categoryColor,
-      emoji: t.categoryEmoji,
+      icon: t.categoryIcon,
       spend: 0,
     };
     row.spend += t.amount;

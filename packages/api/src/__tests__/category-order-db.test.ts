@@ -1,13 +1,13 @@
 /**
  * Category color and order against a real Postgres (PGlite, KOI-336).
  *
- * - the KOI-336 migration backfill gives seeded categories the seed order and
- *   colors (the same as a new user's seed), and custom ones the places after
- *   them, by name, in palette order
+ * - the KOI-336 migration backfill gives seeded categories the seed order,
+ *   colors and icons (the same as a new user's seed), and custom ones the
+ *   places after them, by name, in palette order, with no icon
  * - `categories.list` returns the manual order after a reorder
  */
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +19,7 @@ import { MIGRATIONS_DIR } from "@life-tracker/db/migrations-dir";
 import { category, user } from "@life-tracker/db/schema/index";
 import { asc, eq, sql } from "drizzle-orm";
 
-import { SEED_CATEGORIES, seedCategoryColor } from "../lib/category-seed";
+import { SEED_CATEGORIES, seedCategoryColor, seedCategoryIcon } from "../lib/category-seed";
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
 
@@ -27,7 +27,7 @@ const USER = "user-pglite-category-order";
 const makeCaller = () => appRouter.createCaller({ session: { user: { id: USER } } } as any);
 
 /** The migration's last statement, the backfill. It recomputes every row, so it can be re-run here. */
-const backfill = readFileSync(join(MIGRATIONS_DIR, "0040_tranquil_wild_pack.sql"), "utf8")
+const backfill = readFileSync(join(MIGRATIONS_DIR, readdirSync(MIGRATIONS_DIR).find((f) => f.startsWith("0040_"))!), "utf8")
   .split("--> statement-breakpoint")
   .at(-1)!;
 
@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 const ordered = () =>
   db
-    .select({ name: category.name, color: category.color, sortOrder: category.sortOrder })
+    .select({ name: category.name, color: category.color, icon: category.icon, sortOrder: category.sortOrder })
     .from(category)
     .where(eq(category.userId, USER))
     .orderBy(asc(category.sortOrder));
@@ -55,9 +55,14 @@ describe("KOI-336 backfill", () => {
     await db.execute(sql.raw(backfill));
 
     expect(await ordered()).toEqual([
-      ...SEED_CATEGORIES.map((name, sortOrder) => ({ name, color: seedCategoryColor(name), sortOrder })),
-      { name: "Climbing", color: "blue", sortOrder: SEED_CATEGORIES.length },
-      { name: "Golf", color: "orange", sortOrder: SEED_CATEGORIES.length + 1 },
+      ...SEED_CATEGORIES.map((name, sortOrder) => ({
+        name,
+        color: seedCategoryColor(name),
+        icon: seedCategoryIcon(name),
+        sortOrder,
+      })),
+      { name: "Climbing", color: "blue", icon: null, sortOrder: SEED_CATEGORIES.length },
+      { name: "Golf", color: "orange", icon: null, sortOrder: SEED_CATEGORIES.length + 1 },
     ]);
   });
 
@@ -66,7 +71,7 @@ describe("KOI-336 backfill", () => {
 
     await db.execute(sql.raw(backfill));
 
-    expect(await ordered()).toEqual([{ name: "Travel", color: "blue", sortOrder: 0 }]);
+    expect(await ordered()).toEqual([{ name: "Travel", color: "blue", icon: null, sortOrder: 0 }]);
   });
 });
 

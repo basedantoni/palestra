@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
-import { categoryLabel } from "./category-color";
+import { CategoryPicker } from "./category-picker";
 import { RuleForm } from "./category-rule-list";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -272,19 +272,14 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
       <div className="flex flex-wrap items-center gap-3">
         <FlowPicker txn={txn} />
         {txn.flow !== "transfer" && (
-          <select
+          <CategoryPicker
+            size="xs"
             aria-label="Category"
+            categories={categories}
             value={txn.categoryId ?? ""}
-            onChange={(e) => setCategory.mutate({ id: txn.id, categoryId: e.target.value || null })}
-            className="rounded-md border border-border bg-background px-1.5 py-0.5 text-xs"
-          >
-            <option value="">Uncategorized</option>
-            {(categories ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {categoryLabel(c)}
-              </option>
-            ))}
-          </select>
+            onChange={(categoryId) => setCategory.mutate({ id: txn.id, categoryId: categoryId || null })}
+            extras={[{ value: "", label: "Uncategorized", uncategorized: true }]}
+          />
         )}
         {txn.categoryOverridden && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">

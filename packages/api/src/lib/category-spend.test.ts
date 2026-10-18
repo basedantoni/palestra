@@ -19,7 +19,7 @@ const tx = (
   categoryId: category?.[0] ?? null,
   categoryName: category?.[1] ?? null,
   categoryColor: category?.[2] ?? null,
-  categoryEmoji: null,
+  categoryIcon: null,
 });
 
 const groceries: [string, string, string] = ["c-groc", "Groceries", "aqua"];
@@ -45,9 +45,9 @@ describe("categorySpend", () => {
       june,
     );
     expect(rows).toEqual([
-      { categoryId: "c-groc", name: "Groceries", color: "aqua", emoji: null, spend: 150, share: 0.5 },
-      { categoryId: null, name: "Uncategorized", color: null, emoji: null, spend: 100, share: 1 / 3 },
-      { categoryId: "c-dine", name: "Dining", color: null, emoji: null, spend: 50, share: 1 / 6 },
+      { categoryId: "c-groc", name: "Groceries", color: "aqua", icon: null, spend: 150, share: 0.5 },
+      { categoryId: null, name: "Uncategorized", color: null, icon: null, spend: 100, share: 1 / 3 },
+      { categoryId: "c-dine", name: "Dining", color: null, icon: null, spend: 50, share: 1 / 6 },
     ]);
   });
 
@@ -72,7 +72,7 @@ describe("categorySpend", () => {
 
   it("has no share when no category has positive spend", () => {
     expect(categorySpend([tx("2026-06-09", -90, shopping)], june)).toEqual([
-      { categoryId: "c-shop", name: "Shopping", color: null, emoji: null, spend: -90, share: null },
+      { categoryId: "c-shop", name: "Shopping", color: null, icon: null, spend: -90, share: null },
     ]);
   });
 
@@ -141,7 +141,7 @@ const row = (name: string, spend: number, categoryId: string | null = `c-${name}
   categoryId,
   name,
   color: null,
-  emoji: null,
+  icon: null,
   spend,
   share: null,
 });
