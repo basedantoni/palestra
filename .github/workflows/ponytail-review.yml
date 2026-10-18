@@ -1,0 +1,40 @@
+# Over-engineering review on request: ask `palestra-bot` to review a PR and it
+# posts a ponytail-review (prompt: .github/ponytail-review.md) via OpenRouter.
+# Setup: machine user `palestra-bot` as repo collaborator; secrets BOT_PAT
+# (its token, pull requests write) and OPENROUTER_API_KEY. Swap MODEL freely.
+name: ponytail-review
+
+on:
+  pull_request:
+    types: [review_requested]
+
+jobs:
+  review:
+    if: github.event.requested_reviewer.login == 'palestra-bot'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Review diff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BOT_PAT }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MODEL: anthropic/claude-opus-5.5
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr diff "$PR" > pr.diff
+          # ponytail: diff capped at 200k chars, chunk per file if big PRs get truncated
+          jq -n --rawfile skill .github/ponytail-review.md --rawfile diff pr.diff --arg model "$MODEL" \
+            '{model: $model, reasoning: {effort: "high"}, max_tokens: 32000, messages: [
+              {role: "system", content: $skill},
+              {role: "user", content: ("Review this diff:\n\n" + $diff[:200000])}]}' \
+          | curl -sSf https://openrouter.ai/api/v1/chat/completions \
+              -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+              -H "Content-Type: application/json" -d @- \
+          | jq -er '.choices[0].message.content | select(length > 0)' > review.md
+          gh pr review "$PR" --comment -F review.md
