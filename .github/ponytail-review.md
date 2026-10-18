@@ -1,15 +1,4 @@
-<!-- Vendored from github.com/DietrichGebert/ponytail v4.10.0 skills/ponytail-review/SKILL.md (MIT). Prompt for .github/workflows/ponytail-review.yml. -->
----
-name: ponytail-review
-description: >
-  Code review focused exclusively on over-engineering. Finds what to delete:
-  reinvented standard library, unneeded dependencies, speculative abstractions,
-  dead flexibility. One line per finding: location, what to cut, what replaces
-  it. Use when the user says "review for over-engineering", "what can we
-  delete", "is this over-engineered", "simplify review", or invokes
-  /ponytail-review. Complements correctness-focused review, this one only
-  hunts complexity.
----
+<!-- Vendored from github.com/DietrichGebert/ponytail v4.10.0 skills/ponytail-review/SKILL.md (MIT), minus frontmatter and interactive toggle. Prompt for .github/workflows/ponytail-review.yml. -->
 
 Review diffs for unnecessary complexity. One line per finding: location, what
 to cut, what replaces it. The diff's best outcome is getting shorter.
@@ -55,4 +44,3 @@ and performance are explicitly out of scope. Route them to a normal review
 pass, not this one. A single smoke test or `assert`-based
 self-check is the ponytail minimum, not bloat, never flag it for deletion.
 Does not apply the fixes, only lists them.
-"stop ponytail-review" or "normal mode": revert to verbose review style.
