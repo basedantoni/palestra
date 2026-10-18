@@ -1,12 +1,16 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
 /**
  * User-owned spending category. Seeded from the Bank Categories on first connect
  * (`category-seed.ts`), and freely extendable, renamable and deletable by the
- * user. `isSystem` only records which rows were seeded.
+ * user. `isSystem` only records which rows were seeded. `color` is a palette
+ * token (`CATEGORY_COLORS` in @life-tracker/shared), checked by the router, not
+ * an enum, so the palette can change without a migration; null renders neutral.
+ * `icon` is likewise a lucide icon name from `CATEGORY_ICONS`.
+ * Lists order by `sortOrder`, then name.
  */
 export const category = pgTable(
   "category",
@@ -17,6 +21,9 @@ export const category = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     isSystem: boolean("is_system").default(false).notNull(),
+    color: text("color"),
+    icon: text("icon"),
+    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

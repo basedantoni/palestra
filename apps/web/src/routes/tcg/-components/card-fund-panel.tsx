@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { CategoryPicker } from "@/components/finance/category-picker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useFinanceToday } from "@/hooks/use-finance-today";
@@ -88,16 +89,13 @@ function FundSettingsDialog({ settings, onClose }: { settings: Settings | null; 
         >
           <label className="block space-y-1 text-xs">
             <span className="text-muted-foreground">Cards category</span>
-            <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={field}>
-              <option value="" disabled>
-                Choose a category
-              </option>
-              {categories?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <CategoryPicker
+              categories={categories}
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Choose a category"
+              className="w-full"
+            />
           </label>
           <label className="block space-y-1 text-xs">
             <span className="text-muted-foreground">Start month</span>
@@ -114,7 +112,7 @@ function FundSettingsDialog({ settings, onClose }: { settings: Settings | null; 
             <Button type="button" variant="outline" onClick={onClose} disabled={save.isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={save.isPending}>
+            <Button type="submit" disabled={!categoryId || save.isPending}>
               {save.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

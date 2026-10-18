@@ -53,10 +53,10 @@ export const budgetsRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const categories = await db
-        .select({ id: category.id, name: category.name })
+        .select({ id: category.id, name: category.name, color: category.color, icon: category.icon })
         .from(category)
         .where(eq(category.userId, userId))
-        .orderBy(category.name);
+        .orderBy(category.sortOrder, category.name);
       const limits = await db
         .select({ categoryId: budget.categoryId, limitAmount: budget.limitAmount })
         .from(budget)
@@ -74,6 +74,8 @@ export const budgetsRouter = router({
         return {
           categoryId: c.id,
           categoryName: c.name,
+          color: c.color,
+          icon: c.icon,
           limit,
           spent: categorySpent,
           overspent: limit !== null && categorySpent > limit,

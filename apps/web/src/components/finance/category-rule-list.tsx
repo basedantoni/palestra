@@ -7,6 +7,8 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { Button } from "@/components/ui/button";
 
+import { CategoryPicker } from "./category-picker";
+
 type RuleRow = RouterOutputs["categoryRules"]["list"][number];
 type CategoryRow = RouterOutputs["categories"]["list"][number];
 
@@ -165,21 +167,7 @@ export function RuleForm({
           aria-describedby={errorId}
           className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
         />
-        <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          aria-label="Category"
-          className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-        >
-          <option value="" disabled>
-            Category
-          </option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <CategoryPicker aria-label="Category" categories={categories} value={categoryId} onChange={setCategoryId} />
         <Button size="sm" type="submit" disabled={!pattern.trim() || !categoryId || save.isPending}>
           {editing ? "Save" : "Add"}
         </Button>

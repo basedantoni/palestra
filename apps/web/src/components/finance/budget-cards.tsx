@@ -5,6 +5,7 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
+import { CategoryMark } from "./category-icon";
 import { monthLabel } from "./month-label";
 
 type BudgetRow = RouterOutputs["budgets"]["forMonth"][number];
@@ -120,7 +121,10 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
               r.limit === null ? "border-dashed border-border" : r.overspent ? "border-destructive/50" : "border-border"
             }`}
           >
-            <div className="text-sm font-medium">{r.categoryName}</div>
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <CategoryMark category={r} />
+              <span className="truncate">{r.categoryName}</span>
+            </div>
             {r.limit !== null ? (
               <>
                 <SpendBar spent={r.spent} limit={r.limit} />

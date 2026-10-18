@@ -20,7 +20,7 @@ import {
   type Recategorization,
   ruleRecategorizations,
 } from "./category-rules";
-import { SEED_CATEGORIES, seedBankCategoryMapping } from "./category-seed";
+import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -82,7 +82,17 @@ export async function loadBankCategoryMapping(conn: Conn, userId: string): Promi
   if ((await loadCategoryByName(conn, userId)).size === 0) {
     await conn
       .insert(category)
-      .values(SEED_CATEGORIES.map((name) => ({ id: randomUUID(), userId, name, isSystem: true })))
+      .values(
+        SEED_CATEGORIES.map((name, sortOrder) => ({
+          id: randomUUID(),
+          userId,
+          name,
+          isSystem: true,
+          color: seedCategoryColor(name),
+          icon: seedCategoryIcon(name),
+          sortOrder,
+        })),
+      )
       .onConflictDoNothing();
   }
   return writeSeedMapping(conn, userId);

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { PFC_PRIMARIES, SEED_CATEGORIES, categoryNameForPfc, seedBankCategoryMapping } from "./category-seed";
+import { CATEGORY_ICONS } from "@life-tracker/shared";
+
+import { PFC_PRIMARIES, SEED_CATEGORIES, categoryNameForPfc, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
 
 describe("categoryNameForPfc", () => {
   it("maps known Bank Categories to friendly seed names", () => {
@@ -29,6 +31,25 @@ describe("categoryNameForPfc", () => {
     expect(new Set(SEED_CATEGORIES).size).toBe(SEED_CATEGORIES.length);
     // Uncategorized means no category (glossary), never a real one (KOI-301).
     expect(SEED_CATEGORIES).not.toContain("Uncategorized");
+  });
+});
+
+describe("seedCategoryColor", () => {
+  it("gives every expense seed a distinct palette color, and Income and Transfers none", () => {
+    const colors = SEED_CATEGORIES.map(seedCategoryColor);
+    expect(colors.slice(0, 2)).toEqual([null, null]);
+    expect(colors.slice(2)).not.toContain(null);
+    expect(new Set(colors.slice(2)).size).toBe(SEED_CATEGORIES.length - 2);
+    expect(seedCategoryColor("Food & Drink")).toBe("blue");
+  });
+});
+
+describe("seedCategoryIcon", () => {
+  it("gives every seed a distinct icon from the picker's set", () => {
+    const icons = SEED_CATEGORIES.map(seedCategoryIcon);
+    expect(icons.every((i) => i !== null && CATEGORY_ICONS.includes(i))).toBe(true);
+    expect(new Set(icons).size).toBe(SEED_CATEGORIES.length);
+    expect(seedCategoryIcon("Food & Drink")).toBe("utensils");
   });
 });
 
