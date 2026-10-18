@@ -151,3 +151,15 @@ _Avoid_: Mover, swing, trend
 **Watched Artwork**:
 An Artwork the user has an open Want for, holds a Copy of, has rated ★4 or ★5, or has tagged with a Theme. Derived from those facts, never hand-picked.
 _Avoid_: Watchlist, favourite
+
+**Copy Value**:
+What one Copy is worth in USD on a day: the lowest Market Price for its Printing at its Condition or better (what replacing it would cost), from the latest day up to 30 days back, converted at that day's exchange rate. A Copy with no such price is unpriced, never estimated from another language or from what was paid.
+_Avoid_: Market value, worth
+
+**Collection Value**:
+The sum of Copy Values of the Copies the user holds today, over priced Copies only. Its history revalues today's Copies at each past day's prices, so buying a card is never counted as a change.
+_Avoid_: Portfolio value, net worth, total
+
+**Gain**:
+A Copy Value minus the price paid for that Copy, and summed over Copies that have both. Unrealized: nothing was sold.
+_Avoid_: Return, profit, P&L
