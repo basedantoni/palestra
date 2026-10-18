@@ -74,8 +74,9 @@ export function CategoryList() {
       <ul className="divide-y divide-border border border-border">
         {categories.map((c, i) => {
           const siblings = siblingIndexes(c);
-          const prev = siblings[siblings.indexOf(i) - 1];
-          const next = siblings[siblings.indexOf(i) + 1];
+          const at = siblings.indexOf(i);
+          const prev = siblings[at - 1];
+          const next = siblings[at + 1];
           return (
             <li key={c.id} className={cn("flex items-center gap-2 px-3 py-2 text-sm", c.parentId && "ps-9")}>
               {c.parentId ? (
@@ -183,7 +184,6 @@ export function CategoryList() {
       {deleting && (
         <DeleteCategoryDialog
           category={deleting}
-          subcategoryCount={categories.filter((c) => c.parentId === deleting.id).length}
           others={categories.filter((c) => c.id !== deleting.id)}
           onClose={() => setDeleting(null)}
           onDeleted={refresh}
@@ -352,17 +352,16 @@ function BankCategoryMapping({ categories, onChanged }: { categories: CategoryRo
 
 function DeleteCategoryDialog({
   category,
-  subcategoryCount,
   others,
   onClose,
   onDeleted,
 }: {
   category: CategoryRow;
-  subcategoryCount: number;
   others: CategoryRow[];
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const subcategoryCount = others.filter((c) => c.parentId === category.id).length;
   const [moveTo, setMoveTo] = useState("");
   const remove = useMutation(
     trpc.categories.remove.mutationOptions({

@@ -32,7 +32,6 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
   const queryClient = useQueryClient();
   const forMonth = trpc.budgets.forMonth.queryOptions({ monthKey: month });
   const { data, isLoading } = useQuery(forMonth);
-  const rows = data?.categories;
   const [openId, setOpenId] = useState<string | null>(null);
   const [copied, setCopied] = useState<{ month: string; fromMonth: string } | null>(null);
 
@@ -59,15 +58,15 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
 
   // Offer to copy the latest earlier month's limits into an empty current or
   // future month. Explicit, so removing or clearing limits always sticks.
-  const hasLimits = rows?.some((r) => r.limit !== null) ?? true;
+  const hasLimits = data?.categories.some((r) => r.limit !== null) ?? true;
   const { data: preview } = useQuery({
     ...trpc.budgets.carryOverPreview.queryOptions({ monthKey: month }),
-    enabled: !!rows && !hasLimits && month >= currentMonth,
+    enabled: !!data && !hasLimits && month >= currentMonth,
   });
 
-  if (isLoading || !data || !rows) return <div className="text-muted-foreground">Loading budgets…</div>;
+  if (isLoading || !data) return <div className="text-muted-foreground">Loading budgets…</div>;
 
-  const hasBudgets = rows.some((r) => r.limit !== null);
+  const rows = data.categories;
   const { limitAmount: totalLimit, spent: totalSpent } = data.total;
   const open = rows.find((r) => r.categoryId === openId) ?? null;
   const card = (r: BudgetRow) => <BudgetCard key={r.categoryId} row={r} onOpen={() => setOpenId(r.categoryId)} />;
@@ -88,7 +87,7 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         </div>
       )}
 
-      {!hasBudgets && preview && (
+      {!hasLimits && preview && (
         <div className="flex flex-wrap items-center justify-between gap-2 border border-dashed border-border px-3 py-3 text-sm">
           <span>No limits for {monthLabel(month, "MMMM yyyy")} yet.</span>
           <Button
@@ -101,7 +100,7 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         </div>
       )}
 
-      {hasBudgets ? (
+      {hasLimits ? (
         <div className="flex items-baseline justify-between border-b border-border pb-2 text-sm">
           <span className="text-muted-foreground">Budgeted</span>
           <span className="tabular-nums">
