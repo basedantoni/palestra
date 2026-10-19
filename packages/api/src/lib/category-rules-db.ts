@@ -39,22 +39,23 @@ export function loadMatchableRules(conn: Conn, userId: string): Promise<Matchabl
 }
 
 /**
- * Asserts the user owns the category, else NOT_FOUND with `message`. Seeded
- * ones are as editable as custom ones: the Bank Category mapping holds them by
- * id, not name (KOI-335).
+ * The user's category, else NOT_FOUND with `message`. Seeded ones are as
+ * editable as custom ones: the Bank Category mapping holds them by id, not
+ * name (KOI-335).
  */
 export async function ownedCategory(
   conn: Conn,
   userId: string,
   id: string,
   message = "Category not found",
-): Promise<void> {
+): Promise<{ id: string; parentId: string | null; color: string | null }> {
   const [row] = await conn
-    .select({ id: category.id })
+    .select({ id: category.id, parentId: category.parentId, color: category.color })
     .from(category)
     .where(and(eq(category.id, id), eq(category.userId, userId)))
     .limit(1);
   if (!row) throw new TRPCError({ code: "NOT_FOUND", message });
+  return row;
 }
 
 export async function loadCategoryByName(conn: Conn, userId: string): Promise<Map<string, string>> {

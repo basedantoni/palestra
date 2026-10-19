@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { CategoryMark } from "./category-icon";
 import { monthLabel } from "./month-label";
 
-type BudgetRow = RouterOutputs["budgets"]["forMonth"][number];
+type BudgetRow = RouterOutputs["budgets"]["forMonth"]["categories"][number];
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -22,15 +22,16 @@ function SpendBar({ spent, limit }: { spent: number; limit: number }) {
 }
 
 /**
- * Budget cards for one month (KOI-284/285): a card per category, a month
- * total, and a side sheet to set or remove that month's limit. An empty
+ * Budget cards for one month (KOI-284/285): a card per category, with each
+ * Parent Category's Subcategories nested under it (KOI-337), the month's
+ * Total Budget, and a side sheet to set or remove that month's limit. An empty
  * current or future month offers to copy the latest earlier month's limits
  * (with an Undo).
  */
 export function BudgetCards({ month, currentMonth }: { month: string; currentMonth: string }) {
   const queryClient = useQueryClient();
   const forMonth = trpc.budgets.forMonth.queryOptions({ monthKey: month });
-  const { data: rows, isLoading } = useQuery(forMonth);
+  const { data, isLoading } = useQuery(forMonth);
   const [openId, setOpenId] = useState<string | null>(null);
   const [copied, setCopied] = useState<{ month: string; fromMonth: string } | null>(null);
 
@@ -57,18 +58,18 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
 
   // Offer to copy the latest earlier month's limits into an empty current or
   // future month. Explicit, so removing or clearing limits always sticks.
-  const hasLimits = rows?.some((r) => r.limit !== null) ?? true;
+  const hasLimits = data?.categories.some((r) => r.limit !== null) ?? true;
   const { data: preview } = useQuery({
     ...trpc.budgets.carryOverPreview.queryOptions({ monthKey: month }),
-    enabled: !!rows && !hasLimits && month >= currentMonth,
+    enabled: !!data && !hasLimits && month >= currentMonth,
   });
 
-  if (isLoading || !rows) return <div className="text-muted-foreground">Loading budgets…</div>;
+  if (isLoading || !data) return <div className="text-muted-foreground">Loading budgets…</div>;
 
-  const budgeted = rows.filter((r): r is BudgetRow & { limit: number } => r.limit !== null);
-  const totalLimit = budgeted.reduce((s, r) => s + r.limit, 0);
-  const totalSpent = budgeted.reduce((s, r) => s + r.spent, 0);
+  const rows = data.categories;
+  const { limitAmount: totalLimit, spent: totalSpent } = data.total;
   const open = rows.find((r) => r.categoryId === openId) ?? null;
+  const card = (r: BudgetRow) => <BudgetCard key={r.categoryId} row={r} onOpen={() => setOpenId(r.categoryId)} />;
 
   return (
     <div className="space-y-4">
@@ -86,7 +87,7 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         </div>
       )}
 
-      {budgeted.length === 0 && preview && (
+      {!hasLimits && preview && (
         <div className="flex flex-wrap items-center justify-between gap-2 border border-dashed border-border px-3 py-3 text-sm">
           <span>No limits for {monthLabel(month, "MMMM yyyy")} yet.</span>
           <Button
@@ -99,7 +100,7 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         </div>
       )}
 
-      {budgeted.length > 0 ? (
+      {hasLimits ? (
         <div className="flex items-baseline justify-between border-b border-border pb-2 text-sm">
           <span className="text-muted-foreground">Budgeted</span>
           <span className="tabular-nums">
@@ -111,32 +112,19 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         <p className="text-sm text-muted-foreground">Tap a category to set a limit.</p>
       )}
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        {rows.map((r) => (
-          <button
-            type="button"
-            key={r.categoryId}
-            onClick={() => setOpenId(r.categoryId)}
-            className={`space-y-2 rounded-md border p-3 text-left hover:bg-muted/40 ${
-              r.limit === null ? "border-dashed border-border" : r.overspent ? "border-destructive/50" : "border-border"
-            }`}
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <CategoryMark category={r} />
-              <span className="truncate">{r.categoryName}</span>
-            </div>
-            {r.limit !== null ? (
-              <>
-                <SpendBar spent={r.spent} limit={r.limit} />
-                <div className={`text-xs tabular-nums ${r.overspent ? "text-destructive" : "text-muted-foreground"}`}>
-                  {usd.format(r.spent)} of {usd.format(r.limit)}
-                </div>
-              </>
-            ) : (
-              <div className="text-xs text-muted-foreground">{usd.format(r.spent)} spent · tap to set a limit</div>
-            )}
-          </button>
-        ))}
+      <div className="grid items-start gap-2 sm:grid-cols-2">
+        {rows
+          .filter((r) => !r.parentId)
+          .map((parent) => {
+            const subcategories = rows.filter((r) => r.parentId === parent.categoryId);
+            if (subcategories.length === 0) return card(parent);
+            return (
+              <div key={parent.categoryId} className="space-y-2">
+                {card(parent)}
+                <div className="ms-4 space-y-2 border-s border-border ps-2">{subcategories.map(card)}</div>
+              </div>
+            );
+          })}
       </div>
 
       <Sheet open={open !== null} onOpenChange={(o) => !o && setOpenId(null)}>
@@ -155,6 +143,34 @@ export function BudgetCards({ month, currentMonth }: { month: string; currentMon
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+/** One category's card: its spend against its limit, or a prompt to set one. A parent's spend includes its Subcategories'. */
+function BudgetCard({ row: r, onOpen }: { row: BudgetRow; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`w-full space-y-2 rounded-md border p-3 text-left hover:bg-muted/40 ${
+        r.limit === null ? "border-dashed border-border" : r.overspent ? "border-destructive/50" : "border-border"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <CategoryMark category={r} />
+        <span className="truncate">{r.categoryName}</span>
+      </div>
+      {r.limit !== null ? (
+        <>
+          <SpendBar spent={r.spent} limit={r.limit} />
+          <div className={`text-xs tabular-nums ${r.overspent ? "text-destructive" : "text-muted-foreground"}`}>
+            {usd.format(r.spent)} of {usd.format(r.limit)}
+          </div>
+        </>
+      ) : (
+        <div className="text-xs text-muted-foreground">{usd.format(r.spent)} spent · tap to set a limit</div>
+      )}
+    </button>
   );
 }
 

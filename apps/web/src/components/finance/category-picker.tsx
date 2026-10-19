@@ -9,7 +9,9 @@ import { CategoryMark } from "./category-icon";
 interface PickerCategory {
   id: string;
   name: string;
+  parentId?: string | null;
   color: string | null;
+  tint?: number | null;
   icon: string | null;
 }
 
@@ -23,7 +25,9 @@ interface Extra {
 
 /**
  * Category dropdown (KOI-336): a popover listing the categories in their
- * manual order, each with its icon or color, under any `extras`. Values are
+ * manual order, each with its icon or color, under any `extras`. Given in
+ * tree order (`categories.list`), Subcategories sit indented under their
+ * parent; parents and Subcategories are both pickable (KOI-337). Values are
  * strings like a `<select>`'s: a category id, an extra's value, or "" for
  * nothing picked yet (shown as `placeholder`).
  */
@@ -101,7 +105,7 @@ export function CategoryPicker({
             </Option>
           ))}
           {categories?.map((c) => (
-            <Option key={c.id} selected={c.id === value} onPick={() => pick(c.id)}>
+            <Option key={c.id} selected={c.id === value} onPick={() => pick(c.id)} indent={!!c.parentId}>
               <CategoryMark category={c} />
               <span className="truncate">{c.name}</span>
             </Option>
@@ -112,14 +116,27 @@ export function CategoryPicker({
   );
 }
 
-function Option({ selected, onPick, children }: { selected: boolean; onPick: () => void; children: React.ReactNode }) {
+function Option({
+  selected,
+  onPick,
+  indent,
+  children,
+}: {
+  selected: boolean;
+  onPick: () => void;
+  indent?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <li>
       <button
         type="button"
         aria-current={selected || undefined}
         onClick={onPick}
-        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+        className={cn(
+          "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
+          indent && "ps-7",
+        )}
       >
         {children}
         {selected && <Check aria-hidden className="ml-auto size-3.5 shrink-0" />}

@@ -3,7 +3,7 @@
  * The fund is derived from the Cards category's finance budgets and
  * transactions; TCG keeps no spending log.
  */
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -15,7 +15,7 @@ import { todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { cardFund } from "../lib/card-fund";
 import { getUserTimezone } from "../lib/user-timezone";
-import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
+import { categoryTreeIds, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 
 export const tcgFundRouter = router({
   /** The caller's settings (null until saved) and Card Fund (null without a Cards category). */
@@ -44,14 +44,17 @@ export const tcgFundRouter = router({
       );
     // This month's spend is shown even when the start month is still ahead.
     const from = startMonth < currentMonth ? startMonth : currentMonth;
+    const categoryIds = await categoryTreeIds(userId, categoryId);
     const transactions = await db
       .select(spendColumns)
       .from(transaction)
-      .where(and(eq(transaction.userId, userId), eq(transaction.categoryId, categoryId), ...monthRange(from, currentMonth)));
+      .where(
+        and(eq(transaction.userId, userId), inArray(transaction.categoryId, categoryIds), ...monthRange(from, currentMonth)),
+      );
 
     return {
       settings,
-      fund: { currentMonth, ...cardFund({ categoryId, limits, transactions, startMonth, currentMonth }) },
+      fund: { currentMonth, ...cardFund({ categoryIds, limits, transactions, startMonth, currentMonth }) },
     };
   }),
 

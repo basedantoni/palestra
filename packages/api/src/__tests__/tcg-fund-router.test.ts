@@ -83,6 +83,7 @@ describe("tcg.fund.get", () => {
       { monthKey: "2026-07", limitAmount: 50 },
       { monthKey: "2026-09", limitAmount: 50 },
     ]);
+    mockDb.onSelect(category, [{ id: CARDS }]); // the Cards category with its Subcategories (none)
     mockDb.onSelect(transaction, [spend("2026-07-04", 30), spend("2026-08-20", 12.5), spend("2026-09-30", 20)]);
 
     const result = await caller().tcg.fund.get();

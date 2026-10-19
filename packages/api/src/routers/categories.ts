@@ -6,10 +6,10 @@ import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
-import { CATEGORY_COLORS, CATEGORY_ICONS, nextCategoryColor } from "@life-tracker/shared";
+import { CATEGORY_COLORS, CATEGORY_ICONS, categoryTree, nextCategoryColor } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { ownedCategory } from "../lib/category-rules-db";
+import { type Conn, ownedCategory } from "../lib/category-rules-db";
 import { UNCATEGORIZED } from "../lib/category-spend";
 
 const categoryName = z.string().trim().min(1).max(60);
@@ -28,13 +28,40 @@ function assertNameNotReserved(name: string): void {
   }
 }
 
+/**
+ * Checks that `id` may be filed under `parentId` (KOI-337): the parent is the
+ * user's own and top-level, and `id` has no Subcategories of its own, so the
+ * tree stays two levels deep.
+ * ponytail: no row locks, so two concurrent moves (A under B, B under C) could
+ * nest three deep; lock both rows FOR UPDATE if categories gain shared editors.
+ */
+async function assertCanFileUnder(conn: Conn, userId: string, id: string, parentId: string): Promise<void> {
+  if (parentId === id) throw new TRPCError({ code: "BAD_REQUEST", message: "A category can't be its own parent" });
+  const parent = await ownedCategory(conn, userId, parentId, "Parent category not found");
+  if (parent.parentId) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "A Subcategory can't have Subcategories" });
+  }
+  const [subcategory] = await conn
+    .select({ id: category.id })
+    .from(category)
+    .where(eq(category.parentId, id))
+    .limit(1);
+  if (subcategory) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "A category with Subcategories can't be moved under another" });
+  }
+}
+
 export const categoriesRouter = router({
-  /** The user's categories in their manual order, with how many transactions each holds. */
+  /**
+   * The user's categories as their tree in manual order (each parent followed
+   * by its Subcategories, `tint` set on those), with how many transactions each holds.
+   */
   list: protectedProcedure.query(async ({ ctx }) => {
-    return db
+    const rows = await db
       .select({
         id: category.id,
         name: category.name,
+        parentId: category.parentId,
         color: category.color,
         icon: category.icon,
         isSystem: category.isSystem,
@@ -45,6 +72,7 @@ export const categoriesRouter = router({
       .where(eq(category.userId, ctx.session.user.id))
       .groupBy(category.id)
       .orderBy(category.sortOrder, category.name);
+    return categoryTree(rows);
   }),
 
   /** A new category goes last, in the least-used palette color. */
@@ -72,7 +100,12 @@ export const categoriesRouter = router({
       return { id };
     }),
 
-  /** Rename, recolor, or set or clear the icon of any owned category, seeded or custom. */
+  /**
+   * Rename, recolor, set or clear the icon of, or set or clear the parent of
+   * any owned category, seeded or custom. A Subcategory stores no color: filing
+   * one under a parent drops its own, and one moved back to top level takes its
+   * old parent's unless given a color.
+   */
   update: protectedProcedure
     .input(
       z.object({
@@ -80,18 +113,32 @@ export const categoriesRouter = router({
         name: categoryName.optional(),
         color: z.enum(CATEGORY_COLORS).optional(),
         icon: z.enum(CATEGORY_ICONS).nullable().optional(),
+        parentId: z.string().uuid().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       if (changes.name !== undefined) assertNameNotReserved(changes.name);
       const userId = ctx.session.user.id;
-      await ownedCategory(db, userId, id);
-      if (Object.values(changes).every((v) => v === undefined)) return { ok: true };
-      await db
-        .update(category)
-        .set(changes)
-        .where(and(eq(category.id, id), eq(category.userId, userId)));
+      await db.transaction(async (tx) => {
+        const current = await ownedCategory(tx, userId, id);
+        const willBeSubcategory = changes.parentId === undefined ? !!current.parentId : !!changes.parentId;
+        if (changes.color && willBeSubcategory) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "A Subcategory takes its parent's color" });
+        }
+        const set: Partial<typeof category.$inferInsert> = { ...changes };
+        if (changes.parentId) {
+          await assertCanFileUnder(tx, userId, id, changes.parentId);
+          set.color = null;
+        } else if (changes.parentId === null && current.parentId) {
+          set.color = changes.color ?? (await ownedCategory(tx, userId, current.parentId)).color;
+        }
+        if (Object.values(set).every((v) => v === undefined)) return;
+        await tx
+          .update(category)
+          .set(set)
+          .where(and(eq(category.id, id), eq(category.userId, userId)));
+      });
       return { ok: true };
     }),
 
@@ -124,7 +171,8 @@ export const categoriesRouter = router({
    * Delete any owned category. With `moveToCategoryId`, its transactions move
    * to that (owned) category first; otherwise they become Uncategorized. Its
    * budgets are removed by the FK cascade, and a Bank Category mapped to it
-   * becomes unmapped (SET NULL).
+   * becomes unmapped (SET NULL). Its Subcategories move up to top level in
+   * its color.
    */
   remove: protectedProcedure
     .input(z.object({ id: z.string().uuid(), moveToCategoryId: z.string().uuid().optional() }))
@@ -134,7 +182,11 @@ export const categoriesRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Can't move transactions into the category being deleted" });
       }
       await db.transaction(async (tx) => {
-        await ownedCategory(tx, userId, input.id);
+        const deleted = await ownedCategory(tx, userId, input.id);
+        await tx
+          .update(category)
+          .set({ parentId: null, color: deleted.color })
+          .where(and(eq(category.userId, userId), eq(category.parentId, input.id)));
         if (input.moveToCategoryId) {
           await ownedCategory(tx, userId, input.moveToCategoryId, "Target category not found");
           await tx

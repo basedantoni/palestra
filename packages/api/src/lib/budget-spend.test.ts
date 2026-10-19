@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { spendByCategory, spendHistory } from "./budget-spend";
+import { rollUpSpend, spendByCategory, spendHistory, totalBudget } from "./budget-spend";
 
 describe("spend rules", () => {
   const txns = [
@@ -58,6 +58,59 @@ describe("spendHistory", () => {
       { categoryId: "fun", amount: 99, flow: "expense", excluded: false, date: new Date("2026-07-02T00:00:00Z") },
     ] as const;
 
-    expect(spendHistory([...txns], "food", ["2026-05", "2026-06", "2026-07"])).toEqual([30, 0, 20]);
+    expect(spendHistory([...txns], ["food"], ["2026-05", "2026-06", "2026-07"])).toEqual([30, 0, 20]);
+  });
+});
+
+describe("rollUpSpend", () => {
+  const categories = [
+    { id: "fun", parentId: null },
+    { id: "golf", parentId: "fun" },
+    { id: "movies", parentId: "fun" },
+    { id: "food", parentId: null },
+  ];
+
+  it("adds each Subcategory's spend to its parent's own", () => {
+    const spent = new Map([
+      ["fun", 10],
+      ["golf", 120],
+      ["movies", 30],
+      ["food", 55],
+    ]);
+
+    expect(Object.fromEntries(rollUpSpend(spent, categories))).toEqual({
+      fun: 160,
+      golf: 120,
+      movies: 30,
+      food: 55,
+    });
+  });
+
+  it("gives a parent with no spend of its own its Subcategories' spend", () => {
+    expect(Object.fromEntries(rollUpSpend(new Map([["golf", 40]]), categories))).toEqual({ fun: 40, golf: 40 });
+  });
+});
+
+describe("totalBudget", () => {
+  const categories = [
+    { id: "fun", parentId: null },
+    { id: "golf", parentId: "fun" },
+    { id: "food", parentId: null },
+    { id: "groceries", parentId: "food" },
+  ];
+
+  it("counts a Subcategory's budget only when its parent has none that month", () => {
+    // Spend is rolled up: fun's 160 already includes golf's 120.
+    const budgets = [
+      { categoryId: "fun", limitAmount: 200, spent: 160 },
+      { categoryId: "golf", limitAmount: 150, spent: 120 },
+      { categoryId: "groceries", limitAmount: 300, spent: 210 },
+    ];
+
+    expect(totalBudget(budgets, categories)).toEqual({ limitAmount: 500, spent: 370 });
+  });
+
+  it("is zero with no budgets", () => {
+    expect(totalBudget([], categories)).toEqual({ limitAmount: 0, spent: 0 });
   });
 });

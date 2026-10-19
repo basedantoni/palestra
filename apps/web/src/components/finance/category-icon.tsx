@@ -47,9 +47,15 @@ import {
 import type { CategoryIcon } from "@life-tracker/shared";
 import { cn } from "@/lib/utils";
 
-/** The CSS color of a category's palette token (KOI-336); a category with none is neutral. */
-export const categoryColor = (token: string | null) =>
-  token ? `var(--chart-cat-${token})` : "var(--chart-cat-other)";
+/**
+ * The CSS color of a category's palette token (KOI-336); a category with none
+ * is neutral. A Subcategory passes its parent's token and its `tint`
+ * (`categoryTree`), mixing that far toward the card surface (KOI-337).
+ */
+export const categoryColor = (token: string | null, tint?: number | null) => {
+  const color = token ? `var(--chart-cat-${token})` : "var(--chart-cat-other)";
+  return tint ? `color-mix(in oklab, ${color}, var(--card) ${tint}%)` : color;
+};
 
 /** Every picker icon's component; named imports, so only these 42 are bundled. */
 export const CATEGORY_ICON_COMPONENTS: Record<CategoryIcon, LucideIcon> = {
@@ -105,7 +111,7 @@ export function CategoryMark({
   category,
   className,
 }: {
-  category: { color: string | null; icon: string | null } | null;
+  category: { color: string | null; tint?: number | null; icon: string | null } | null;
   className?: string;
 }) {
   const Icon = category?.icon ? CATEGORY_ICON_COMPONENTS[category.icon as CategoryIcon] : undefined;
@@ -115,10 +121,10 @@ export function CategoryMark({
         <span
           aria-hidden
           className={cn("size-2.5 shrink-0 rounded-sm", !category && "border border-dashed border-muted-foreground")}
-          style={category ? { background: categoryColor(category.color) } : undefined}
+          style={category ? { background: categoryColor(category.color, category.tint) } : undefined}
         />
       </span>
     );
   }
-  return <Icon aria-hidden className={cn("size-4 shrink-0", className)} style={{ color: categoryColor(category!.color) }} />;
+  return <Icon aria-hidden className={cn("size-4 shrink-0", className)} style={{ color: categoryColor(category!.color, category!.tint) }} />;
 }

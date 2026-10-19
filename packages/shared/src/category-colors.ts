@@ -64,3 +64,27 @@ export function nextCategoryColor(used: readonly (string | null)[]): CategoryCol
   const count = (c: CategoryColor) => used.filter((u) => u === c).length;
   return CATEGORY_COLORS.reduce((best, c) => (count(c) < count(best) ? c : best));
 }
+
+/**
+ * Categories as their two-level tree (KOI-337), given in manual order: each
+ * top-level category followed by its Subcategories, both levels keeping that
+ * order. Subcategories store no color, so each takes its parent's token with
+ * `tint` (the percent to mix toward the surface, from `subcategoryTint` by its
+ * place among siblings); top-level categories have a null tint.
+ */
+export function categoryTree<T extends { id: string; parentId: string | null; color: string | null }>(
+  categories: T[],
+): Array<T & { tint: number | null }> {
+  const ids = new Set(categories.map((c) => c.id));
+  const isTop = (c: T) => !c.parentId || !ids.has(c.parentId);
+  return categories.filter(isTop).flatMap((parent) => [
+    { ...parent, tint: null },
+    ...categories
+      .filter((c) => !isTop(c) && c.parentId === parent.id)
+      .map((c, i) =>
+        parent.color && parent.color in TINT_CAP
+          ? { ...c, color: parent.color, tint: subcategoryTint(parent.color as CategoryColor, i) }
+          : { ...c, color: null, tint: null },
+      ),
+  ]);
+}
