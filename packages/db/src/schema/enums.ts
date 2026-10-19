@@ -156,3 +156,6 @@ export const tcgVariantKindEnum = pgEnum("tcg_variant_kind", ["base", "parallel"
 /** Condition, best first: NM > LP > MP > HP > DMG. "At least LP" compares positions in this order. Shared by Wants and Copies. */
 export const tcgConditionEnum = pgEnum("tcg_condition", ["NM", "LP", "MP", "HP", "DMG"]);
 export const tcgWantStatusEnum = pgEnum("tcg_want_status", ["open", "ordered", "fulfilled", "dropped"]);
+
+/** How a Rule's Pattern matches a bank description (KOI-339). */
+export const ruleMatchModeEnum = pgEnum("rule_match_mode", ["exact", "contains"]);

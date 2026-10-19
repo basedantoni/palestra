@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@life-tracker/db", () => import("./helpers/mock-db").then((m) => m.mockDbModule));
 
-import { bankCategoryMapping, category, categoryRule, transaction } from "@life-tracker/db/schema/index";
+import { bankCategoryMapping, category, rule, transaction } from "@life-tracker/db/schema/index";
 
 import { PFC_PRIMARIES } from "../lib/category-seed";
 import { appRouter } from "../routers/index";
@@ -86,7 +86,7 @@ describe("bankCategories.setMapping", () => {
   it("lets a matching rule win over the new mapping", async () => {
     mockDb.onSelect(category, [{ id: DINING }]);
     seededMapping();
-    mockDb.onSelect(categoryRule, [{ id: "r1", pattern: "starbucks", categoryId: COFFEE, createdAt: new Date() }]);
+    mockDb.onSelect(rule, [{ id: "r1", pattern: "starbucks", matchMode: "contains", categoryId: COFFEE, createdAt: new Date() }]);
     mockDb.onSelect(transaction, [txn("t1", "STARBUCKS #1", COFFEE), txn("t2", "CHIPOTLE", FOOD)]);
 
     await makeCaller().bankCategories.setMapping({ bankCategory: "FOOD_AND_DRINK", categoryId: DINING });

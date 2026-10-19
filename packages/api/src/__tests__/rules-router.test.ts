@@ -1,5 +1,5 @@
 /**
- * Category Rules CRUD + rule-aware Plaid sync (KOI-298).
+ * Rules CRUD + rule-aware Plaid sync (KOI-298, KOI-339).
  *
  * Mocked db (helpers/mock-db): selects are answered per table, and writes are
  * recorded so tests can assert on table, values and rendered WHERE params.
@@ -24,7 +24,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 import {
   bankCategoryMapping,
   category,
-  categoryRule,
+  rule,
   financialAccount,
   plaidItem,
   transaction,
@@ -46,45 +46,50 @@ function makeCaller() {
 
 /** The category ownership check finds the category (or, with [], doesn't). */
 const ownsCategory = (rows: unknown[] = [{ id: CAT_ID }]) => mockDb.onSelect(category, rows);
-/** The caller's existing Category Rules. */
-const rulesAre = (rows: unknown[]) => mockDb.onSelect(categoryRule, rows);
+/** The caller's existing Rules. */
+const rulesAre = (rows: unknown[]) => mockDb.onSelect(rule, rows);
 /** Every update, whatever the table. */
 const updates = () => mockDb.opsOf("update");
 
 beforeEach(() => {
   vi.clearAllMocks();
   // Rule writes return the saved row; transaction updates report one row written each.
-  mockDb.fallback("insert", categoryRule, [{ id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }]);
-  mockDb.fallback("update", categoryRule, [{ id: RULE_ID }]);
-  mockDb.fallback("delete", categoryRule, [{ id: RULE_ID }]);
+  mockDb.fallback("insert", rule, [{ id: RULE_ID, pattern: "Starbucks", matchMode: "contains", categoryId: CAT_ID }]);
+  mockDb.fallback("update", rule, [{ id: RULE_ID }]);
+  mockDb.fallback("delete", rule, [{ id: RULE_ID }]);
   mockDb.fallback("update", transaction, { rowCount: 1 });
 });
 
-describe("categoryRules.list", () => {
+describe("rules.list", () => {
   it("returns the caller's rules with their category", async () => {
     const rows = [
       { id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID, categoryName: "Coffee", createdAt: new Date() },
     ];
     rulesAre(rows);
 
-    await expect(makeCaller().categoryRules.list()).resolves.toEqual(rows);
-    expect(mockDb.selected(categoryRule)).toEqual([[USER_ID]]);
+    await expect(makeCaller().rules.list()).resolves.toEqual(rows);
+    expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
   });
 });
 
-describe("categoryRules.create", () => {
+describe("rules.create", () => {
   it("inserts a trimmed pattern for an owned category", async () => {
     ownsCategory();
-    rulesAre([{ id: "r-other", pattern: "uber" }]);
+    rulesAre([{ id: "r-other", pattern: "uber", matchMode: "contains" }]);
 
-    const result = await makeCaller().categoryRules.create({ pattern: "  Starbucks ", categoryId: CAT_ID });
+    const result = await makeCaller().rules.create({ pattern: "  Starbucks ", categoryId: CAT_ID });
 
-    expect(result).toEqual({ rule: { id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }, applied: 0 });
+    expect(result).toEqual({
+      rule: { id: RULE_ID, pattern: "Starbucks", matchMode: "contains", categoryId: CAT_ID },
+      applied: 0,
+    });
     expect(mockDb.selected(category)).toEqual([[CAT_ID, USER_ID]]);
-    expect(mockDb.selected(categoryRule)).toEqual([[USER_ID]]);
-    expect(mockDb.inserted(categoryRule)[0]).toMatchObject({
+    expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
+    expect(mockDb.inserted(rule)[0]).toMatchObject({
       userId: USER_ID,
       pattern: "Starbucks",
+      patternKey: "starbucks",
+      matchMode: "contains",
       categoryId: CAT_ID,
     });
   });
@@ -93,9 +98,9 @@ describe("categoryRules.create", () => {
     ownsCategory([]);
 
     await expect(
-      makeCaller().categoryRules.create({ pattern: "starbucks", categoryId: CAT_ID }),
+      makeCaller().rules.create({ pattern: "starbucks", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(mockDb.inserted(categoryRule)).toEqual([]);
+    expect(mockDb.inserted(rule)).toEqual([]);
   });
 
   it("rejects a too-short pattern with BAD_REQUEST and a reason", async () => {
@@ -103,27 +108,27 @@ describe("categoryRules.create", () => {
     rulesAre([]);
 
     await expect(
-      makeCaller().categoryRules.create({ pattern: " ab ", categoryId: CAT_ID }),
+      makeCaller().rules.create({ pattern: " ab ", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/at least 3/) });
-    expect(mockDb.inserted(categoryRule)).toEqual([]);
+    expect(mockDb.inserted(rule)).toEqual([]);
   });
 
   it("rejects a case-insensitive duplicate with BAD_REQUEST", async () => {
     ownsCategory();
-    rulesAre([{ id: "r-existing", pattern: "Starbucks" }]);
+    rulesAre([{ id: "r-existing", pattern: "Starbucks", matchMode: "contains" }]);
 
     await expect(
-      makeCaller().categoryRules.create({ pattern: "STARBUCKS", categoryId: CAT_ID }),
+      makeCaller().rules.create({ pattern: "STARBUCKS", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/already exists/) });
-    expect(mockDb.inserted(categoryRule)).toEqual([]);
+    expect(mockDb.inserted(rule)).toEqual([]);
   });
 
   it("maps a lost insert race on the unique index to BAD_REQUEST", async () => {
     ownsCategory();
-    mockDb.onInsert(categoryRule, []); // lost the race: nothing inserted
+    mockDb.onInsert(rule, []); // lost the race: nothing inserted
 
     await expect(
-      makeCaller().categoryRules.create({ pattern: "starbucks", categoryId: CAT_ID }),
+      makeCaller().rules.create({ pattern: "starbucks", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
@@ -135,6 +140,7 @@ const OTHER_CAT = "00000000-0000-4000-8000-0000000000c2";
 const existingRule = (id: string, pattern: string, categoryId: string, createdAt = "2026-01-01") => ({
   id,
   pattern,
+  matchMode: "contains" as const,
   categoryId,
   createdAt: new Date(createdAt),
 });
@@ -153,7 +159,7 @@ function applyContext(rows: unknown[]) {
   mockDb.onSelect(transaction, rows);
 }
 
-describe("categoryRules.preview", () => {
+describe("rules.preview", () => {
   it("counts non-manual transactions whose category would change", async () => {
     ownsCategory();
     rulesAre([]);
@@ -164,7 +170,7 @@ describe("categoryRules.preview", () => {
     ]);
 
     await expect(
-      makeCaller().categoryRules.preview({ pattern: "starbucks", categoryId: CAT_ID }),
+      makeCaller().rules.preview({ pattern: "starbucks", categoryId: CAT_ID }),
     ).resolves.toEqual({ matchCount: 1 });
     expect(mockDb.selected(category)[0]).toEqual([CAT_ID, USER_ID]);
     // Scoped to the caller; hand-picked categories excluded (blank manual rows allowed).
@@ -177,7 +183,7 @@ describe("categoryRules.preview", () => {
     applyContext([txn("t1", "STARBUCKS #1", OTHER_CAT), txn("t2", "STARBUCKS RESERVE", OTHER_CAT)]);
 
     await expect(
-      makeCaller().categoryRules.preview({ pattern: "starbucks reserve", categoryId: CAT_ID, ruleId: RULE_ID }),
+      makeCaller().rules.preview({ pattern: "starbucks reserve", categoryId: CAT_ID, ruleId: RULE_ID }),
     ).resolves.toEqual({ matchCount: 2 }); // t2 → CAT_ID, t1 loses the rule → Default Category
   });
 
@@ -186,13 +192,23 @@ describe("categoryRules.preview", () => {
     rulesAre([existingRule("r-long", "amazon prime", OTHER_CAT)]);
     applyContext([txn("t1", "AMAZON PRIME*1", OTHER_CAT), txn("t2", "AMAZON MKTP", "cat-food")]);
 
-    await expect(makeCaller().categoryRules.preview({ pattern: "amazon", categoryId: CAT_ID })).resolves.toEqual({
+    await expect(makeCaller().rules.preview({ pattern: "amazon", categoryId: CAT_ID })).resolves.toEqual({
       matchCount: 1,
     });
   });
 
+  it("counts only whole-description matches for an exact rule", async () => {
+    ownsCategory();
+    rulesAre([]);
+    applyContext([txn("t1", "STARBUCKS", "cat-food"), txn("t2", "STARBUCKS #2", "cat-food")]);
+
+    await expect(
+      makeCaller().rules.preview({ pattern: "starbucks", matchMode: "exact", categoryId: CAT_ID }),
+    ).resolves.toEqual({ matchCount: 1 });
+  });
+
   it("is zero for a pattern too short to save, without querying", async () => {
-    await expect(makeCaller().categoryRules.preview({ pattern: "ab", categoryId: CAT_ID })).resolves.toEqual({
+    await expect(makeCaller().rules.preview({ pattern: "ab", categoryId: CAT_ID })).resolves.toEqual({
       matchCount: 0,
     });
     expect(mockDb.db.select).not.toHaveBeenCalled();
@@ -203,19 +219,19 @@ describe("categoryRules.preview", () => {
     rulesAre([]);
 
     await expect(
-      makeCaller().categoryRules.preview({ pattern: "starbucks", categoryId: CAT_ID, ruleId: RULE_ID }),
+      makeCaller().rules.preview({ pattern: "starbucks", categoryId: CAT_ID, ruleId: RULE_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 
-describe("categoryRules.create with applyToExisting", () => {
+describe("rules.create with applyToExisting", () => {
   it("leaves rows the new pattern doesn't match alone", async () => {
     ownsCategory();
     rulesAre([]);
     // UBER TRIP still carries a deleted rule's category; applying "starbucks" must not revert it.
     applyContext([txn("t1", "UBER TRIP", OTHER_CAT)]);
 
-    const result = await makeCaller().categoryRules.create({
+    const result = await makeCaller().rules.create({
       pattern: "starbucks",
       categoryId: CAT_ID,
       applyToExisting: true,
@@ -230,7 +246,7 @@ describe("categoryRules.create with applyToExisting", () => {
     rulesAre([]);
     applyContext([txn("t1", "STARBUCKS #1", "cat-food"), txn("t2", "STARBUCKS #2", CAT_ID), txn("t3", "CHIPOTLE", "cat-food")]);
 
-    const result = await makeCaller().categoryRules.create({
+    const result = await makeCaller().rules.create({
       pattern: "starbucks",
       categoryId: CAT_ID,
       applyToExisting: true,
@@ -247,9 +263,9 @@ describe("categoryRules.create with applyToExisting", () => {
       { ...txn("t1", "KFC #1", null), categoryOverridden: true },
       { ...txn("t2", "KFC #2", OTHER_CAT), categoryOverridden: true }, // hand-picked: never loaded, but guard anyway
     ]);
-    mockDb.onInsert(categoryRule, [{ id: RULE_ID, pattern: "kfc", categoryId: CAT_ID }]);
+    mockDb.onInsert(rule, [{ id: RULE_ID, pattern: "kfc", categoryId: CAT_ID }]);
 
-    const result = await makeCaller().categoryRules.create({ pattern: "kfc", categoryId: CAT_ID, applyToExisting: true });
+    const result = await makeCaller().rules.create({ pattern: "kfc", categoryId: CAT_ID, applyToExisting: true });
 
     expect(result.applied).toBe(1);
     expect(transactionUpdates()).toEqual([
@@ -261,23 +277,29 @@ describe("categoryRules.create with applyToExisting", () => {
     ownsCategory();
     rulesAre([]);
 
-    const result = await makeCaller().categoryRules.create({ pattern: "starbucks", categoryId: CAT_ID });
+    const result = await makeCaller().rules.create({ pattern: "starbucks", categoryId: CAT_ID });
 
     expect(result.applied).toBe(0);
     expect(transactionUpdates()).toEqual([]);
   });
 });
 
-describe("categoryRules.update", () => {
+describe("rules.update", () => {
   it("saves the edited rule, scoped to the caller, and leaves transactions alone without apply", async () => {
     ownsCategory();
     rulesAre([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
 
-    const result = await makeCaller().categoryRules.update({ id: RULE_ID, pattern: " Starbucks ", categoryId: CAT_ID });
+    const result = await makeCaller().rules.update({ id: RULE_ID, pattern: " Starbucks ", categoryId: CAT_ID });
 
-    expect(result).toEqual({ rule: { id: RULE_ID, pattern: "Starbucks", categoryId: CAT_ID }, applied: 0 });
-    expect(mockDb.updated(categoryRule)).toEqual([
-      { set: { pattern: "Starbucks", categoryId: CAT_ID }, where: [RULE_ID, USER_ID] },
+    expect(result).toEqual({
+      rule: { id: RULE_ID, pattern: "Starbucks", matchMode: "contains", categoryId: CAT_ID },
+      applied: 0,
+    });
+    expect(mockDb.updated(rule)).toEqual([
+      {
+        set: { pattern: "Starbucks", patternKey: "starbucks", matchMode: "contains", categoryId: CAT_ID },
+        where: [RULE_ID, USER_ID],
+      },
     ]);
     expect(transactionUpdates()).toEqual([]);
   });
@@ -287,7 +309,7 @@ describe("categoryRules.update", () => {
     rulesAre([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
     applyContext([txn("t1", "STARBUCKS #1", OTHER_CAT), txn("t2", "CHIPOTLE", "cat-food")]);
 
-    const result = await makeCaller().categoryRules.update({
+    const result = await makeCaller().rules.update({
       id: RULE_ID,
       pattern: "starbucks",
       categoryId: CAT_ID,
@@ -303,7 +325,7 @@ describe("categoryRules.update", () => {
     rulesAre([]); // the caller has no such rule
 
     await expect(
-      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
+      makeCaller().rules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(updates()).toEqual([]);
   });
@@ -311,10 +333,10 @@ describe("categoryRules.update", () => {
   it("rejects a rule deleted mid-save with NOT_FOUND and applies nothing", async () => {
     ownsCategory();
     rulesAre([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
-    mockDb.onUpdate(categoryRule, []); // deleted mid-save: nothing updated
+    mockDb.onUpdate(rule, []); // deleted mid-save: nothing updated
 
     await expect(
-      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID, applyToExisting: true }),
+      makeCaller().rules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID, applyToExisting: true }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(transactionUpdates()).toEqual([]);
   });
@@ -323,7 +345,7 @@ describe("categoryRules.update", () => {
     ownsCategory([]);
 
     await expect(
-      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
+      makeCaller().rules.update({ id: RULE_ID, pattern: "starbucks", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(updates()).toEqual([]);
   });
@@ -333,7 +355,7 @@ describe("categoryRules.update", () => {
     rulesAre([existingRule(RULE_ID, "starbucks", OTHER_CAT), existingRule("r2", "uber", OTHER_CAT)]);
 
     await expect(
-      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "UBER", categoryId: CAT_ID }),
+      makeCaller().rules.update({ id: RULE_ID, pattern: "UBER", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/already exists/) });
     expect(updates()).toEqual([]);
   });
@@ -341,27 +363,27 @@ describe("categoryRules.update", () => {
   it("maps a unique-index race to BAD_REQUEST", async () => {
     ownsCategory();
     rulesAre([existingRule(RULE_ID, "starbucks", OTHER_CAT)]);
-    mockDb.onUpdate(categoryRule, rejectWith(Object.assign(new Error("Failed query"), { cause: { code: "23505" } })));
+    mockDb.onUpdate(rule, rejectWith(Object.assign(new Error("Failed query"), { cause: { code: "23505" } })));
 
     await expect(
-      makeCaller().categoryRules.update({ id: RULE_ID, pattern: "uber", categoryId: CAT_ID }),
+      makeCaller().rules.update({ id: RULE_ID, pattern: "uber", categoryId: CAT_ID }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
 
-describe("categoryRules.delete", () => {
+describe("rules.delete", () => {
   it("deletes only the caller's rule and leaves transactions untouched", async () => {
-    await makeCaller().categoryRules.delete({ id: RULE_ID });
+    await makeCaller().rules.delete({ id: RULE_ID });
 
-    expect(mockDb.opsOf("delete").map((op) => op.table)).toEqual([categoryRule]);
-    expect(mockDb.deleted(categoryRule)).toEqual([[RULE_ID, USER_ID]]);
+    expect(mockDb.opsOf("delete").map((op) => op.table)).toEqual([rule]);
+    expect(mockDb.deleted(rule)).toEqual([[RULE_ID, USER_ID]]);
     expect(updates()).toEqual([]);
   });
 
   it("rejects a rule the caller doesn't own with NOT_FOUND", async () => {
-    mockDb.onDelete(categoryRule, []); // nothing deleted
+    mockDb.onDelete(rule, []); // nothing deleted
 
-    await expect(makeCaller().categoryRules.delete({ id: RULE_ID })).rejects.toMatchObject({
+    await expect(makeCaller().rules.delete({ id: RULE_ID })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
   });
@@ -398,7 +420,7 @@ function syncWith(names: string[], rules: unknown[], seeded = true) {
 const insertedCategoryIds = () =>
   (mockDb.inserted(transaction) as Array<{ categoryId: string | null }>).map((v) => v.categoryId);
 
-describe("syncPlaidItem with Category Rules", () => {
+describe("syncPlaidItem with Rules", () => {
   it("loads the user's rules once and categorizes new transactions by them", async () => {
     syncWith(
       ["SQ *STARBUCKS #12", "CHIPOTLE 42"],
@@ -407,7 +429,7 @@ describe("syncPlaidItem with Category Rules", () => {
 
     await syncPlaidItem(ITEM_ID);
 
-    expect(mockDb.selected(categoryRule)).toEqual([[USER_ID]]); // once, scoped to the caller
+    expect(mockDb.selected(rule)).toEqual([[USER_ID]]); // once, scoped to the caller
     expect(insertedCategoryIds()).toEqual(["cat-coffee", "cat-food"]);
   });
 

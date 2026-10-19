@@ -1,6 +1,6 @@
 /**
- * Category Rules — DB integration (KOI-298/299). Loads what the pure matching
- * in `category-rules.ts` needs and writes retroactive recategorizations. Sync,
+ * Rules — DB integration (KOI-298/299). Loads what the pure matching
+ * in `rules.ts` needs and writes retroactive recategorizations. Sync,
  * reset, the rules router and Bank Category remapping share these so they
  * resolve identically.
  */
@@ -10,7 +10,7 @@ import { TRPCError } from "@trpc/server";
 import { type SQL, and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
-import { bankCategoryMapping, category, categoryRule, transaction } from "@life-tracker/db/schema/index";
+import { bankCategoryMapping, category, rule, transaction } from "@life-tracker/db/schema/index";
 
 import {
   type BankCategoryMapping,
@@ -19,7 +19,7 @@ import {
   type MatchableRule,
   type Recategorization,
   ruleRecategorizations,
-} from "./category-rules";
+} from "./rules";
 import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
 
 type Db = typeof db;
@@ -29,13 +29,14 @@ export type Conn = Db | Tx;
 export function loadMatchableRules(conn: Conn, userId: string): Promise<MatchableRule[]> {
   return conn
     .select({
-      id: categoryRule.id,
-      pattern: categoryRule.pattern,
-      categoryId: categoryRule.categoryId,
-      createdAt: categoryRule.createdAt,
+      id: rule.id,
+      pattern: rule.pattern,
+      matchMode: rule.matchMode,
+      categoryId: rule.categoryId,
+      createdAt: rule.createdAt,
     })
-    .from(categoryRule)
-    .where(eq(categoryRule.userId, userId));
+    .from(rule)
+    .where(eq(rule.userId, userId));
 }
 
 /**

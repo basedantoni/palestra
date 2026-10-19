@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAX_PATTERN_LENGTH,
+  type MatchMode,
+  fold,
   defaultCategoryId,
   isManualCategory,
   matchRule,
@@ -11,7 +13,7 @@ import {
   resolveCategory,
   validatePattern,
   withCandidateRule,
-} from "./category-rules";
+} from "./rules";
 
 // The user's Bank Category mapping: Bank Category → category id, or null when
 // the user left it unmapped (Uncategorized).
@@ -71,11 +73,18 @@ describe("isManualCategory", () => {
   });
 });
 
-const rule = (id: string, pattern: string, categoryId: string, createdAt = "2026-01-01") => ({
-  id,
-  pattern,
-  categoryId,
-  createdAt: new Date(createdAt),
+const rule = (
+  id: string,
+  pattern: string,
+  categoryId: string,
+  createdAt = "2026-01-01",
+  matchMode: MatchMode = "contains",
+) => ({ id, pattern, matchMode, categoryId, createdAt: new Date(createdAt) });
+
+describe("fold", () => {
+  it("drops accents and case", () => {
+    expect(fold("Café CRÈME Ångström")).toBe("cafe creme angstrom");
+  });
 });
 
 describe("matchRule", () => {
@@ -108,6 +117,25 @@ describe("matchRule", () => {
     expect(matchRule("UBER EATS", [a, b])).toBe(b);
     expect(matchRule("UBER EATS", [b, a])).toBe(b);
   });
+
+  it("ignores accents in both modes", () => {
+    const contains = rule("r1", "cafe", "cat-food");
+    const exact = rule("r2", "creme brulee", "cat-food", "2026-01-01", "exact");
+    expect(matchRule("CAFÉ DU MONDE", [contains])).toBe(contains);
+    expect(matchRule("Crème Brûlée", [exact])).toBe(exact);
+  });
+
+  it("matches an exact rule only on the whole trimmed description", () => {
+    const exact = rule("r1", "uber", "cat-travel", "2026-01-01", "exact");
+    expect(matchRule("  UBER ", [exact])).toBe(exact);
+    expect(matchRule("UBER EATS", [exact])).toBeNull();
+  });
+
+  it("prefers an exact rule over any contains rule, however long", () => {
+    const exact = rule("r1", "uber eats", "cat-food", "2026-01-01", "exact");
+    const longer = rule("r2", "uber eats", "cat-travel", "2026-05-01");
+    expect(matchRule("UBER EATS", [longer, exact])).toBe(exact);
+  });
 });
 
 describe("resolveCategory", () => {
@@ -126,25 +154,36 @@ describe("resolveCategory", () => {
 
 describe("validatePattern", () => {
   const existing = [
-    { id: "r1", pattern: "Starbucks" },
-    { id: "r2", pattern: "uber" },
+    { id: "r1", pattern: "Starbucks", matchMode: "contains" as const },
+    { id: "r2", pattern: "uber", matchMode: "contains" as const },
+    { id: "r3", pattern: "Café Rio", matchMode: "exact" as const },
   ];
 
   it("accepts a new pattern and returns it trimmed", () => {
-    expect(validatePattern("  amazon ", existing)).toEqual({ ok: true, pattern: "amazon" });
+    expect(validatePattern("  amazon ", "contains", existing)).toEqual({ ok: true, pattern: "amazon" });
   });
 
   it("rejects patterns shorter than 3 characters after trimming", () => {
-    expect(validatePattern("  ab  ", existing)).toMatchObject({ ok: false });
+    expect(validatePattern("  ab  ", "contains", existing)).toMatchObject({ ok: false });
   });
 
-  it("rejects a case-insensitive duplicate", () => {
-    expect(validatePattern("STARBUCKS", existing)).toMatchObject({ ok: false });
+  it("rejects patterns longer than the maximum, such as a long description offered as exact", () => {
+    expect(validatePattern("x".repeat(MAX_PATTERN_LENGTH + 1), "exact", existing)).toMatchObject({ ok: false });
+  });
+
+  it("rejects a duplicate in the same mode, ignoring case and accents", () => {
+    expect(validatePattern("STARBUCKS", "contains", existing)).toMatchObject({ ok: false });
+    expect(validatePattern("cafe rio", "exact", existing)).toMatchObject({ ok: false });
+  });
+
+  it("allows the same Pattern once per mode", () => {
+    expect(validatePattern("starbucks", "exact", existing)).toEqual({ ok: true, pattern: "starbucks" });
+    expect(validatePattern("Cafe Rio", "contains", existing)).toEqual({ ok: true, pattern: "Cafe Rio" });
   });
 
   it("allows a rule to keep its own pattern on edit", () => {
-    expect(validatePattern("starbucks", existing, "r1")).toEqual({ ok: true, pattern: "starbucks" });
-    expect(validatePattern("uber", existing, "r1")).toMatchObject({ ok: false });
+    expect(validatePattern("starbucks", "contains", existing, "r1")).toEqual({ ok: true, pattern: "starbucks" });
+    expect(validatePattern("uber", "contains", existing, "r1")).toMatchObject({ ok: false });
   });
 });
 
@@ -153,21 +192,21 @@ describe("withCandidateRule", () => {
 
   it("keeps a new rule's own createdAt when it has one", () => {
     const saved = new Date("2026-10-07");
-    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", categoryId: "cat-food", createdAt: saved });
+    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", matchMode: "contains", categoryId: "cat-food", createdAt: saved });
     expect(rules.at(-1)!.createdAt).toBe(saved);
   });
 
   it("adds a new rule as the newest", () => {
-    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", categoryId: "cat-food" });
+    const rules = withCandidateRule(existing, { id: "new", pattern: "eats", matchMode: "contains", categoryId: "cat-food" });
     expect(rules).toHaveLength(3);
-    expect(rules.at(-1)).toMatchObject({ id: "new", pattern: "eats", categoryId: "cat-food" });
+    expect(rules.at(-1)).toMatchObject({ id: "new", pattern: "eats", matchMode: "contains", categoryId: "cat-food" });
     expect(rules.at(-1)!.createdAt > existing[1]!.createdAt).toBe(true);
   });
 
   it("replaces an edited rule, keeping its createdAt", () => {
-    const rules = withCandidateRule(existing, { id: "r1", pattern: "uber eats", categoryId: "cat-food" });
+    const rules = withCandidateRule(existing, { id: "r1", pattern: "uber eats", matchMode: "contains", categoryId: "cat-food" });
     expect(rules).toEqual([
-      { id: "r1", pattern: "uber eats", categoryId: "cat-food", createdAt: new Date("2026-01-01") },
+      { id: "r1", pattern: "uber eats", matchMode: "contains", categoryId: "cat-food", createdAt: new Date("2026-01-01") },
       existing[1],
     ]);
   });
@@ -184,14 +223,14 @@ describe("ruleRecategorizations", () => {
   it("fills a blank Manual Category when the rule matches it, clearing the manual flag", () => {
     const rows = [{ ...row("t1", "KFC", null), categoryOverridden: true }];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, mapping),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", matchMode: "contains", categoryId: "cat-food" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-food" }]);
   });
 
   it("never touches a Manual Category with a real category", () => {
     const rows = [{ ...row("t1", "KFC", "cat-shop"), categoryOverridden: true }];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", categoryId: "cat-food" }, mapping),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "kfc", matchMode: "contains", categoryId: "cat-food" }, mapping),
     ).toEqual([]);
   });
 
@@ -202,7 +241,7 @@ describe("ruleRecategorizations", () => {
       ruleRecategorizations(
         rows,
         [rule("r1", "kfc", "cat-food")],
-        { id: "r1", pattern: "kfc express", categoryId: "cat-food" },
+        { id: "r1", pattern: "kfc express", matchMode: "contains", categoryId: "cat-food" },
         mapping,
       ),
     ).toEqual([]);
@@ -214,14 +253,14 @@ describe("ruleRecategorizations", () => {
       row("t2", "STARBUCKS #2", "cat-coffee"), // already right
     ];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, mapping),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", matchMode: "contains", categoryId: "cat-coffee" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
   });
 
   it("leaves rows the rule doesn't match alone, even if a deleted rule categorized them", () => {
     const rows = [row("t1", "STARBUCKS #1", "cat-food"), row("t2", "UBER TRIP", "cat-travel")];
     expect(
-      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", categoryId: "cat-coffee" }, mapping),
+      ruleRecategorizations(rows, [], { id: "new", pattern: "starbucks", matchMode: "contains", categoryId: "cat-coffee" }, mapping),
     ).toEqual([{ id: "t1", categoryId: "cat-coffee" }]);
   });
 
@@ -229,18 +268,33 @@ describe("ruleRecategorizations", () => {
     const rules = [rule("r1", "starbucks", "cat-coffee")];
     const rows = [row("t1", "STARBUCKS #1", "cat-coffee"), row("t2", "STARBUCKS RESERVE", "cat-coffee")];
     expect(
-      ruleRecategorizations(rows, rules, { id: "r1", pattern: "starbucks reserve", categoryId: "cat-shop" }, mapping),
+      ruleRecategorizations(rows, rules, { id: "r1", pattern: "starbucks reserve", matchMode: "contains", categoryId: "cat-shop" }, mapping),
     ).toEqual([
       { id: "t1", categoryId: "cat-food" },
       { id: "t2", categoryId: "cat-shop" },
     ]);
   });
 
+  it("touches only rows an exact candidate matches whole", () => {
+    const rows = [row("t1", "UBER", "cat-food"), row("t2", "UBER EATS", "cat-food")];
+    expect(
+      ruleRecategorizations(rows, [], { id: "new", pattern: "uber", matchMode: "exact", categoryId: "cat-travel" }, mapping),
+    ).toEqual([{ id: "t1", categoryId: "cat-travel" }]);
+  });
+
+  it("on a switch from contains to exact, re-resolves rows the contains pattern matched", () => {
+    const rules = [rule("r1", "uber", "cat-travel")];
+    const rows = [row("t1", "UBER", "cat-travel"), row("t2", "UBER EATS", "cat-travel")];
+    expect(
+      ruleRecategorizations(rows, rules, { id: "r1", pattern: "uber", matchMode: "exact", categoryId: "cat-travel" }, mapping),
+    ).toEqual([{ id: "t2", categoryId: "cat-food" }]);
+  });
+
   it("keeps longest-pattern precedence from other rules", () => {
     const rules = [rule("r1", "amazon prime", "cat-subs")];
     const rows = [row("t1", "AMAZON PRIME*1", "cat-subs"), row("t2", "AMAZON MKTP", "cat-food")];
     expect(
-      ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", categoryId: "cat-shop" }, mapping),
+      ruleRecategorizations(rows, rules, { id: "new", pattern: "amazon", matchMode: "contains", categoryId: "cat-shop" }, mapping),
     ).toEqual([{ id: "t2", categoryId: "cat-shop" }]);
   });
 });
@@ -287,6 +341,10 @@ describe("suggestPattern", () => {
 
   it("falls back to the description without a merchant", () => {
     expect(suggestPattern("ACH TRANSFER 42", null)).toBe("ACH TRANSFER 42");
+  });
+
+  it("suggests the merchant when the description has it without accents", () => {
+    expect(suggestPattern("CAFE RIO #12", "Café Rio")).toBe("Café Rio");
   });
 
   it("ignores whitespace around the merchant", () => {

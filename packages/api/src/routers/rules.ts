@@ -5,21 +5,24 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { category, categoryRule } from "@life-tracker/db/schema/index";
+import { category, rule } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
 import {
   DUPLICATE_PATTERN_REASON,
+  MATCH_MODES,
   MAX_PATTERN_LENGTH,
   MIN_PATTERN_LENGTH,
   type MatchableRule,
+  fold,
   validatePattern,
-} from "../lib/category-rules";
-import { type Conn, applyRecategorizations, loadMatchableRules, planRuleApply } from "../lib/category-rules-db";
+} from "../lib/rules";
+import { type Conn, applyRecategorizations, loadMatchableRules, planRuleApply } from "../lib/rules-db";
 import { isUniqueViolation } from "../lib/pg-error";
 
 const ruleInput = z.object({
   pattern: z.string().max(MAX_PATTERN_LENGTH),
+  matchMode: z.enum(MATCH_MODES).default("contains"),
   categoryId: z.string().uuid(),
 });
 
@@ -37,25 +40,26 @@ function assertOwnedRule(rules: readonly MatchableRule[], ruleId: string): void 
 }
 
 /**
- * Category Rules (KOI-298/299): user-defined Patterns that categorize
+ * Rules (KOI-298/299, KOI-339): user-defined Patterns, exact or contains, that categorize
  * transactions at Plaid sync and, when asked, retroactively. Applying is a
  * one-shot write (ADR 0004): deleting or editing a rule without apply leaves
  * past transactions as they are. Deleting a category cascades to its rules.
  */
-export const categoryRulesRouter = router({
+export const rulesRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return db
       .select({
-        id: categoryRule.id,
-        pattern: categoryRule.pattern,
-        categoryId: categoryRule.categoryId,
+        id: rule.id,
+        pattern: rule.pattern,
+        matchMode: rule.matchMode,
+        categoryId: rule.categoryId,
         categoryName: category.name,
-        createdAt: categoryRule.createdAt,
+        createdAt: rule.createdAt,
       })
-      .from(categoryRule)
-      .innerJoin(category, eq(category.id, categoryRule.categoryId))
-      .where(eq(categoryRule.userId, ctx.session.user.id))
-      .orderBy(desc(categoryRule.createdAt));
+      .from(rule)
+      .innerJoin(category, eq(category.id, rule.categoryId))
+      .where(eq(rule.userId, ctx.session.user.id))
+      .orderBy(desc(rule.createdAt));
   }),
 
   /** How many non-manual transactions would change if this rule were saved (new, or as `ruleId`). */
@@ -72,6 +76,7 @@ export const categoryRulesRouter = router({
       const changes = await planRuleApply(db, userId, rules, {
         id: input.ruleId ?? randomUUID(),
         pattern,
+        matchMode: input.matchMode,
         categoryId: input.categoryId,
       });
       return { matchCount: changes.length };
@@ -85,19 +90,27 @@ export const categoryRulesRouter = router({
       return db.transaction(async (tx) => {
         await assertOwnedCategory(tx, userId, input.categoryId);
         const rules = await loadMatchableRules(tx, userId);
-        const valid = validatePattern(input.pattern, rules);
+        const valid = validatePattern(input.pattern, input.matchMode, rules);
         if (!valid.ok) throw new TRPCError({ code: "BAD_REQUEST", message: valid.reason });
 
-        // The unique (user, lower(pattern)) index catches a concurrent duplicate.
+        // The unique (user, matchMode, patternKey) index catches a concurrent duplicate.
         const [saved] = await tx
-          .insert(categoryRule)
-          .values({ id: randomUUID(), userId, pattern: valid.pattern, categoryId: input.categoryId })
+          .insert(rule)
+          .values({
+            id: randomUUID(),
+            userId,
+            pattern: valid.pattern,
+            patternKey: fold(valid.pattern),
+            matchMode: input.matchMode,
+            categoryId: input.categoryId,
+          })
           .onConflictDoNothing()
           .returning({
-            id: categoryRule.id,
-            pattern: categoryRule.pattern,
-            categoryId: categoryRule.categoryId,
-            createdAt: categoryRule.createdAt,
+            id: rule.id,
+            pattern: rule.pattern,
+            matchMode: rule.matchMode,
+            categoryId: rule.categoryId,
+            createdAt: rule.createdAt,
           });
         if (!saved) throw new TRPCError({ code: "BAD_REQUEST", message: DUPLICATE_PATTERN_REASON });
 
@@ -117,21 +130,26 @@ export const categoryRulesRouter = router({
           await assertOwnedCategory(tx, userId, input.categoryId);
           const rules = await loadMatchableRules(tx, userId);
           assertOwnedRule(rules, input.id);
-          const valid = validatePattern(input.pattern, rules, input.id);
+          const valid = validatePattern(input.pattern, input.matchMode, rules, input.id);
           if (!valid.ok) throw new TRPCError({ code: "BAD_REQUEST", message: valid.reason });
 
-          const rule = { id: input.id, pattern: valid.pattern, categoryId: input.categoryId };
+          const edited = { id: input.id, pattern: valid.pattern, matchMode: input.matchMode, categoryId: input.categoryId };
           const [saved] = await tx
-            .update(categoryRule)
-            .set({ pattern: rule.pattern, categoryId: rule.categoryId })
-            .where(and(eq(categoryRule.id, rule.id), eq(categoryRule.userId, userId)))
-            .returning({ id: categoryRule.id });
+            .update(rule)
+            .set({
+              pattern: edited.pattern,
+              patternKey: fold(edited.pattern),
+              matchMode: edited.matchMode,
+              categoryId: edited.categoryId,
+            })
+            .where(and(eq(rule.id, edited.id), eq(rule.userId, userId)))
+            .returning({ id: rule.id });
           if (!saved) throw new TRPCError({ code: "NOT_FOUND", message: "Rule not found" });
 
           const applied = input.applyToExisting
-            ? await applyRecategorizations(tx, userId, await planRuleApply(tx, userId, rules, rule))
+            ? await applyRecategorizations(tx, userId, await planRuleApply(tx, userId, rules, edited))
             : 0;
-          return { rule, applied };
+          return { rule: edited, applied };
         });
       } catch (err) {
         if (isUniqueViolation(err)) throw new TRPCError({ code: "BAD_REQUEST", message: DUPLICATE_PATTERN_REASON });
@@ -143,9 +161,9 @@ export const categoryRulesRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await db
-        .delete(categoryRule)
-        .where(and(eq(categoryRule.id, input.id), eq(categoryRule.userId, ctx.session.user.id)))
-        .returning({ id: categoryRule.id });
+        .delete(rule)
+        .where(and(eq(rule.id, input.id), eq(rule.userId, ctx.session.user.id)))
+        .returning({ id: rule.id });
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Rule not found" });
       return { ok: true };
     }),

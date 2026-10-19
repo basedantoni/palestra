@@ -5,7 +5,7 @@ import { adminRouter } from "./admin";
 import { bankCategoriesRouter } from "./bank-categories";
 import { budgetsRouter } from "./budgets";
 import { categoriesRouter } from "./categories";
-import { categoryRulesRouter } from "./category-rules";
+import { rulesRouter } from "./rules";
 import { goalsRouter } from "./goals";
 import { dataExportRouter } from "./data-export";
 import { exercisesRouter } from "./exercises";
@@ -50,7 +50,7 @@ export const appRouter = router({
   accounts: accountsRouter,
   categories: categoriesRouter,
   bankCategories: bankCategoriesRouter,
-  categoryRules: categoryRulesRouter,
+  rules: rulesRouter,
   budgets: budgetsRouter,
   transactions: transactionsRouter,
   goals: goalsRouter,

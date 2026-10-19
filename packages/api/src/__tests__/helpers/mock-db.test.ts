@@ -1,20 +1,20 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { category, categoryRule, transaction } from "@life-tracker/db/schema/index";
+import { category, rule, transaction } from "@life-tracker/db/schema/index";
 
 import { type MockDbOp, mockDb, rejectWith } from "./mock-db";
 
 describe("mockDb", () => {
   it("returns queued select results per table, in call order, then []", async () => {
     mockDb.onSelect(category, [{ id: "c1" }], [{ id: "c2" }]);
-    mockDb.onSelect(categoryRule, [{ id: "r1" }]);
+    mockDb.onSelect(rule, [{ id: "r1" }]);
 
     const { db } = mockDb;
     await expect(db.select().from(category)).resolves.toEqual([{ id: "c1" }]);
     // A select against another table doesn't shift category's queue.
     await expect(db.select().from(transaction)).resolves.toEqual([]);
-    await expect(db.select().from(categoryRule).where(eq(categoryRule.id, "r1"))).resolves.toEqual([
+    await expect(db.select().from(rule).where(eq(rule.id, "r1"))).resolves.toEqual([
       { id: "r1" },
     ]);
     await expect(db.select().from(category)).resolves.toEqual([{ id: "c2" }]);
@@ -25,12 +25,12 @@ describe("mockDb", () => {
     const { db } = mockDb;
     await db.insert(category).values({ id: "c1", name: "Food" }).onConflictDoNothing();
     await db.update(transaction).set({ categoryId: null }).where(eq(transaction.id, "t1"));
-    await db.delete(categoryRule).where(eq(categoryRule.id, "r1"));
+    await db.delete(rule).where(eq(rule.id, "r1"));
     await db.select().from(category).where(eq(category.userId, "u1"));
 
     expect(mockDb.inserted(category)).toEqual([{ id: "c1", name: "Food" }]);
     expect(mockDb.updated(transaction)).toEqual([{ set: { categoryId: null }, where: ["t1"] }]);
-    expect(mockDb.deleted(categoryRule)).toEqual([["r1"]]);
+    expect(mockDb.deleted(rule)).toEqual([["r1"]]);
     expect(mockDb.selected(category)).toEqual([["u1"]]);
     expect(mockDb.inserted(transaction)).toEqual([]);
   });
@@ -39,9 +39,9 @@ describe("mockDb", () => {
     const { db } = mockDb;
     await db.insert(category).values({ id: "c1" });
     await db.update(transaction).set({ categoryId: null });
-    await db.insert(categoryRule).values({ id: "r1" });
+    await db.insert(rule).values({ id: "r1" });
 
-    expect(mockDb.opsOf("insert").map((op) => op.table)).toEqual([category, categoryRule]);
+    expect(mockDb.opsOf("insert").map((op) => op.table)).toEqual([category, rule]);
     expect(mockDb.opsOf("update").map((op) => op.arg("set"))).toEqual([{ categoryId: null }]);
     expect(mockDb.opsOn(category, "insert")).toHaveLength(1);
     expect(mockDb.opsOn(category, "update")).toEqual([]);

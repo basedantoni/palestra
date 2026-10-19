@@ -44,7 +44,7 @@ export function CategoryList() {
       trpc.categories.pathKey(),
       trpc.budgets.pathKey(),
       trpc.transactions.pathKey(),
-      trpc.categoryRules.pathKey(),
+      trpc.rules.pathKey(),
       trpc.bankCategories.pathKey(),
       trpc.finance.pathKey(),
     ]) {

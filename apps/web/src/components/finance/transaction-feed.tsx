@@ -3,14 +3,14 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
-import { suggestPattern, validatePattern } from "@life-tracker/api/lib/category-rules";
+import { suggestPattern, validatePattern } from "@life-tracker/api/lib/rules";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { CategoryPicker } from "./category-picker";
-import { RuleForm } from "./category-rule-list";
+import { RuleForm, type RuleSuggestion } from "./rule-list";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -329,24 +329,28 @@ type OnRecategorized = (txn: Txn, categoryId: string) => void;
 
 /**
  * "Always categorize like this?" after a recategorize (KOI-300): a toast
- * offering a rule for the suggested Pattern, skipped when that Pattern
- * couldn't be saved (too short, or a rule already has it). Accepting opens
- * the rule form prefilled; dismissing leaves just the Manual Category.
+ * offering a contains rule for the suggested Pattern, skipped when that
+ * Pattern couldn't be saved (too short, or a rule already has it). Accepting
+ * opens the rule form prefilled, its exact toggle offering the whole trimmed
+ * description (KOI-339); dismissing leaves just the Manual Category.
  */
 function useRuleOffer(): [OnRecategorized, ReactNode] {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<{ pattern: string; categoryId: string } | null>(null);
+  const [draft, setDraft] = useState<RuleSuggestion | null>(null);
   const { data: categories } = useQuery(trpc.categories.list.queryOptions());
-  const { data: rules } = useQuery({ ...trpc.categoryRules.list.queryOptions(), enabled: !!draft });
+  const { data: rules } = useQuery({ ...trpc.rules.list.queryOptions(), enabled: !!draft });
 
   const offer: OnRecategorized = async (txn, categoryId) => {
-    const current = await queryClient.fetchQuery(trpc.categoryRules.list.queryOptions());
-    const valid = validatePattern(suggestPattern(txn.name, txn.merchantName), current);
+    const current = await queryClient.fetchQuery(trpc.rules.list.queryOptions());
+    const valid = validatePattern(suggestPattern(txn.name, txn.merchantName), "contains", current);
     if (!valid.ok) return;
     const categoryName = categories?.find((c) => c.id === categoryId)?.name ?? "this category";
     toast(`Always categorize transactions containing “${valid.pattern}” as ${categoryName}?`, {
-      id: "category-rule-offer",
-      action: { label: "Create rule", onClick: () => setDraft({ pattern: valid.pattern, categoryId }) },
+      id: "rule-offer",
+      action: {
+        label: "Create rule",
+        onClick: () => setDraft({ pattern: valid.pattern, exactPattern: txn.name.trim(), categoryId }),
+      },
       cancel: { label: "Dismiss", onClick: () => {} },
     });
   };
@@ -355,7 +359,7 @@ function useRuleOffer(): [OnRecategorized, ReactNode] {
     <Dialog open={!!draft} onOpenChange={(open) => !open && setDraft(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New category rule</DialogTitle>
+          <DialogTitle>New rule</DialogTitle>
         </DialogHeader>
         {draft && rules && categories && (
           <RuleForm rules={rules} categories={categories} suggested={draft} onDone={() => setDraft(null)} />

@@ -18,8 +18,8 @@ import {
 } from "@life-tracker/db/schema/index";
 
 import { adminProcedure, router } from "../index";
-import { isManualCategory } from "../lib/category-rules";
-import { writeSeedMapping } from "../lib/category-rules-db";
+import { isManualCategory } from "../lib/rules";
+import { writeSeedMapping } from "../lib/rules-db";
 import { seedBankCategoryMapping } from "../lib/category-seed";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -64,7 +64,7 @@ export const adminRouter = router({
   // Backfill: flag existing transactions whose category was picked by hand
   // (KOI-297, ADR 0004). Before the flag existed nothing recorded this, so it is
   // inferred: a category that differs from the recomputed Default Category is
-  // manual. Run ONCE, right after the migration — once Category Rules exist, a
+  // manual. Run ONCE, right after the migration — once Rules exist, a
   // rule-applied category also differs from the default and would be misread.
   // ---------------------------------------------------------------------------
   backfillManualCategories: adminProcedure.mutation(async () => {

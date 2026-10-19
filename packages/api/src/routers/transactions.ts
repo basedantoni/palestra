@@ -10,8 +10,8 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { countsInTotals, isExcluded } from "../lib/counts-in-totals-sql";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
-import { resolveCategory } from "../lib/category-rules";
-import { loadBankCategoryMapping, loadMatchableRules } from "../lib/category-rules-db";
+import { resolveCategory } from "../lib/rules";
+import { loadBankCategoryMapping, loadMatchableRules } from "../lib/rules-db";
 import { effectiveFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 

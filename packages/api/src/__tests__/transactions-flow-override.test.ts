@@ -85,7 +85,7 @@ describe("syncPlaidItem upsert", () => {
       },
     });
     mockDb.onSelect(financialAccount, [{ id: "fa-chk", plaidAccountId: "p_chk" }]);
-    // Categories, category rules and transfer candidates: nothing queued, so [].
+    // Categories, rules and transfer candidates: nothing queued, so [].
 
     await syncPlaidItem(ITEM_ID);
 

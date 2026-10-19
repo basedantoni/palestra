@@ -4,7 +4,7 @@ import { db } from "@life-tracker/db";
 import { bankCategoryMapping } from "@life-tracker/db/schema/index";
 
 import { protectedProcedure, router } from "../index";
-import { bankCategoryRecategorizations } from "../lib/category-rules";
+import { bankCategoryRecategorizations } from "../lib/rules";
 import {
   applyRecategorizations,
   loadBankCategoryMapping,
@@ -12,7 +12,7 @@ import {
   loadMatchableRules,
   ownedCategory,
   remapMayCategorize,
-} from "../lib/category-rules-db";
+} from "../lib/rules-db";
 import { PFC_PRIMARIES } from "../lib/category-seed";
 
 /**
