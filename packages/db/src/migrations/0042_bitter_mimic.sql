@@ -1,0 +1,1 @@
+ALTER TABLE "category" ADD COLUMN "excluded" boolean DEFAULT false NOT NULL;

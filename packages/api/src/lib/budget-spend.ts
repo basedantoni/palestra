@@ -13,6 +13,7 @@ export interface SpendTransaction {
   /** Plaid sign convention: positive = money out (an expense). */
   amount: number;
   flow: TransactionFlow | null;
+  /** Excluded by hand or through its category (`isExcluded`, counts-in-totals-sql.ts). */
   excluded: boolean;
   date: Date;
 }

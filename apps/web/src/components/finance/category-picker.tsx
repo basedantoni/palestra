@@ -13,6 +13,9 @@ interface PickerCategory {
   color: string | null;
   tint?: number | null;
   icon: string | null;
+  /** Excluded Category, itself or through its parent (KOI-338). */
+  excluded?: boolean;
+  excludedByParent?: boolean;
 }
 
 /** A row above the categories, such as "Uncategorized" or "All categories". */
@@ -27,7 +30,8 @@ interface Extra {
  * Category dropdown (KOI-336): a popover listing the categories in their
  * manual order, each with its icon or color, under any `extras`. Given in
  * tree order (`categories.list`), Subcategories sit indented under their
- * parent; parents and Subcategories are both pickable (KOI-337). Values are
+ * parent; parents and Subcategories are both pickable (KOI-337), and
+ * Excluded Categories are marked (KOI-338). Values are
  * strings like a `<select>`'s: a category id, an extra's value, or "" for
  * nothing picked yet (shown as `placeholder`).
  */
@@ -108,6 +112,7 @@ export function CategoryPicker({
             <Option key={c.id} selected={c.id === value} onPick={() => pick(c.id)} indent={!!c.parentId}>
               <CategoryMark category={c} />
               <span className="truncate">{c.name}</span>
+              {(c.excluded || c.excludedByParent) && <span className="shrink-0 text-xs text-muted-foreground">excluded</span>}
             </Option>
           ))}
         </ul>

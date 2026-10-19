@@ -26,6 +26,9 @@ import { user } from "./auth";
  * `parentId` files a Subcategory under a Parent Category (KOI-337). The tree is
  * two levels deep, enforced by `categories.update`, not the database; a
  * Subcategory stores no color (it renders as a tint of its parent's).
+ *
+ * `excluded` makes it an Excluded Category (KOI-338): its transactions, and its
+ * Subcategories', leave every total (`countsInTotals`) but stay in the ledger.
  */
 export const category = pgTable(
   "category",
@@ -39,6 +42,7 @@ export const category = pgTable(
     isSystem: boolean("is_system").default(false).notNull(),
     color: text("color"),
     icon: text("icon"),
+    excluded: boolean("excluded").default(false).notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
