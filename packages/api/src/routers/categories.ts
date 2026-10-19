@@ -54,7 +54,9 @@ async function assertCanFileUnder(conn: Conn, userId: string, id: string, parent
 export const categoriesRouter = router({
   /**
    * The user's categories as their tree in manual order (each parent followed
-   * by its Subcategories, `tint` set on those), with how many transactions each holds.
+   * by its Subcategories, `tint` set on those), with how many transactions each
+   * holds. `excluded` is the category's own setting; `excludedByParent` marks a
+   * Subcategory excluded through its parent (KOI-338).
    */
   list: protectedProcedure.query(async ({ ctx }) => {
     const rows = await db
@@ -65,6 +67,7 @@ export const categoriesRouter = router({
         color: category.color,
         icon: category.icon,
         isSystem: category.isSystem,
+        excluded: category.excluded,
         transactionCount: sql<number>`count(${transaction.id})::int`,
       })
       .from(category)
@@ -72,7 +75,8 @@ export const categoriesRouter = router({
       .where(eq(category.userId, ctx.session.user.id))
       .groupBy(category.id)
       .orderBy(category.sortOrder, category.name);
-    return categoryTree(rows);
+    const excludedIds = new Set(rows.filter((r) => r.excluded).map((r) => r.id));
+    return categoryTree(rows).map((c) => ({ ...c, excludedByParent: !!c.parentId && excludedIds.has(c.parentId) }));
   }),
 
   /** A new category goes last, in the least-used palette color. */
@@ -101,10 +105,10 @@ export const categoriesRouter = router({
     }),
 
   /**
-   * Rename, recolor, set or clear the icon of, or set or clear the parent of
-   * any owned category, seeded or custom. A Subcategory stores no color: filing
-   * one under a parent drops its own, and one moved back to top level takes its
-   * old parent's unless given a color.
+   * Rename, recolor, set or clear the icon of, set or clear the parent of, or
+   * exclude or include (KOI-338) any owned category, seeded or custom. A
+   * Subcategory stores no color: filing one under a parent drops its own, and
+   * one moved back to top level takes its old parent's unless given a color.
    */
   update: protectedProcedure
     .input(
@@ -114,6 +118,7 @@ export const categoriesRouter = router({
         color: z.enum(CATEGORY_COLORS).optional(),
         icon: z.enum(CATEGORY_ICONS).nullable().optional(),
         parentId: z.string().uuid().nullable().optional(),
+        excluded: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

@@ -8,6 +8,7 @@ import { category, financialAccount, transaction } from "@life-tracker/db/schema
 import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { countsInTotals, isExcluded } from "../lib/counts-in-totals-sql";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { resolveCategory } from "../lib/category-rules";
 import { loadBankCategoryMapping, loadMatchableRules } from "../lib/category-rules-db";
@@ -74,7 +75,9 @@ export const transactionsRouter = router({
           flow: transaction.flow,
           flowOverridden: transaction.flowOverridden,
           pending: transaction.pending,
-          excluded: transaction.excluded,
+          // Excluded by hand or through its category; `excludedByHand` is the toggle's own flag.
+          excluded: isExcluded,
+          excludedByHand: transaction.excluded,
           note: transaction.note,
           transferPairId: transaction.transferPairId,
           categoryId: transaction.categoryId,
@@ -100,14 +103,14 @@ export const transactionsRouter = router({
 
   /**
    * Totals for the filtered feed: how many transactions match, and expense
-   * spend (non-excluded, flow = expense — the same rule budgets use).
+   * spend (flow = expense and counting in totals — the same rule budgets use).
    */
   summary: protectedProcedure.input(filtersSchema).query(async ({ ctx, input }) => {
     const conds = await filterConditions(ctx.session.user.id, input);
     const [row] = await db
       .select({
         count: sql<number>`count(*)::int`,
-        spent: sql<number | null>`sum(${transaction.amount}) filter (where ${transaction.flow} = 'expense' and not ${transaction.excluded})`,
+        spent: sql<number | null>`sum(${transaction.amount}) filter (where ${transaction.flow} = 'expense' and ${countsInTotals})`,
       })
       .from(transaction)
       .where(and(...conds));
@@ -205,6 +208,7 @@ export const transactionsRouter = router({
       return { ok: true };
     }),
 
+  /** Exclude or include one transaction by hand; one in an Excluded Category stays Excluded either way. */
   setExcluded: protectedProcedure
     .input(z.object({ id: z.string().uuid(), excluded: z.boolean() }))
     .mutation(async ({ ctx, input }) => {

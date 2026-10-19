@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { CATEGORY_COLORS, CATEGORY_ICONS, type CategoryIcon } from "@life-tracker/shared";
@@ -25,9 +25,9 @@ type CategoryRow = RouterOutputs["categories"]["list"][number];
  * Categories tab on the budgets page (KOI-287): every category, in its manual
  * order, with its color, icon and transaction count; any category, seeded or
  * custom, can be recolored, renamed, moved up or down among its siblings,
- * filed under a parent (KOI-337), or deleted (optionally moving its
- * transactions). Subcategories sit indented under their parent in a tint of
- * its color. Below, the Bank Category mapping (KOI-335).
+ * filed under a parent (KOI-337), excluded from totals (KOI-338), or deleted
+ * (optionally moving its transactions). Subcategories sit indented under their
+ * parent in a tint of its color. Below, the Bank Category mapping (KOI-335).
  */
 export function CategoryList() {
   const queryClient = useQueryClient();
@@ -108,7 +108,10 @@ export function CategoryList() {
                   className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5"
                 />
               ) : (
-                <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                <span className={cn("min-w-0 flex-1 truncate", (c.excluded || c.excludedByParent) && "text-muted-foreground")}>
+                  {c.name}
+                  {(c.excluded || c.excludedByParent) && <span className="ms-1.5 text-xs">· excluded</span>}
+                </span>
               )}
               <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                 {!hasSubcategories(c.id) && (
@@ -143,6 +146,17 @@ export function CategoryList() {
                   aria-label={`Move ${c.name} down`}
                 >
                   <ArrowDown />
+                </Button>
+                <Button
+                  size="icon-xs"
+                  variant={c.excluded ? "secondary" : "ghost"}
+                  aria-pressed={c.excluded || c.excludedByParent}
+                  disabled={(c.excludedByParent && !c.excluded) || update.isPending}
+                  onClick={() => update.mutate({ id: c.id, excluded: !c.excluded })}
+                  aria-label={`Exclude ${c.name} from totals`}
+                  title={c.excludedByParent ? "Excluded with its parent" : "Exclude from totals"}
+                >
+                  <EyeOff />
                 </Button>
                 <Button size="icon-xs" variant="ghost" onClick={() => setRenaming(c.id)} aria-label={`Rename ${c.name}`}>
                   <Pencil />

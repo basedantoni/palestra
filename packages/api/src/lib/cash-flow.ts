@@ -10,6 +10,7 @@ export interface CashFlowTransaction {
   /** Plaid sign convention: positive = money out. */
   amount: number;
   flow: TransactionFlow | null;
+  /** Excluded by hand or through its category (`isExcluded`, counts-in-totals-sql.ts). */
   excluded: boolean;
   date: Date;
 }

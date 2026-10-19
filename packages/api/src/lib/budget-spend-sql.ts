@@ -6,13 +6,15 @@ import { db } from "@life-tracker/db";
 import { category, transaction } from "@life-tracker/db/schema/index";
 import { addMonths, MONTH_KEY_REGEX } from "@life-tracker/shared";
 
+import { isExcluded } from "./counts-in-totals-sql";
+
 export const monthKeySchema = z.string().regex(MONTH_KEY_REGEX, "monthKey must be YYYY-MM");
 
 export const spendColumns = {
   categoryId: transaction.categoryId,
   amount: transaction.amount,
   flow: transaction.flow,
-  excluded: transaction.excluded,
+  excluded: isExcluded,
   date: transaction.date,
 };
 

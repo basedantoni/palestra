@@ -297,11 +297,14 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
         <label className="flex items-center gap-1 text-xs text-muted-foreground">
           <input
             type="checkbox"
-            checked={txn.excluded}
+            checked={txn.excludedByHand}
             onChange={(e) => setExcluded.mutate({ id: txn.id, excluded: e.target.checked })}
           />
-          Exclude from budgets
+          Exclude from totals
         </label>
+        {txn.excluded && !txn.excludedByHand && (
+          <span className="text-xs text-muted-foreground">Excluded with its category</span>
+        )}
       </div>
       <textarea
         aria-label="Note"
