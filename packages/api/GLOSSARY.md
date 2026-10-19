@@ -140,6 +140,10 @@ _Avoid_: Source, feed, shop, store
 One Marketplace's price for one Printing in one Condition on one day, in the currency the Marketplace reports: its own aggregate where it publishes one, otherwise its lowest Listing that day. Not a seller's price: an Offer can sit well above or below it.
 _Avoid_: Price, market value, quote
 
+**Current Market Price**:
+The latest Market Price for a Printing in a Condition on a Marketplace on or before a given day, up to 30 days old. It shows its date once it is more than 7 days old. With none that recent, there is no Current Market Price, and none is carried forward or estimated.
+_Avoid_: Latest price, today's price, last price
+
 **Marketplace Product**:
 A Marketplace's own identity for something it sells, such as a TCGplayer product or a CardTrader blueprint. It is of at most one Artwork; one Artwork can have several (a reprint, an errata or a promo stamp of the same art). One with no Artwork gets no Market Price.
 _Avoid_: Blueprint, SKU, product
@@ -153,7 +157,7 @@ The daily Market Prices of one Printing from one Marketplace over time. Never bl
 _Avoid_: Price chart, price trend, history
 
 **Price Move**:
-The change in one Printing's Market Price on one Marketplace over a window, as a percentage in the Marketplace's own currency, so exchange-rate swings never count as a move.
+The change in one Printing's Market Price on one Marketplace over a window, as a percentage in the Marketplace's own currency, so exchange-rate swings never count as a move. A Printing with no Market Price near either end of the window has no Price Move.
 _Avoid_: Mover, swing, trend
 
 **Watched Artwork**:
@@ -161,7 +165,7 @@ An Artwork the user has an open Want for, holds a Copy of, has rated ★4 or ★
 _Avoid_: Watchlist, favourite
 
 **Copy Value**:
-What one Copy is worth in USD on a day: the lowest Market Price for its Printing at its Condition or better (what replacing it would cost), from the latest day up to 30 days back, converted at that day's exchange rate. A Copy with no such price is unpriced, never estimated from another language or from what was paid.
+What one Copy is worth in USD on a day: the lowest Current Market Price for its Printing at its Condition or better (what replacing it would cost), converted at that day's exchange rate. A Copy with no such price is unpriced, never estimated from another language or from what was paid.
 _Avoid_: Market value, worth
 
 **Collection Value**:
