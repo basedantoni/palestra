@@ -147,7 +147,7 @@ export function loadBankCategoryTransactions(
 const ruleMayCategorize = or(eq(transaction.categoryOverridden, false), isNull(transaction.categoryId));
 
 /** A rule may set the flow of these: not hand-set (ADR 0001) nor a Transfer Pair's leg — `isFlowLocked` in SQL. */
-const ruleMaySetFlow = and(eq(transaction.flowOverridden, false), isNull(transaction.transferPairId));
+export const ruleMaySetFlow = and(eq(transaction.flowOverridden, false), isNull(transaction.transferPairId));
 
 /**
  * A remap may set only automatic rows; every Manual Category stays (KOI-335).

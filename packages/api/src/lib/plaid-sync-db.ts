@@ -48,7 +48,7 @@ import {
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
 import { resolveCategory, resolveFlow } from "./rules";
-import { loadBankCategoryMapping, loadMatchableRules } from "./rules-db";
+import { loadBankCategoryMapping, loadMatchableRules, ruleMaySetFlow } from "./rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -172,8 +172,8 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
           merchantName: up.merchantName,
           pending: up.pending,
           // A user override wins over Plaid's re-classification (ADR 0001), and
-          // a Transfer Pair's legs keep theirs (`isFlowLocked`).
-          flow: sql`case when (${transaction.flowOverridden} or ${transaction.transferPairId} is not null) then ${transaction.flow} else excluded.flow end`,
+          // a Transfer Pair's legs keep theirs: only an unlocked row takes the new flow.
+          flow: sql`case when ${ruleMaySetFlow} then excluded.flow else ${transaction.flow} end`,
           plaidCategoryPrimary: up.plaidCategoryPrimary,
           plaidCategoryDetailed: up.plaidCategoryDetailed,
           isoCurrencyCode: up.isoCurrencyCode,

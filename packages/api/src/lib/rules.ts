@@ -120,13 +120,18 @@ export function resolveFlow(
   return matchRule(name, rules, "setFlow")?.setFlow ?? baseFlow;
 }
 
+/** Income and transfer carry no category, so a rule setting either sets none. */
+export function flowTakesNoCategory(flow: TransactionFlow | null): boolean {
+  return flow === "income" || flow === "transfer";
+}
+
 /**
  * Why a Rule can't set this flow and category, or null when it can: it must
  * set at least one, and an income or transfer rule sets no category.
  */
 export function ruleTargetsError(setFlow: TransactionFlow | null, categoryId: string | null): string | null {
   if (setFlow === null && categoryId === null) return "A rule must set a flow, a category, or both";
-  if (categoryId !== null && setFlow !== null && setFlow !== "expense") return "Income and transfer rules set no category";
+  if (categoryId !== null && flowTakesNoCategory(setFlow)) return "Income and transfer rules set no category";
   return null;
 }
 
@@ -209,7 +214,8 @@ export interface CategorizableTransaction extends FlowLock {
  * sweep (ADR 0004). A Manual Category is never changed, except that a matching
  * rule fills a blank one (Uncategorized); falling back to the Default Category
  * never does. Flow re-resolves from the bank's classification, except on a
- * locked row (`isFlowLocked`).
+ * locked row (`isFlowLocked`). Only the fields the rule sets, or set before
+ * the edit, re-resolve: a category rule never resets a flow, nor the reverse.
  */
 export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
@@ -220,17 +226,22 @@ export function ruleRecategorizations(
   const previous = rules.find((r) => r.id === candidate.id);
   const touched = rows.filter((row) => matches(candidate, row.name) || (previous && matches(previous, row.name)));
   const saved = withCandidateRule(rules, candidate);
+  const sets = (field: RuleField) => candidate[field] !== null || (previous !== undefined && previous[field] !== null);
   return touched.flatMap((row) => {
     const change: Recategorization = { id: row.id };
-    // undefined: the category stays (a Manual Category takes only a rule's, and only when blank).
-    const categoryId = !row.categoryOverridden
-      ? resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping)
-      : row.categoryId === null
-        ? matchRule(row.name, saved, "categoryId")?.categoryId
-        : undefined;
-    if (categoryId !== undefined && categoryId !== row.categoryId) change.categoryId = categoryId;
-    const flow = resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, saved, row);
-    if (!isFlowLocked(row) && flow !== row.flow) change.flow = flow;
+    if (sets("categoryId")) {
+      // undefined: the category stays (a Manual Category takes only a rule's, and only when blank).
+      const categoryId = !row.categoryOverridden
+        ? resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping)
+        : row.categoryId === null
+          ? matchRule(row.name, saved, "categoryId")?.categoryId
+          : undefined;
+      if (categoryId !== undefined && categoryId !== row.categoryId) change.categoryId = categoryId;
+    }
+    if (sets("setFlow") && !isFlowLocked(row)) {
+      const flow = resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, saved, row);
+      if (flow !== row.flow) change.flow = flow;
+    }
     return "categoryId" in change || "flow" in change ? [change] : [];
   });
 }

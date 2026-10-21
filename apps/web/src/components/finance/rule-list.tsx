@@ -6,6 +6,7 @@ import {
   MATCH_MODES,
   MAX_PATTERN_LENGTH,
   type MatchMode,
+  flowTakesNoCategory,
   ruleTargetsError,
   validatePattern,
 } from "@life-tracker/api/lib/rules";
@@ -144,7 +145,6 @@ export function RuleForm({
   // "" in the selects is "none"; the API takes null.
   const targets = { setFlow: flow || null, categoryId: categoryId || null };
   const targetsOk = ruleTargetsError(targets.setFlow, targets.categoryId) === null;
-  const noCategory = flow === "income" || flow === "transfer";
   const validation = validatePattern(pattern, matchMode, rules, editing?.id);
   const debouncedValid = validatePattern(debouncedPattern, matchMode, rules, editing?.id);
   const preview = useQuery(
@@ -227,7 +227,7 @@ export function RuleForm({
           onChange={(e) => {
             const next = e.target.value as TransactionFlow | "";
             setFlow(next);
-            if (next === "income" || next === "transfer") setCategoryId("");
+            if (flowTakesNoCategory(next || null)) setCategoryId("");
             save.reset();
           }}
           className="rounded-md border border-border bg-background px-1.5 py-1 text-sm"
@@ -246,7 +246,7 @@ export function RuleForm({
           onChange={setCategoryId}
           // With a flow set, the category is optional.
           extras={flow ? [{ value: "", label: "No category" }] : []}
-          disabled={noCategory}
+          disabled={flowTakesNoCategory(flow || null)}
         />
         <div className="ml-auto flex gap-2">
           <Button size="sm" type="submit" disabled={!pattern.trim() || !targetsOk || save.isPending}>

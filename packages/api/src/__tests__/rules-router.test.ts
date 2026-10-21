@@ -595,8 +595,8 @@ describe("syncPlaidItem with flow rules", () => {
 
     const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as { set: { flow: unknown } };
-    expect(sqlText(onConflict.set.flow)).toMatch(
-      /case when \("transaction"."flow_overridden" or "transaction"."transfer_pair_id" is not null\) then "transaction"."flow" else excluded.flow end/,
+    expect(sqlText(onConflict.set.flow)).toBe(
+      'case when ("transaction"."flow_overridden" = $1 and "transaction"."transfer_pair_id" is null) then excluded.flow else "transaction"."flow" end',
     );
   });
 });

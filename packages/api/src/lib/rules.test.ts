@@ -428,6 +428,20 @@ describe("ruleRecategorizations", () => {
     expect(ruleRecategorizations(rows, rules, candidate, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts" }]);
   });
 
+  it("re-resolves only the fields the rule sets, or set before the edit", () => {
+    // t1's income came from a since-deleted flow rule; a category rule leaves it be.
+    const rows = [{ ...transferIn("t1", "ZELLE FROM JANE"), flow: "income" as const }];
+    const categoryOnly = { id: "new", pattern: "zelle", matchMode: "contains" as const, categoryId: "cat-gifts", setFlow: null };
+    expect(ruleRecategorizations(rows, [], categoryOnly, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts" }]);
+    // A flow-only rule leaves a category a deleted rule set.
+    const categorized = [{ ...row("t2", "ZELLE FROM JANE", "cat-old"), plaidCategoryPrimary: "TRANSFER_IN", flow: "transfer" as const }];
+    expect(ruleRecategorizations(categorized, [], flowCandidate("income"), mapping)).toEqual([{ id: "t2", flow: "income" }]);
+    // Editing a flow rule into a category rule still returns its rows' flow.
+    const rules = [flowRule("r1", "zelle", "income")];
+    const edited = { ...categoryOnly, id: "r1" };
+    expect(ruleRecategorizations(rows, rules, edited, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts", flow: "transfer" }]);
+  });
+
   it("keeps longest-pattern precedence from other rules", () => {
     const rules = [rule("r1", "amazon prime", "cat-subs")];
     const rows = [row("t1", "AMAZON PRIME*1", "cat-subs"), row("t2", "AMAZON MKTP", "cat-food")];

@@ -4,6 +4,7 @@ import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react"
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
 import { suggestPattern, validatePattern } from "@life-tracker/api/lib/rules";
+import { TRANSACTION_FLOWS, type TransactionFlow } from "@life-tracker/api/lib/transaction-flow";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -215,7 +216,6 @@ function FeedItem({
   );
 }
 
-type Flow = keyof typeof FLOW_LABELS;
 
 /**
  * Correct a transaction's flow, or return it to "Automatic" (Plaid-derived).
@@ -233,14 +233,14 @@ function FlowPicker({ txn }: { txn: Txn }) {
       value={txn.flowOverridden && txn.flow ? txn.flow : "auto"}
       onChange={(e) => {
         const v = e.target.value;
-        setFlow.mutate({ id: txn.id, flow: v === "auto" ? null : (v as Flow) });
+        setFlow.mutate({ id: txn.id, flow: v === "auto" ? null : (v as TransactionFlow) });
       }}
       className="rounded-md border border-border bg-background px-1.5 py-0.5 text-xs disabled:opacity-50"
     >
       <option value="auto">
         Automatic{!txn.flowOverridden && txn.flow ? ` (${FLOW_LABELS[txn.flow]})` : ""}
       </option>
-      {(Object.keys(FLOW_LABELS) as Flow[]).map((f) => (
+      {TRANSACTION_FLOWS.map((f) => (
         <option key={f} value={f}>
           {FLOW_LABELS[f]}
         </option>

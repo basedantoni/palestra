@@ -94,7 +94,7 @@ describe("syncPlaidItem upsert", () => {
       set: Record<string, unknown>;
     };
     expect(render(onConflict.set.flow).sql).toBe(
-      'case when ("transaction"."flow_overridden" or "transaction"."transfer_pair_id" is not null) then "transaction"."flow" else excluded.flow end',
+      'case when ("transaction"."flow_overridden" = $1 and "transaction"."transfer_pair_id" is null) then excluded.flow else "transaction"."flow" end',
     );
   });
 });
