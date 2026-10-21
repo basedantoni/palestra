@@ -85,11 +85,11 @@ A game card identified by its card number (e.g. `OP05-069`) and character. Sever
 _Avoid_: Using "card" for a physical card or a specific artwork
 
 **Artwork**:
-One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language. A region-exclusive print with no Japanese variant ID (a Korea-only promo, a China-only card) is not an Artwork here.
+One illustration of a Card, identified by Bandai's Japanese variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language. An English-only print is an Artwork too, identified by its English ID marked as English. A Korea-only promo or China-only card is not an Artwork here.
 _Avoid_: Variant (as a noun), art, illustration
 
 **Printing**:
-An Artwork released in one language (English, Japanese, Simplified Chinese, or Korean), with its set. What a seller sells and what a Copy is of.
+An Artwork released in one language (English, Japanese, Simplified Chinese, or Korean), with its set. What a seller sells and what a Copy is of. Its language's card list may number it differently from its Artwork's variant ID: Bandai's English IDs drift from the Japanese ones after reprints.
 _Avoid_: Version, edition
 
 **Copy**:
