@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { MATCH_MODES, MAX_PATTERN_LENGTH, type MatchMode, validatePattern } from "@life-tracker/api/lib/rules";
+import {
+  MATCH_MODES,
+  MAX_PATTERN_LENGTH,
+  type MatchMode,
+  ruleTargetsError,
+  validatePattern,
+} from "@life-tracker/api/lib/rules";
+import { TRANSACTION_FLOWS, type TransactionFlow } from "@life-tracker/api/lib/transaction-flow";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { Button } from "@/components/ui/button";
@@ -18,11 +25,19 @@ const PREVIEW_DEBOUNCE_MS = 300;
 /** How each match mode reads in the list and the form's toggle. */
 const MODE_LABELS: Record<MatchMode, string> = { contains: "Contains", exact: "Is exactly" };
 
+export const FLOW_LABELS: Record<TransactionFlow, string> = { income: "Income", expense: "Expense", transfer: "Transfer" };
+
+/** What a rule sets, as the list shows it: "Income", "Coffee", or "Expense · Coffee". */
+function ruleTargets(r: RuleRow): string {
+  return [r.setFlow && FLOW_LABELS[r.setFlow], r.categoryName].filter(Boolean).join(" · ");
+}
+
 /**
- * Rules tab on the budgets page (KOI-298/299, KOI-339): Rules categorize new
- * transactions at sync when their bank description is exactly, or contains,
- * the Pattern, and can be applied to past ones on save. Applying is one-shot:
- * deleting or editing a rule leaves already-categorized transactions as they are.
+ * Rules tab on the budgets page (KOI-298/299, KOI-339, KOI-340): Rules set the
+ * category, flow, or both of new transactions at sync when their bank
+ * description is exactly, or contains, the Pattern, and can be applied to past
+ * ones on save. Applying is one-shot: deleting or editing a rule leaves
+ * already-changed transactions as they are.
  */
 export function RuleList() {
   const queryClient = useQueryClient();
@@ -49,7 +64,7 @@ export function RuleList() {
             ) : (
               <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                 <span>
-                  {MODE_LABELS[r.matchMode]} <span className="font-medium">“{r.pattern}”</span> → {r.categoryName}
+                  {MODE_LABELS[r.matchMode]} <span className="font-medium">“{r.pattern}”</span> → {ruleTargets(r)}
                 </span>
                 <span className="flex items-center gap-1">
                   <Button size="icon-xs" variant="ghost" onClick={() => setEditingId(r.id)} aria-label={`Edit rule ${r.pattern}`}>
@@ -75,8 +90,9 @@ export function RuleList() {
       {editingId === null && <RuleForm rules={rules} categories={categories} />}
       <p className="text-xs text-muted-foreground">
         New transactions whose description is exactly, or contains, a pattern (ignoring case and accents) get its
-        category. An exact match wins over any other; then the longest pattern wins, then the newest rule.
-        Transactions you categorized by hand are never changed.
+        flow and category, each from the best rule that sets it. An exact match wins over any other; then the longest
+        pattern wins, then the newest rule. Income and transfer rules set no category. Categories and flows you set by
+        hand, and paired transfers, are never changed.
       </p>
     </div>
   );
@@ -91,7 +107,8 @@ export interface RuleSuggestion {
 
 /**
  * Create a rule (optionally prefilled with `suggested`), or edit `editing`:
- * match mode, live Pattern validation, match count, and apply-to-existing.
+ * match mode, live Pattern validation, flow and category (an income or
+ * transfer rule takes no category), match count, and apply-to-existing.
  * Switching a suggestion's mode swaps in its Pattern for that mode. With `onDone`,
  * the form closes on save or Cancel; without it, it resets for the next rule.
  */
@@ -114,6 +131,7 @@ export function RuleForm({
   const [matchMode, setMatchMode] = useState<MatchMode>(editing?.matchMode ?? "contains");
   const [pattern, setPattern] = useState(initial?.pattern ?? "");
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [flow, setFlow] = useState<TransactionFlow | "">(editing?.setFlow ?? "");
   const [applyToExisting, setApplyToExisting] = useState(true);
   const [touched, setTouched] = useState(false);
   const [debouncedPattern, setDebouncedPattern] = useState(pattern);
@@ -123,6 +141,10 @@ export function RuleForm({
     return () => clearTimeout(t);
   }, [pattern]);
 
+  // "" in the selects is "none"; the API takes null.
+  const targets = { setFlow: flow || null, categoryId: categoryId || null };
+  const targetsOk = ruleTargetsError(targets.setFlow, targets.categoryId) === null;
+  const noCategory = flow === "income" || flow === "transfer";
   const validation = validatePattern(pattern, matchMode, rules, editing?.id);
   const debouncedValid = validatePattern(debouncedPattern, matchMode, rules, editing?.id);
   const preview = useQuery(
@@ -130,10 +152,10 @@ export function RuleForm({
       {
         pattern: debouncedValid.ok ? debouncedValid.pattern : "",
         matchMode,
-        categoryId,
+        ...targets,
         ruleId: editing?.id,
       },
-      { enabled: debouncedValid.ok && !!categoryId },
+      { enabled: debouncedValid.ok && targetsOk },
     ),
   );
 
@@ -151,7 +173,7 @@ export function RuleForm({
 
   const patternError = touched && !validation.ok ? validation.reason : save.error?.message;
   const errorId = `rule-pattern-error-${editing?.id ?? "new"}`;
-  const matchCount = validation.ok && categoryId && pattern === debouncedPattern ? preview.data?.matchCount : undefined;
+  const matchCount = validation.ok && targetsOk && pattern === debouncedPattern ? preview.data?.matchCount : undefined;
 
   return (
     <form
@@ -159,8 +181,8 @@ export function RuleForm({
       onSubmit={(e) => {
         e.preventDefault();
         setTouched(true);
-        if (!validation.ok || !categoryId) return;
-        const input = { pattern: validation.pattern, matchMode, categoryId, applyToExisting };
+        if (!validation.ok || !targetsOk) return;
+        const input = { pattern: validation.pattern, matchMode, ...targets, applyToExisting };
         if (editing) update.mutate({ id: editing.id, ...input });
         else create.mutate(input);
       }}
@@ -199,9 +221,35 @@ export function RuleForm({
           aria-describedby={errorId}
           className="min-w-40 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
         />
-        <CategoryPicker aria-label="Category" categories={categories} value={categoryId} onChange={setCategoryId} />
+        <select
+          aria-label="Set flow"
+          value={flow}
+          onChange={(e) => {
+            const next = e.target.value as TransactionFlow | "";
+            setFlow(next);
+            if (next === "income" || next === "transfer") setCategoryId("");
+            save.reset();
+          }}
+          className="rounded-md border border-border bg-background px-1.5 py-1 text-sm"
+        >
+          <option value="">Keep flow</option>
+          {TRANSACTION_FLOWS.map((f) => (
+            <option key={f} value={f}>
+              {FLOW_LABELS[f]}
+            </option>
+          ))}
+        </select>
+        <CategoryPicker
+          aria-label="Category"
+          categories={categories}
+          value={categoryId}
+          onChange={setCategoryId}
+          // With a flow set, the category is optional.
+          extras={flow ? [{ value: "", label: "No category" }] : []}
+          disabled={noCategory}
+        />
         <div className="ml-auto flex gap-2">
-          <Button size="sm" type="submit" disabled={!pattern.trim() || !categoryId || save.isPending}>
+          <Button size="sm" type="submit" disabled={!pattern.trim() || !targetsOk || save.isPending}>
             {editing ? "Save" : "Add"}
           </Button>
           {onDone && (

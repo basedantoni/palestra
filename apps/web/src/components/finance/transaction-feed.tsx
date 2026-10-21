@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { CategoryPicker } from "./category-picker";
-import { RuleForm, type RuleSuggestion } from "./rule-list";
+import { FLOW_LABELS, RuleForm, type RuleSuggestion } from "./rule-list";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -215,7 +215,6 @@ function FeedItem({
   );
 }
 
-const FLOW_LABELS = { income: "Income", expense: "Expense", transfer: "Transfer" } as const;
 type Flow = keyof typeof FLOW_LABELS;
 
 /**

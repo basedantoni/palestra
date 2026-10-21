@@ -5,7 +5,8 @@
  * step calls these to set `flow` and link transfer legs via `transferPairId`.
  */
 
-export type TransactionFlow = "income" | "expense" | "transfer";
+export const TRANSACTION_FLOWS = ["income", "expense", "transfer"] as const;
+export type TransactionFlow = (typeof TRANSACTION_FLOWS)[number];
 
 /**
  * Classify a transaction's money flow from its Plaid Personal Finance Category
@@ -17,14 +18,6 @@ export function classifyFlow(pfcPrimary: string | null | undefined): Transaction
   if (pfcPrimary === "INCOME") return "income";
   if (pfcPrimary === "TRANSFER_IN" || pfcPrimary === "TRANSFER_OUT") return "transfer";
   return "expense";
-}
-
-/** The flow a row ends up with: the override, or the automatic classification when reset (null). */
-export function effectiveFlow(
-  override: TransactionFlow | null,
-  pfcPrimary: string | null | undefined,
-): TransactionFlow {
-  return override ?? classifyFlow(pfcPrimary);
 }
 
 export interface TransferCandidate {

@@ -33,6 +33,7 @@ export function loadMatchableRules(conn: Conn, userId: string): Promise<Matchabl
       pattern: rule.pattern,
       matchMode: rule.matchMode,
       categoryId: rule.categoryId,
+      setFlow: rule.setFlow,
       createdAt: rule.createdAt,
     })
     .from(rule)
@@ -122,6 +123,9 @@ const categorizableColumns = {
   plaidCategoryPrimary: transaction.plaidCategoryPrimary,
   categoryId: transaction.categoryId,
   categoryOverridden: transaction.categoryOverridden,
+  flow: transaction.flow,
+  flowOverridden: transaction.flowOverridden,
+  transferPairId: transaction.transferPairId,
 };
 
 /**
@@ -142,21 +146,24 @@ export function loadBankCategoryTransactions(
 /** A rule may set these: automatic, or a blank (Uncategorized) Manual Category (ADR 0004). */
 const ruleMayCategorize = or(eq(transaction.categoryOverridden, false), isNull(transaction.categoryId));
 
+/** A rule may set the flow of these: not hand-set (ADR 0001) nor a Transfer Pair's leg — `isFlowLocked` in SQL. */
+const ruleMaySetFlow = and(eq(transaction.flowOverridden, false), isNull(transaction.transferPairId));
+
 /**
  * A remap may set only automatic rows; every Manual Category stays (KOI-335).
  * Re-checked in the UPDATE so a hand-pick committed after the rows were read wins.
  */
 export const remapMayCategorize = eq(transaction.categoryOverridden, false);
 
-/** The user's transactions a rule may categorize; a hand-picked real category is never loaded. */
+/** The user's transactions a rule may categorize or set the flow of; ones it may do neither to are never loaded. */
 export function loadRuleApplicableTransactions(conn: Conn, userId: string): Promise<CategorizableTransaction[]> {
   return conn
     .select(categorizableColumns)
     .from(transaction)
-    .where(and(eq(transaction.userId, userId), ruleMayCategorize));
+    .where(and(eq(transaction.userId, userId), or(ruleMayCategorize, ruleMaySetFlow)));
 }
 
-/** Non-manual transactions whose category changes once `candidate` is saved against `rules`. */
+/** Transactions whose category or flow changes once `candidate` is saved against `rules`. */
 export async function planRuleApply(
   conn: Conn,
   userId: string,
@@ -169,8 +176,9 @@ export async function planRuleApply(
 }
 
 /**
- * Write recategorizations: one UPDATE per target category, scoped to the user
- * and re-checking eligibility (`mayCategorize`, a rule's by default) so a
+ * Write recategorizations: one UPDATE per distinct change (category, flow or
+ * both), scoped to the user and re-checking eligibility for each field it
+ * sets (`mayCategorize`, a rule's by default; a rule's flow guard) so a
  * concurrent hand-pick wins. A filled blank Manual Category becomes automatic.
  * Returns how many transactions were actually updated.
  */
@@ -181,15 +189,18 @@ export async function applyRecategorizations(
   mayCategorize: SQL | undefined = ruleMayCategorize,
 ): Promise<number> {
   let updated = 0;
-  // ponytail: one UPDATE per category, unchunked; chunk the ids if a pattern ever matches >65k rows (bind-param limit).
-  for (const [categoryId, group] of Map.groupBy(changes, (c) => c.categoryId)) {
+  // ponytail: one UPDATE per distinct change, unchunked; chunk the ids if a pattern ever matches >65k rows (bind-param limit).
+  for (const group of Map.groupBy(changes, (c) => `${c.categoryId}|${c.flow}`).values()) {
+    const { categoryId, flow } = group[0]!;
+    const setsCategory = categoryId !== undefined;
     const result = await conn
       .update(transaction)
-      .set({ categoryId, categoryOverridden: false })
+      .set({ ...(setsCategory && { categoryId, categoryOverridden: false }), ...(flow && { flow }) })
       .where(
         and(
           eq(transaction.userId, userId),
-          mayCategorize,
+          setsCategory ? mayCategorize : undefined,
+          flow ? ruleMaySetFlow : undefined,
           inArray(transaction.id, group.map((c) => c.id)),
         ),
       );

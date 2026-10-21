@@ -1,8 +1,9 @@
 /**
- * Category resolution for transactions (KOI-295): Default Category, Manual
- * Category and Rules. Pure — matching never lives in SQL, so sync,
- * reset, retroactive apply and remapping all share these functions.
+ * Category and flow resolution for transactions (KOI-295, KOI-340): Default
+ * Category, Manual Category and Rules. Pure — matching never lives in SQL, so
+ * sync, reset, retroactive apply and remapping all share these functions.
  */
+import { type TransactionFlow, classifyFlow } from "./transaction-flow";
 
 /** The user's Bank Category mapping (KOI-335): Bank Category → category id, null when unmapped. */
 export type BankCategoryMapping = ReadonlyMap<string, string | null>;
@@ -44,14 +45,18 @@ export function fold(s: string): string {
   return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
 
-/** The fields of a Rule that matching needs. */
+/** The fields of a Rule that matching needs. A rule sets a category, a flow, or both. */
 export interface MatchableRule {
   id: string;
   pattern: string;
   matchMode: MatchMode;
-  categoryId: string;
+  categoryId: string | null;
+  setFlow: TransactionFlow | null;
   createdAt: Date;
 }
+
+/** What a Rule can set; each resolves on its own, among the rules that set it. */
+export type RuleField = "categoryId" | "setFlow";
 
 /** Whether one rule matches a bank description, in its own mode. */
 function matches(rule: Pick<MatchableRule, "pattern" | "matchMode">, name: string): boolean {
@@ -59,14 +64,16 @@ function matches(rule: Pick<MatchableRule, "pattern" | "matchMode">, name: strin
 }
 
 /**
- * The Rule for a bank description. An exact match beats any contains match;
- * then the longest Pattern wins, then the newest rule, then the highest id,
- * so the winner never depends on input order. Null when none match.
+ * The Rule that sets `field` for a bank description; rules that don't set it
+ * are ignored, so a flow-only rule never blocks a category. An exact match
+ * beats any contains match; then the longest Pattern wins, then the newest
+ * rule, then the highest id, so the winner never depends on input order. Null
+ * when none match.
  */
-export function matchRule<R extends MatchableRule>(name: string, rules: readonly R[]): R | null {
+export function matchRule<R extends MatchableRule>(name: string, rules: readonly R[], field: RuleField): R | null {
   let best: R | null = null;
   for (const r of rules) {
-    if (matches(r, name) && (!best || outranks(r, best))) best = r;
+    if (r[field] !== null && matches(r, name) && (!best || outranks(r, best))) best = r;
   }
   return best;
 }
@@ -85,7 +92,42 @@ export function resolveCategory(
   rules: readonly MatchableRule[],
   mapping: BankCategoryMapping,
 ): string | null {
-  return matchRule(name, rules)?.categoryId ?? defaultCategoryId(plaidCategoryPrimary, mapping);
+  return matchRule(name, rules, "categoryId")?.categoryId ?? defaultCategoryId(plaidCategoryPrimary, mapping);
+}
+
+/** What decides whether a transaction's flow is a Rule's to set. */
+export interface FlowLock {
+  flowOverridden: boolean;
+  transferPairId: string | null;
+}
+
+/** A hand-set flow (ADR 0001) and a Transfer Pair's legs are never a Rule's to change. */
+export function isFlowLocked(row: FlowLock): boolean {
+  return row.flowOverridden || row.transferPairId !== null;
+}
+
+/**
+ * Automatic flow: the matching flow rule's, else `baseFlow` (the bank's
+ * classification). A locked row gets no rule: `baseFlow` comes back.
+ */
+export function resolveFlow(
+  baseFlow: TransactionFlow,
+  name: string,
+  rules: readonly MatchableRule[],
+  row: FlowLock,
+): TransactionFlow {
+  if (isFlowLocked(row)) return baseFlow;
+  return matchRule(name, rules, "setFlow")?.setFlow ?? baseFlow;
+}
+
+/**
+ * Why a Rule can't set this flow and category, or null when it can: it must
+ * set at least one, and an income or transfer rule sets no category.
+ */
+export function ruleTargetsError(setFlow: TransactionFlow | null, categoryId: string | null): string | null {
+  if (setFlow === null && categoryId === null) return "A rule must set a flow, a category, or both";
+  if (categoryId !== null && setFlow !== null && setFlow !== "expense") return "Income and transfer rules set no category";
+  return null;
 }
 
 export const MIN_PATTERN_LENGTH = 3;
@@ -123,13 +165,16 @@ export interface CandidateRule {
   id: string;
   pattern: string;
   matchMode: MatchMode;
-  categoryId: string;
+  categoryId: string | null;
+  setFlow: TransactionFlow | null;
   createdAt?: Date;
 }
 
+/** A transaction's automatic changes: only the fields that change are present. */
 export interface Recategorization {
   id: string;
-  categoryId: string | null;
+  categoryId?: string | null;
+  flow?: TransactionFlow;
 }
 
 /**
@@ -138,17 +183,20 @@ export interface Recategorization {
  * as the newest.
  */
 export function withCandidateRule(rules: readonly MatchableRule[], candidate: CandidateRule): MatchableRule[] {
-  const { id, pattern, matchMode, categoryId } = candidate;
+  const { id, pattern, matchMode, categoryId, setFlow } = candidate;
   const edited = rules.find((r) => r.id === id);
-  if (!edited) return [...rules, { id, pattern, matchMode, categoryId, createdAt: candidate.createdAt ?? new Date() }];
-  return rules.map((r) => (r === edited ? { id, pattern, matchMode, categoryId, createdAt: r.createdAt } : r));
+  if (!edited) {
+    return [...rules, { id, pattern, matchMode, categoryId, setFlow, createdAt: candidate.createdAt ?? new Date() }];
+  }
+  return rules.map((r) => (r === edited ? { id, pattern, matchMode, categoryId, setFlow, createdAt: r.createdAt } : r));
 }
 
-export interface CategorizableTransaction {
+export interface CategorizableTransaction extends FlowLock {
   id: string;
   name: string;
   plaidCategoryPrimary: string | null;
   categoryId: string | null;
+  flow: TransactionFlow | null;
   /** Manual Category flag; only blank (Uncategorized) manual rows can be filled. */
   categoryOverridden?: boolean;
 }
@@ -156,11 +204,12 @@ export interface CategorizableTransaction {
 /**
  * Retroactive apply of one rule: only rows it matches (or, on edit, its
  * previous Pattern and mode matched) are re-resolved, against the full rule set as
- * if the rule were saved; returns those whose category changes. Rows a deleted
- * rule once categorized stay as they are — applying is one-shot, never a sweep
- * (ADR 0004). A Manual Category is never changed, except that a matching rule
- * fills a blank one (Uncategorized); falling back to the Default Category
- * never does.
+ * if the rule were saved; returns those whose category or flow changes. Rows a
+ * deleted rule once changed stay as they are — applying is one-shot, never a
+ * sweep (ADR 0004). A Manual Category is never changed, except that a matching
+ * rule fills a blank one (Uncategorized); falling back to the Default Category
+ * never does. Flow re-resolves from the bank's classification, except on a
+ * locked row (`isFlowLocked`).
  */
 export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
@@ -172,12 +221,17 @@ export function ruleRecategorizations(
   const touched = rows.filter((row) => matches(candidate, row.name) || (previous && matches(previous, row.name)));
   const saved = withCandidateRule(rules, candidate);
   return touched.flatMap((row) => {
-    if (row.categoryOverridden) {
-      const rule = row.categoryId === null ? matchRule(row.name, saved) : null;
-      return rule ? [{ id: row.id, categoryId: rule.categoryId }] : [];
-    }
-    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping);
-    return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
+    const change: Recategorization = { id: row.id };
+    // undefined: the category stays (a Manual Category takes only a rule's, and only when blank).
+    const categoryId = !row.categoryOverridden
+      ? resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping)
+      : row.categoryId === null
+        ? matchRule(row.name, saved, "categoryId")?.categoryId
+        : undefined;
+    if (categoryId !== undefined && categoryId !== row.categoryId) change.categoryId = categoryId;
+    const flow = resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, saved, row);
+    if (!isFlowLocked(row) && flow !== row.flow) change.flow = flow;
+    return "categoryId" in change || "flow" in change ? [change] : [];
   });
 }
 

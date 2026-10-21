@@ -4,6 +4,8 @@
  *
  * - rule's unique index is on (user_id, match_mode, pattern_key): a second rule
  *   differing only in case or accents is rejected, per user and per mode
+ * - a rule sets a flow, a category, or both, and an income or transfer rule
+ *   sets no category (check constraints, KOI-340)
  * - deleting a category cascades to its rules, while its transactions become
  *   Uncategorized (or move to the target category first)
  */
@@ -18,8 +20,9 @@ import { category, rule, transaction } from "@life-tracker/db/schema/index";
 import { eq } from "drizzle-orm";
 
 import { type MatchMode, fold } from "../lib/rules";
+import type { TransactionFlow } from "../lib/transaction-flow";
 import { appRouter } from "../routers/index";
-import { PG_UNIQUE_VIOLATION, seedFinanceUser, truncateAll } from "./helpers/pglite";
+import { PG_CHECK_VIOLATION, PG_UNIQUE_VIOLATION, seedFinanceUser, truncateAll } from "./helpers/pglite";
 
 const USER = "user-pglite-rules";
 const OTHER_USER = "user-pglite-other";
@@ -37,8 +40,13 @@ async function pgErrorCode(promise: Promise<unknown>): Promise<string | undefine
 }
 
 /** Straight to the table, past `validatePattern`, keyed as the router keys it. */
-const insertRule = (userId: string, pattern: string, categoryId: string, matchMode: MatchMode = "contains") =>
-  db.insert(rule).values({ id: randomUUID(), userId, pattern, patternKey: fold(pattern), matchMode, categoryId });
+const insertRule = (
+  userId: string,
+  pattern: string,
+  categoryId: string | null,
+  matchMode: MatchMode = "contains",
+  setFlow: TransactionFlow | null = null,
+) => db.insert(rule).values({ id: randomUUID(), userId, pattern, patternKey: fold(pattern), matchMode, categoryId, setFlow });
 
 beforeEach(async () => {
   await truncateAll(db);
@@ -69,6 +77,29 @@ describe("rule unique index (user_id, match_mode, pattern_key)", () => {
     await insertRule(OTHER_USER, "starbucks", theirs.categoryId);
 
     expect(await db.select().from(rule)).toHaveLength(2);
+  });
+});
+
+describe("rule targets (check constraints)", () => {
+  it("accepts a flow-only rule and an expense rule with a category", async () => {
+    const { categoryId } = await seedFinanceUser(db, USER);
+    await insertRule(USER, "zelle from jane", null, "contains", "income");
+    await insertRule(USER, "venmo rent", categoryId, "contains", "expense");
+
+    expect(await db.select().from(rule)).toHaveLength(2);
+  });
+
+  it("rejects a rule that sets neither a flow nor a category", async () => {
+    await seedFinanceUser(db, USER);
+
+    expect(await pgErrorCode(insertRule(USER, "zelle", null))).toBe(PG_CHECK_VIOLATION);
+  });
+
+  it("rejects a category on an income or transfer rule", async () => {
+    const { categoryId } = await seedFinanceUser(db, USER);
+
+    expect(await pgErrorCode(insertRule(USER, "zelle", categoryId, "contains", "income"))).toBe(PG_CHECK_VIOLATION);
+    expect(await pgErrorCode(insertRule(USER, "robinhood", categoryId, "contains", "transfer"))).toBe(PG_CHECK_VIOLATION);
   });
 });
 

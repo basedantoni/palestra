@@ -1,5 +1,5 @@
 /**
- * Rules CRUD + rule-aware Plaid sync (KOI-298, KOI-339).
+ * Rules CRUD + rule-aware Plaid sync (KOI-298, KOI-339, KOI-340).
  *
  * Mocked db (helpers/mock-db): selects are answered per table, and writes are
  * recorded so tests can assert on table, values and rendered WHERE params.
@@ -29,6 +29,9 @@ import {
   plaidItem,
   transaction,
 } from "@life-tracker/db/schema/index";
+
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
@@ -137,11 +140,18 @@ describe("rules.create", () => {
 const transactionUpdates = () => mockDb.updated(transaction).map((u) => ({ set: u.set, params: u.where }));
 
 const OTHER_CAT = "00000000-0000-4000-8000-0000000000c2";
-const existingRule = (id: string, pattern: string, categoryId: string, createdAt = "2026-01-01") => ({
+const existingRule = (
+  id: string,
+  pattern: string,
+  categoryId: string | null,
+  createdAt = "2026-01-01",
+  setFlow: string | null = null,
+) => ({
   id,
   pattern,
   matchMode: "contains" as const,
   categoryId,
+  setFlow,
   createdAt: new Date(createdAt),
 });
 const txn = (id: string, name: string, categoryId: string | null) => ({
@@ -149,7 +159,14 @@ const txn = (id: string, name: string, categoryId: string | null) => ({
   name,
   plaidCategoryPrimary: "FOOD_AND_DRINK",
   categoryId,
+  flow: "expense",
+  flowOverridden: false,
+  transferPairId: null as string | null,
 });
+/** A bank-classified incoming transfer with no category, as a Zelle payment arrives. */
+const transferIn = (id: string, name: string) => ({ ...txn(id, name, null), plaidCategoryPrimary: "TRANSFER_IN", flow: "transfer" });
+/** The SQL text of a drizzle fragment, such as an update's WHERE. */
+const sqlText = (fragment: unknown) => new PgDialect().sqlToQuery(fragment as SQL).sql;
 /** The caller's Bank Category mapping: FOOD_AND_DRINK → cat-food. */
 const mappedFood = () => mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" }]);
 
@@ -173,8 +190,8 @@ describe("rules.preview", () => {
       makeCaller().rules.preview({ pattern: "starbucks", categoryId: CAT_ID }),
     ).resolves.toEqual({ matchCount: 1 });
     expect(mockDb.selected(category)[0]).toEqual([CAT_ID, USER_ID]);
-    // Scoped to the caller; hand-picked categories excluded (blank manual rows allowed).
-    expect(mockDb.selected(transaction)).toEqual([[USER_ID, false]]);
+    // Scoped to the caller; rows neither a category nor a flow rule may change are excluded.
+    expect(mockDb.selected(transaction)).toEqual([[USER_ID, false, false]]);
   });
 
   it("previews an edit as replacing the existing rule", async () => {
@@ -284,6 +301,86 @@ describe("rules.create with applyToExisting", () => {
   });
 });
 
+describe("flow rules", () => {
+  it("saves a flow-only rule without a category check", async () => {
+    rulesAre([]);
+    mockDb.onInsert(rule, [{ id: RULE_ID, pattern: "zelle from jane", categoryId: null, setFlow: "income" }]);
+
+    await makeCaller().rules.create({ pattern: "zelle from jane", setFlow: "income" });
+
+    expect(mockDb.selected(category)).toEqual([]);
+    expect(mockDb.inserted(rule)[0]).toMatchObject({ categoryId: null, setFlow: "income" });
+  });
+
+  it("rejects a rule that sets nothing, or a category on an income rule, with BAD_REQUEST", async () => {
+    await expect(makeCaller().rules.create({ pattern: "zelle" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      makeCaller().rules.create({ pattern: "zelle", setFlow: "income", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "Income and transfer rules set no category" });
+    await expect(
+      makeCaller().rules.preview({ pattern: "zelle", setFlow: "transfer", categoryId: CAT_ID }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mockDb.inserted(rule)).toEqual([]);
+  });
+
+  it("counts flow changes in the preview", async () => {
+    rulesAre([]);
+    applyContext([transferIn("t1", "ZELLE FROM JANE"), transferIn("t2", "ZELLE TO BOB")]);
+
+    await expect(makeCaller().rules.preview({ pattern: "zelle from jane", setFlow: "income" })).resolves.toEqual({
+      matchCount: 1,
+    });
+  });
+
+  it("applies a flow rule's flow to matching unlocked rows, guarding the write", async () => {
+    rulesAre([]);
+    applyContext([transferIn("t1", "ZELLE FROM JANE"), transferIn("t2", "ZELLE TO BOB")]);
+    mockDb.onInsert(rule, [{ id: RULE_ID, pattern: "zelle from jane", matchMode: "contains", categoryId: null, setFlow: "income", createdAt: new Date() }]);
+
+    const result = await makeCaller().rules.create({ pattern: "zelle from jane", setFlow: "income", applyToExisting: true });
+
+    expect(result.applied).toBe(1);
+    expect(transactionUpdates()).toEqual([{ set: { flow: "income" }, params: [USER_ID, false, "t1"] }]);
+    // A flow hand-set or paired since the read is left alone; the category guard doesn't apply.
+    const where = sqlText(mockDb.opsOn(transaction, "update")[0]!.arg("where"));
+    expect(where).toMatch(/"flow_overridden" = \$\d+ and "transaction"."transfer_pair_id" is null/);
+    expect(where).not.toMatch(/category_overridden/);
+  });
+
+  it("never changes the flow of a Transfer Pair's leg", async () => {
+    rulesAre([]);
+    applyContext([{ ...transferIn("t1", "ZELLE FROM JANE"), transferPairId: "pair-1" }]);
+    mockDb.onInsert(rule, [{ id: RULE_ID, pattern: "zelle from jane", matchMode: "contains", categoryId: null, setFlow: "income", createdAt: new Date() }]);
+
+    const result = await makeCaller().rules.create({ pattern: "zelle from jane", setFlow: "income", applyToExisting: true });
+
+    expect(result.applied).toBe(0);
+    expect(transactionUpdates()).toEqual([]);
+  });
+
+  it("writes flow and category together, under both guards, when the rule sets both", async () => {
+    ownsCategory();
+    rulesAre([]);
+    applyContext([transferIn("t1", "VENMO RENT")]);
+    mockDb.onInsert(rule, [{ id: RULE_ID, pattern: "venmo rent", matchMode: "contains", categoryId: CAT_ID, setFlow: "expense", createdAt: new Date() }]);
+
+    const result = await makeCaller().rules.create({ pattern: "venmo rent", setFlow: "expense", categoryId: CAT_ID, applyToExisting: true });
+
+    expect(result.applied).toBe(1);
+    expect(transactionUpdates()).toEqual([
+      { set: { categoryId: CAT_ID, categoryOverridden: false, flow: "expense" }, params: [USER_ID, false, false, "t1"] },
+    ]);
+  });
+
+  it("saves an edited rule's flow", async () => {
+    rulesAre([existingRule(RULE_ID, "zelle from jane", null, "2026-01-01", "income")]);
+
+    await makeCaller().rules.update({ id: RULE_ID, pattern: "zelle from jane", setFlow: "transfer" });
+
+    expect(mockDb.updated(rule)[0]!.set).toMatchObject({ categoryId: null, setFlow: "transfer" });
+  });
+});
+
 describe("rules.update", () => {
   it("saves the edited rule, scoped to the caller, and leaves transactions alone without apply", async () => {
     ownsCategory();
@@ -292,12 +389,12 @@ describe("rules.update", () => {
     const result = await makeCaller().rules.update({ id: RULE_ID, pattern: " Starbucks ", categoryId: CAT_ID });
 
     expect(result).toEqual({
-      rule: { id: RULE_ID, pattern: "Starbucks", matchMode: "contains", categoryId: CAT_ID },
+      rule: { id: RULE_ID, pattern: "Starbucks", matchMode: "contains", categoryId: CAT_ID, setFlow: null },
       applied: 0,
     });
     expect(mockDb.updated(rule)).toEqual([
       {
-        set: { pattern: "Starbucks", patternKey: "starbucks", matchMode: "contains", categoryId: CAT_ID },
+        set: { pattern: "Starbucks", patternKey: "starbucks", matchMode: "contains", categoryId: CAT_ID, setFlow: null },
         where: [RULE_ID, USER_ID],
       },
     ]);
@@ -417,6 +514,29 @@ function syncWith(names: string[], rules: unknown[], seeded = true) {
   rulesAre(rules);
 }
 
+/** One Plaid sync of `added` transactions with a given primary each. */
+function syncWithPrimaries(added: Array<[name: string, primary: string]>, rules: unknown[]) {
+  syncWith([], rules);
+  mockPlaid.transactionsSync.mockReset().mockResolvedValueOnce({
+    data: {
+      added: added.map(([name, primary], i) => ({
+        transaction_id: `plaid-txn-${i}`,
+        account_id: "p_chk",
+        amount: -50,
+        date: "2026-09-30",
+        name,
+        pending: false,
+        personal_finance_category: { primary, detailed: null },
+      })),
+      modified: [],
+      removed: [],
+      accounts: [],
+      next_cursor: "c2",
+      has_more: false,
+    },
+  });
+}
+
 const insertedCategoryIds = () =>
   (mockDb.inserted(transaction) as Array<{ categoryId: string | null }>).map((v) => v.categoryId);
 
@@ -441,6 +561,43 @@ describe("syncPlaidItem with Rules", () => {
     const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as { set: Record<string, unknown> };
     expect(onConflict.set).not.toHaveProperty("categoryId");
+  });
+});
+
+const insertedFlowsAndCategories = () =>
+  (mockDb.inserted(transaction) as Array<{ flow: string; categoryId: string | null }>).map((t) => [t.flow, t.categoryId]);
+
+describe("syncPlaidItem with flow rules", () => {
+  it("lets a flow rule override the bank's flow, and another rule still set the category", async () => {
+    syncWithPrimaries(
+      [
+        ["ZELLE FROM JANE", "TRANSFER_IN"],
+        ["ZELLE TO BOB", "TRANSFER_OUT"],
+      ],
+      [
+        existingRule("r1", "zelle from jane", null, "2026-01-01", "income"),
+        existingRule("r2", "zelle", "cat-gifts"),
+      ],
+    );
+
+    await syncPlaidItem(ITEM_ID);
+
+    expect(insertedFlowsAndCategories()).toEqual([
+      ["income", "cat-gifts"],
+      ["transfer", "cat-gifts"],
+    ]);
+  });
+
+  it("keeps a hand-set or paired row's flow when the transaction is synced again", async () => {
+    syncWithPrimaries([["ZELLE FROM JANE", "TRANSFER_IN"]], [existingRule("r1", "zelle", null, "2026-01-01", "income")]);
+
+    await syncPlaidItem(ITEM_ID);
+
+    const upsert = mockDb.opsOn(transaction, "insert")[0]!;
+    const onConflict = upsert.arg("onConflictDoUpdate") as { set: { flow: unknown } };
+    expect(sqlText(onConflict.set.flow)).toMatch(
+      /case when \("transaction"."flow_overridden" or "transaction"."transfer_pair_id" is not null\) then "transaction"."flow" else excluded.flow end/,
+    );
   });
 });
 
