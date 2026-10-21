@@ -58,10 +58,14 @@ export async function upsertCatalog(catalog: ReturnType<typeof transformCatalog>
   });
 }
 
-/** Artworks grouped by Card, optionally only Cards with a Printing in one set (`OP-05`). */
+/**
+ * Artworks grouped by Card, optionally only Cards with a Printing in one set
+ * (`OP-05`), each with one Printing's Bandai image to compare art against: the
+ * Japanese one when it exists, since an Artwork is its Japanese variant ID (ADR 0006).
+ */
 export async function artworksByCard(
   set?: string,
-): Promise<Map<string, Array<{ variantId: string; artist: string | null }>>> {
+): Promise<Map<string, Array<{ variantId: string; artist: string | null; imageUrl: string | null }>>> {
   const inSet = set
     ? inArray(
         tcgArtwork.cardNumber,
@@ -73,11 +77,19 @@ export async function artworksByCard(
       )
     : undefined;
   const rows = await db
-    .select({ cardNumber: tcgArtwork.cardNumber, variantId: tcgArtwork.variantId, artist: tcgArtwork.artist })
+    .select({
+      cardNumber: tcgArtwork.cardNumber,
+      variantId: tcgArtwork.variantId,
+      artist: tcgArtwork.artist,
+      imageUrl: tcgPrinting.imageUrl,
+    })
     .from(tcgArtwork)
+    .leftJoin(tcgPrinting, eq(tcgPrinting.variantId, tcgArtwork.variantId))
     .where(inSet)
-    .orderBy(asc(tcgArtwork.variantId));
-  return Map.groupBy(rows, (r) => r.cardNumber);
+    // Postgres sorts an enum in declaration order: `ja` before `en`.
+    .orderBy(asc(tcgArtwork.variantId), asc(tcgPrinting.language));
+  const artworks = [...Map.groupBy(rows, (r) => r.variantId).values()].map(([first]) => first!);
+  return Map.groupBy(artworks, (r) => r.cardNumber);
 }
 
 /**
