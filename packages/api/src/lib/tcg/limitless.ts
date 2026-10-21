@@ -1,6 +1,7 @@
 /**
  * Artist backfill from Limitless One Piece card pages (KOI-306, ADR 0006).
- * Bandai doesn't credit illustrators; Limitless does, one variant per page.
+ * Bandai doesn't credit illustrators; Limitless does, one print per page,
+ * under its own numbering: prints are paired with Artworks by art (KOI-356).
  *
  * ponytail: regex over Limitless's server-rendered markup (no HTML parser
  * installed). Selectors are pinned by the saved fixtures; if Limitless changes
@@ -8,10 +9,16 @@
  * pages without a variant.
  */
 
-/** What one Limitless card page says about the Artwork it shows. */
+/** What one Limitless card page says about the print it shows. */
 export interface LimitlessVariant {
-  /** Bandai variant ID from the card image's filename (`OP05-069_p1`), or null when the page shows no card. */
-  variantId: string | null;
+  /**
+   * Limitless's variant ID, from the card image's filename (`OP05-069_p1`), or null when the page
+   * shows no card. Limitless numbers prints its own way, shared by both languages and matching
+   * neither Bandai list after a reprint (KOI-356): it is not an Artwork's variant ID.
+   */
+  limitlessId: string | null;
+  /** The card image, to pair this print with an Artwork by art distance. */
+  imageUrl: string | null;
   /** Credited illustrator, or null when the page credits nobody. Never guessed. */
   artist: string | null;
   /** Limitless's print label for this variant ("aa", "manga", "wanted"…), null when blank. */
@@ -36,12 +43,13 @@ const text = (html: string) =>
 export function parseLimitlessCardPage(html: string): LimitlessVariant {
   // The card image is named after the variant (`.../OP05/OP05-069_p1_EN.webp`); `?v=N` is not
   // a stable mapping (OP01-120's v=4 is `_p4`, not `_r1`).
-  const image = /<img class="card[\s"][^>]*\bsrc="[^"]*\/([^/"]+?)_(?:EN|JP)\.\w+"/.exec(html);
+  const image = /<img class="card[\s"][^>]*\bsrc="([^"]*\/([^/"]+?)_(?:EN|JP)\.\w+)"/.exec(html);
   const artist = /<div class="[^"]*\bcard-text-artist\b[^"]*">[\s\S]*?<a\b[^>]*>([\s\S]*?)<\/a>/.exec(html);
   const table = /<table class="card-prints-versions">([\s\S]*?)<\/table>/.exec(html)?.[1] ?? "";
   const current = /<tr\s+class="current"\s*>[\s\S]*?<span class="prints-table-card-number">([\s\S]*?)<\/span>/.exec(table);
   return {
-    variantId: image?.[1] ?? null,
+    limitlessId: image?.[2] ?? null,
+    imageUrl: image?.[1] ?? null,
     artist: artist ? text(artist[1]!) : null,
     label: current ? text(current[1]!) : null,
     versions: [...table.matchAll(/href="(\/cards\/[^"]*\?v=\d+)"/g)].map((m) => m[1]!),
@@ -61,26 +69,29 @@ const sameArtist = (a: string, b: string) => a.localeCompare(b, "en", { sensitiv
 
 /**
  * Artist per Artwork from the Japanese and English Limitless pages of one Card.
- * A language that credits nobody is no evidence against the other. When both
- * credit different artists the Artwork is flagged and keeps its existing artist.
- * Artworks neither language lists are left out (unchanged). Re-running with the
- * same pages gives the same updates.
+ * An Artwork takes its credit from every Limitless print with the same art
+ * (`sameArt`), never from a matching ID: Limitless's numbering drifts from
+ * Bandai's after a reprint (KOI-356). Same art is the same illustrator, so a
+ * reprint sharing a scan is credited too. A print that credits nobody is no
+ * evidence against the others. When credits disagree the Artwork is flagged and
+ * keeps its existing artist. Artworks no print matches are left out (unchanged).
+ * Re-running with the same pages gives the same updates.
  */
 export function reconcileArtists(
   artworks: Array<{ variantId: string; artist: string | null }>,
   pages: { ja: LimitlessVariant[]; en: LimitlessVariant[] },
+  sameArt: (variantId: string, limitlessId: string) => boolean,
 ): ArtistUpdate[] {
-  const byId = (list: LimitlessVariant[]) => new Map(list.map((v) => [v.variantId, v]));
-  const ja = byId(pages.ja);
-  const en = byId(pages.en);
+  // English first, so its spelling of an agreed credit wins.
+  const prints = [...pages.en, ...pages.ja];
   return artworks.flatMap(({ variantId, artist }): ArtistUpdate[] => {
-    const j = ja.get(variantId);
-    const e = en.get(variantId);
-    if (!j && !e) return [];
-    const manga = j?.label === "manga" || e?.label === "manga";
-    if (j?.artist && e?.artist && !sameArtist(j.artist, e.artist)) {
+    const matches = prints.filter((p) => p.limitlessId && sameArt(variantId, p.limitlessId));
+    if (!matches.length) return [];
+    const manga = matches.some((p) => p.label === "manga");
+    const credits = matches.flatMap((p) => p.artist ?? []);
+    if (credits.some((c) => !sameArtist(c, credits[0]!))) {
       return [{ variantId, artist, artistConflict: true, manga }];
     }
-    return [{ variantId, artist: e?.artist ?? j?.artist ?? null, artistConflict: false, manga }];
+    return [{ variantId, artist: credits[0] ?? null, artistConflict: false, manga }];
   });
 }

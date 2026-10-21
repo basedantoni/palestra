@@ -124,11 +124,11 @@ A game card identified by its card number (e.g. `OP05-069`) and character. Sever
 _Avoid_: Using "card" for a physical card or a specific artwork
 
 **Artwork**:
-One illustration of a Card, identified by Bandai's variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language.
+One illustration of a Card, identified by Bandai's Japanese variant ID (e.g. `OP05-069_p1`: base, parallel, manga, reprint) and credited to an artist when known. The same Artwork is released in each language. An English-only print is an Artwork too, identified by its English ID marked as English. A Korea-only promo or China-only card is not an Artwork here.
 _Avoid_: Variant (as a noun), art, illustration
 
 **Printing**:
-An Artwork released in one language (English, Japanese, Simplified Chinese, or Korean), with its set. What a seller sells and what a Copy is of.
+An Artwork released in one language (English, Japanese, Simplified Chinese, or Korean), with its set. What a seller sells and what a Copy is of. Its language's card list may number it differently from its Artwork's variant ID: Bandai's English IDs drift from the Japanese ones after reprints.
 _Avoid_: Version, edition
 
 **Copy**:
@@ -176,9 +176,41 @@ A site where many sellers list Printings and which reports its own prices for th
 _Avoid_: Source, feed, shop, store
 
 **Market Price**:
-A Marketplace's own aggregate price for one Printing in one Condition on one day, in the currency the Marketplace reports. Not a seller's price: an Offer can sit well above or below it.
+One Marketplace's price for one Printing in one Condition on one day, in the currency the Marketplace reports: its own aggregate where it publishes one, otherwise its lowest Listing that day. Not a seller's price: an Offer can sit well above or below it.
 _Avoid_: Price, market value, quote
+
+**Current Market Price**:
+The latest Market Price for a Printing in a Condition on a Marketplace on or before a given day, up to 30 days old. It shows its date once it is more than 7 days old. With none that recent, there is no Current Market Price, and none is carried forward or estimated.
+_Avoid_: Latest price, today's price, last price
+
+**Marketplace Product**:
+A Marketplace's own identity for something it sells, such as a TCGplayer product or a CardTrader blueprint. It is of at most one Artwork; one Artwork can have several (a reprint, an errata or a promo stamp of the same art). One with no Artwork gets no Market Price.
+_Avoid_: Blueprint, SKU, product
+
+**Listing**:
+One seller's ask for a Marketplace Product in one language and Condition. Graded, signed and altered Listings never count.
+_Avoid_: Offer, ask, sale
 
 **Price History**:
 The daily Market Prices of one Printing from one Marketplace over time. Never blended across Marketplaces.
 _Avoid_: Price chart, price trend, history
+
+**Price Move**:
+The change in one Printing's Market Price on one Marketplace over a window, as a percentage in the Marketplace's own currency, so exchange-rate swings never count as a move. A Printing with no Market Price near either end of the window has no Price Move.
+_Avoid_: Mover, swing, trend
+
+**Watched Artwork**:
+An Artwork the user has an open Want for, holds a Copy of, has rated ★4 or ★5, or has tagged with a Theme. Derived from those facts, never hand-picked.
+_Avoid_: Watchlist, favourite
+
+**Copy Value**:
+What one Copy is worth in USD on a day: the lowest Current Market Price for its Printing at its Condition or better (what replacing it would cost), converted at that day's exchange rate. A Copy with no such price is unpriced, never estimated from another language or from what was paid.
+_Avoid_: Market value, worth
+
+**Collection Value**:
+The sum of Copy Values of the Copies the user holds today, over priced Copies only. Its history revalues today's Copies at each past day's prices, so buying a card is never counted as a change.
+_Avoid_: Portfolio value, net worth, total
+
+**Gain**:
+A Copy Value minus the price paid for that Copy, and summed over Copies that have both. Unrealized: nothing was sold.
+_Avoid_: Return, profit, P&L
