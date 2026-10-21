@@ -165,7 +165,8 @@ export function RuleForm({
         else create.mutate(input);
       }}
     >
-      <div className="flex gap-2">
+      {/* Wraps in narrow spots (the offer dialog) instead of overflowing. */}
+      <div className="flex flex-wrap gap-2">
         <select
           aria-label="Match"
           value={matchMode}
@@ -196,24 +197,26 @@ export function RuleForm({
           aria-label="Pattern"
           aria-invalid={!!patternError}
           aria-describedby={errorId}
-          className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
+          className="min-w-40 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
         />
         <CategoryPicker aria-label="Category" categories={categories} value={categoryId} onChange={setCategoryId} />
-        <Button size="sm" type="submit" disabled={!pattern.trim() || !categoryId || save.isPending}>
-          {editing ? "Save" : "Add"}
-        </Button>
-        {onDone && (
-          <Button size="sm" type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
-            Cancel
+        <div className="ml-auto flex gap-2">
+          <Button size="sm" type="submit" disabled={!pattern.trim() || !categoryId || save.isPending}>
+            {editing ? "Save" : "Add"}
           </Button>
-        )}
+          {onDone && (
+            <Button size="sm" type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
+              Cancel
+            </Button>
+          )}
+        </div>
       </div>
       {patternError && (
         <p id={errorId} className="text-xs text-destructive">
           {patternError}
         </p>
       )}
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span aria-live="polite">
           {matchCount === undefined
             ? "\u00a0"
