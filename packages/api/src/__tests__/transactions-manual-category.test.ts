@@ -31,7 +31,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 import {
   bankCategoryMapping,
   category,
-  categoryRule,
+  rule,
   financialAccount,
   plaidItem,
   transaction,
@@ -103,7 +103,7 @@ describe("transactions.resetCategory", () => {
     await makeCaller().transactions.resetCategory({ id: TXN_ID });
 
     expect(mockDb.selected(transaction)).toEqual([[TXN_ID, USER_ID]]);
-    expect(mockDb.selected(categoryRule)).toEqual([[USER_ID]]);
+    expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
     expect(mockDb.selected(bankCategoryMapping)).toEqual([[USER_ID]]);
     const [update] = transactionUpdates();
     expect(update!.set).toEqual({ categoryId: "cat-food", categoryOverridden: false });
@@ -120,10 +120,10 @@ describe("transactions.resetCategory", () => {
     expect(update!.set).toEqual({ categoryId: null, categoryOverridden: false });
   });
 
-  it("applies the matching Category Rule before the Default Category", async () => {
+  it("applies the matching Rule before the Default Category", async () => {
     mockDb.onSelect(transaction, [{ name: "SQ *BLUE BOTTLE", plaidCategoryPrimary: "FOOD_AND_DRINK" }]);
-    mockDb.onSelect(categoryRule, [
-      { id: "r1", pattern: "blue bottle", categoryId: "cat-coffee", createdAt: new Date() },
+    mockDb.onSelect(rule, [
+      { id: "r1", pattern: "blue bottle", matchMode: "contains", categoryId: "cat-coffee", createdAt: new Date() },
     ]);
     mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "FOOD_AND_DRINK", categoryId: "cat-food" }]);
 

@@ -6,7 +6,7 @@
  *  - `applyTransactionSyncDelta` maps the Plaid response to mutations
  *  - `classifyFlow` sets income/expense/transfer
  *  - `resolveCategory` assigns a new transaction's category: the matching
- *    Category Rule, else the Default Category from the Bank Category mapping
+ *    Rule, else the Default Category from the Bank Category mapping
  *    (written on first read by `loadBankCategoryMapping`)
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`
  *
@@ -45,8 +45,8 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
-import { resolveCategory } from "./category-rules";
-import { loadBankCategoryMapping, loadMatchableRules } from "./category-rules-db";
+import { resolveCategory } from "./rules";
+import { loadBankCategoryMapping, loadMatchableRules } from "./rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 

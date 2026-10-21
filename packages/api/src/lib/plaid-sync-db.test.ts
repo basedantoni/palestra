@@ -13,7 +13,7 @@ vi.mock("./plaid-client", () => ({
   getTokenEncryptionKey: () => "key",
 }));
 vi.mock("./plaid-balance-db", () => ({ persistAccountBalances: vi.fn() }));
-vi.mock("./category-rules-db", () => ({
+vi.mock("./rules-db", () => ({
   loadBankCategoryMapping: vi.fn(async () => new Map()),
   loadMatchableRules: vi.fn(),
 }));

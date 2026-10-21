@@ -10,7 +10,7 @@
  * this month (KOI-337).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
- * transactions), the dev user's category rules and Bank Category mapping, then
+ * transactions), the dev user's rules and Bank Category mapping, then
  * re-inserts the same rows with the same ids. Dates are relative to today, inside the current month.
  *
  * Run: pnpm db:seed:finance
@@ -20,7 +20,7 @@ import {
   bankCategoryMapping,
   budget,
   category,
-  categoryRule,
+  rule,
   financialAccount,
   plaidItem,
   transaction,
@@ -32,8 +32,8 @@ import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "../packages/auth/src/index";
 import { SEED_CATEGORIES, seedCategoryColor, seedCategoryIcon } from "../packages/api/src/lib/category-seed";
-import { loadCategoryByName, writeSeedMapping } from "../packages/api/src/lib/category-rules-db";
-import { defaultCategoryId } from "../packages/api/src/lib/category-rules";
+import { loadCategoryByName, writeSeedMapping } from "../packages/api/src/lib/rules-db";
+import { defaultCategoryId } from "../packages/api/src/lib/rules";
 import { otherPlaidEnv } from "../packages/api/src/lib/plaid-env";
 import { classifyFlow } from "../packages/api/src/lib/transaction-flow";
 import { deterministicUUID } from "../packages/db/src/seed";
@@ -150,7 +150,7 @@ async function seedFinance() {
 
     // Reset: cascades to the fixture accounts and their transactions.
     await tx.delete(plaidItem).where(inArray(plaidItem.itemId, [FIXTURE_ITEM_ID, STUCK_ITEM_ID]));
-    await tx.delete(categoryRule).where(eq(categoryRule.userId, userId));
+    await tx.delete(rule).where(eq(rule.userId, userId));
     await tx.delete(bankCategoryMapping).where(eq(bankCategoryMapping.userId, userId));
     const mapping = await writeSeedMapping(tx, userId);
 

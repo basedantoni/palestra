@@ -17,7 +17,7 @@ import {
 import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import type { Conn } from "../lib/category-rules-db";
+import type { Conn } from "../lib/rules-db";
 import { isBelowCondition } from "../lib/tcg-condition";
 
 const terms = z.object({

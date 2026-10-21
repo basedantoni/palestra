@@ -1,6 +1,6 @@
 /**
  * Category resolution for transactions (KOI-295): Default Category, Manual
- * Category and Category Rules. Pure — matching never lives in SQL, so sync,
+ * Category and Rules. Pure — matching never lives in SQL, so sync,
  * reset, retroactive apply and remapping all share these functions.
  */
 
@@ -31,34 +31,51 @@ export function isManualCategory(
   return categoryId !== defaultCategoryId(plaidCategoryPrimary, mapping);
 }
 
-/** The fields of a Category Rule that matching needs. */
+/**
+ * How a Rule's Pattern matches: the whole trimmed description, or any part of
+ * it. Mirrors `ruleMatchModeEnum` in the db schema, kept apart so the web app
+ * can import this file without the db package.
+ */
+export const MATCH_MODES = ["exact", "contains"] as const;
+export type MatchMode = (typeof MATCH_MODES)[number];
+
+/** Both match modes ignore accents and case: "Café" and "CAFE" are the same. */
+export function fold(s: string): string {
+  return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+/** The fields of a Rule that matching needs. */
 export interface MatchableRule {
   id: string;
   pattern: string;
+  matchMode: MatchMode;
   categoryId: string;
   createdAt: Date;
 }
 
+/** Whether one rule matches a bank description, in its own mode. */
+function matches(rule: Pick<MatchableRule, "pattern" | "matchMode">, name: string): boolean {
+  return rule.matchMode === "exact" ? fold(name.trim()) === fold(rule.pattern) : fold(name).includes(fold(rule.pattern));
+}
+
 /**
- * The Category Rule for a bank description: case-insensitive "contains",
- * longest Pattern wins, ties go to the newest rule (then highest id, so the
- * winner never depends on input order). Null when none match.
+ * The Rule for a bank description. An exact match beats any contains match;
+ * then the longest Pattern wins, then the newest rule, then the highest id,
+ * so the winner never depends on input order. Null when none match.
  */
 export function matchRule<R extends MatchableRule>(name: string, rules: readonly R[]): R | null {
-  const haystack = name.toLowerCase();
   let best: R | null = null;
   for (const r of rules) {
-    if (!haystack.includes(r.pattern.toLowerCase())) continue;
-    if (
-      !best ||
-      r.pattern.length > best.pattern.length ||
-      (r.pattern.length === best.pattern.length &&
-        (r.createdAt > best.createdAt || (+r.createdAt === +best.createdAt && r.id > best.id)))
-    ) {
-      best = r;
-    }
+    if (matches(r, name) && (!best || outranks(r, best))) best = r;
   }
   return best;
+}
+
+function outranks(a: MatchableRule, b: MatchableRule): boolean {
+  if (a.matchMode !== b.matchMode) return a.matchMode === "exact";
+  if (a.pattern.length !== b.pattern.length) return a.pattern.length > b.pattern.length;
+  if (+a.createdAt !== +b.createdAt) return a.createdAt > b.createdAt;
+  return a.id > b.id;
 }
 
 /** Automatic category: the matching rule's, else the Default Category. */
@@ -78,20 +95,24 @@ export const DUPLICATE_PATTERN_REASON = "A rule with this pattern already exists
 export type PatternValidation = { ok: true; pattern: string } | { ok: false; reason: string };
 
 /**
- * A Pattern must be at least 3 characters once trimmed and unique per user
- * ignoring case. On edit, a rule may keep its own pattern.
+ * A Pattern must be 3 to 100 characters once trimmed and unique per user and
+ * match mode, ignoring case and accents. On edit, a rule may keep its own pattern.
  */
 export function validatePattern(
   pattern: string,
-  existing: ReadonlyArray<{ id: string; pattern: string }>,
+  matchMode: MatchMode,
+  existing: ReadonlyArray<{ id: string; pattern: string; matchMode: MatchMode }>,
   editingRuleId?: string,
 ): PatternValidation {
   const trimmed = pattern.trim();
   if (trimmed.length < MIN_PATTERN_LENGTH) {
     return { ok: false, reason: `Pattern must be at least ${MIN_PATTERN_LENGTH} characters` };
   }
-  const lower = trimmed.toLowerCase();
-  if (existing.some((r) => r.id !== editingRuleId && r.pattern.toLowerCase() === lower)) {
+  if (trimmed.length > MAX_PATTERN_LENGTH) {
+    return { ok: false, reason: `Pattern must be at most ${MAX_PATTERN_LENGTH} characters` };
+  }
+  const key = fold(trimmed);
+  if (existing.some((r) => r.id !== editingRuleId && r.matchMode === matchMode && fold(r.pattern) === key)) {
     return { ok: false, reason: DUPLICATE_PATTERN_REASON };
   }
   return { ok: true, pattern: trimmed };
@@ -101,6 +122,7 @@ export function validatePattern(
 export interface CandidateRule {
   id: string;
   pattern: string;
+  matchMode: MatchMode;
   categoryId: string;
   createdAt?: Date;
 }
@@ -116,10 +138,10 @@ export interface Recategorization {
  * as the newest.
  */
 export function withCandidateRule(rules: readonly MatchableRule[], candidate: CandidateRule): MatchableRule[] {
-  const { id, pattern, categoryId } = candidate;
+  const { id, pattern, matchMode, categoryId } = candidate;
   const edited = rules.find((r) => r.id === id);
-  if (!edited) return [...rules, { id, pattern, categoryId, createdAt: candidate.createdAt ?? new Date() }];
-  return rules.map((r) => (r === edited ? { id, pattern, categoryId, createdAt: r.createdAt } : r));
+  if (!edited) return [...rules, { id, pattern, matchMode, categoryId, createdAt: candidate.createdAt ?? new Date() }];
+  return rules.map((r) => (r === edited ? { id, pattern, matchMode, categoryId, createdAt: r.createdAt } : r));
 }
 
 export interface CategorizableTransaction {
@@ -132,8 +154,8 @@ export interface CategorizableTransaction {
 }
 
 /**
- * Retroactive apply of one rule: only rows its Pattern matches (or, on edit,
- * its previous Pattern matched) are re-resolved, against the full rule set as
+ * Retroactive apply of one rule: only rows it matches (or, on edit, its
+ * previous Pattern and mode matched) are re-resolved, against the full rule set as
  * if the rule were saved; returns those whose category changes. Rows a deleted
  * rule once categorized stay as they are — applying is one-shot, never a sweep
  * (ADR 0004). A Manual Category is never changed, except that a matching rule
@@ -147,11 +169,7 @@ export function ruleRecategorizations(
   mapping: BankCategoryMapping,
 ): Recategorization[] {
   const previous = rules.find((r) => r.id === candidate.id);
-  const patterns = [candidate.pattern, previous?.pattern].flatMap((p) => (p ? [p.toLowerCase()] : []));
-  const touched = rows.filter((row) => {
-    const name = row.name.toLowerCase();
-    return patterns.some((p) => name.includes(p));
-  });
+  const touched = rows.filter((row) => matches(candidate, row.name) || (previous && matches(previous, row.name)));
   const saved = withCandidateRule(rules, candidate);
   return touched.flatMap((row) => {
     if (row.categoryOverridden) {
@@ -187,6 +205,6 @@ export function bankCategoryRecategorizations(
  */
 export function suggestPattern(name: string, merchantName: string | null): string {
   const merchant = merchantName?.trim();
-  if (merchant && name.toLowerCase().includes(merchant.toLowerCase())) return merchant;
+  if (merchant && fold(name).includes(fold(merchant))) return merchant;
   return name.trim().slice(0, MAX_PATTERN_LENGTH);
 }

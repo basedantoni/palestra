@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
+import { ruleMatchModeEnum } from "./enums";
 
 /**
  * User-owned spending category. Seeded from the Bank Categories on first connect
@@ -90,18 +91,23 @@ export const bankCategoryMapping = pgTable(
 );
 
 /**
- * Category Rule (KOI-298): transactions whose bank description contains
- * `pattern` (ignoring case) get `categoryId`. Matching lives in TypeScript
- * (`category-rules.ts`), never SQL. Deleting the category deletes its rules.
+ * Rule (KOI-298, KOI-339): transactions whose bank description matches
+ * `pattern` get `categoryId`. `matchMode` is `exact` (the whole trimmed
+ * description) or `contains`; both ignore case and accents. Matching lives in
+ * TypeScript (`rules.ts`), never SQL. `patternKey` is the folded pattern
+ * (`fold`), so the same Pattern exists once per mode. Deleting the category
+ * deletes its rules.
  */
-export const categoryRule = pgTable(
-  "category_rule",
+export const rule = pgTable(
+  "rule",
   {
     id: uuid("id").primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     pattern: text("pattern").notNull(),
+    patternKey: text("pattern_key").notNull(),
+    matchMode: ruleMatchModeEnum("match_mode").default("contains").notNull(),
     categoryId: uuid("category_id")
       .notNull()
       .references(() => category.id, { onDelete: "cascade" }),
@@ -111,18 +117,16 @@ export const categoryRule = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [
-    uniqueIndex("category_rule_userId_pattern_unique_idx").on(table.userId, sql`lower(${table.pattern})`),
-  ],
+  (table) => [uniqueIndex("rule_userId_matchMode_patternKey_unique_idx").on(table.userId, table.matchMode, table.patternKey)],
 );
 
-export const categoryRuleRelations = relations(categoryRule, ({ one }) => ({
+export const ruleRelations = relations(rule, ({ one }) => ({
   user: one(user, {
-    fields: [categoryRule.userId],
+    fields: [rule.userId],
     references: [user.id],
   }),
   category: one(category, {
-    fields: [categoryRule.categoryId],
+    fields: [rule.categoryId],
     references: [category.id],
   }),
 }));

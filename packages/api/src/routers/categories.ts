@@ -9,7 +9,7 @@ import { category, transaction } from "@life-tracker/db/schema/index";
 import { CATEGORY_COLORS, CATEGORY_ICONS, categoryTree, nextCategoryColor } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { type Conn, ownedCategory } from "../lib/category-rules-db";
+import { type Conn, ownedCategory } from "../lib/rules-db";
 import { UNCATEGORIZED } from "../lib/category-spend";
 
 const categoryName = z.string().trim().min(1).max(60);

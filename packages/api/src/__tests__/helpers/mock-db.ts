@@ -1,8 +1,8 @@
 /**
  * Shared mocked Drizzle `db` for API tests (KOI-303).
  *
- * Results are queued per table, not per call: `onSelect(categoryRule, rows)`
- * answers the next select *from categoryRule*, so adding a query against
+ * Results are queued per table, not per call: `onSelect(rule, rows)`
+ * answers the next select *from rule*, so adding a query against
  * another table to a code path doesn't shift what every later select returns.
  * Order still matters *within* a table: successive selects from one table take
  * its queued results in call order. A table with nothing queued answers `[]`

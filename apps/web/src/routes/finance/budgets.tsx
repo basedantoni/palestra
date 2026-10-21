@@ -6,7 +6,7 @@ import { useFinanceToday } from "@/hooks/use-finance-today";
 import { BudgetCards } from "@/components/finance/budget-cards";
 import { BudgetMonthStepper } from "@/components/finance/budget-month-stepper";
 import { CategoryList } from "@/components/finance/category-list";
-import { CategoryRuleList } from "@/components/finance/category-rule-list";
+import { RuleList } from "@/components/finance/rule-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Month and tab live in the URL so reloads and shared links keep the view.
@@ -63,7 +63,7 @@ function BudgetsPage() {
           <CategoryList />
         </TabsContent>
         <TabsContent value="rules">
-          <CategoryRuleList />
+          <RuleList />
         </TabsContent>
       </Tabs>
     </div>
