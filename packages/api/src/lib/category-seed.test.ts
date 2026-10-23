@@ -9,9 +9,12 @@ describe("categoryNameForPfc", () => {
     expect(categoryNameForPfc("FOOD_AND_DRINK")).toBe("Food & Drink");
     expect(categoryNameForPfc("RENT_AND_UTILITIES")).toBe("Rent & Utilities");
     expect(categoryNameForPfc("TRANSPORTATION")).toBe("Transportation");
-    expect(categoryNameForPfc("INCOME")).toBe("Income");
-    expect(categoryNameForPfc("TRANSFER_IN")).toBe("Transfers");
-    expect(categoryNameForPfc("TRANSFER_OUT")).toBe("Transfers");
+  });
+
+  it("leaves income and transfers unmapped: categories describe spend only (KOI-341)", () => {
+    expect(categoryNameForPfc("INCOME")).toBeNull();
+    expect(categoryNameForPfc("TRANSFER_IN")).toBeNull();
+    expect(categoryNameForPfc("TRANSFER_OUT")).toBeNull();
   });
 
   it("is null (Uncategorized: no category) for null/unknown", () => {
@@ -20,26 +23,28 @@ describe("categoryNameForPfc", () => {
     expect(categoryNameForPfc("SOMETHING_NEW")).toBeNull();
   });
 
-  it("every Bank Category resolves to a name present in SEED_CATEGORIES", () => {
+  it("every spend Bank Category resolves to a name present in SEED_CATEGORIES", () => {
     const names = new Set(SEED_CATEGORIES);
-    for (const primary of PFC_PRIMARIES) {
+    const spend = PFC_PRIMARIES.filter((p) => !["INCOME", "TRANSFER_IN", "TRANSFER_OUT"].includes(p));
+    for (const primary of spend) {
       expect(names.has(categoryNameForPfc(primary)!)).toBe(true);
     }
   });
 
-  it("SEED_CATEGORIES has no duplicates and no Uncategorized category", () => {
+  it("SEED_CATEGORIES has no duplicates, no Uncategorized, and no Income or Transfers", () => {
     expect(new Set(SEED_CATEGORIES).size).toBe(SEED_CATEGORIES.length);
     // Uncategorized means no category (glossary), never a real one (KOI-301).
     expect(SEED_CATEGORIES).not.toContain("Uncategorized");
+    expect(SEED_CATEGORIES).not.toContain("Income");
+    expect(SEED_CATEGORIES).not.toContain("Transfers");
   });
 });
 
 describe("seedCategoryColor", () => {
-  it("gives every expense seed a distinct palette color, and Income and Transfers none", () => {
+  it("gives every seed a distinct palette color", () => {
     const colors = SEED_CATEGORIES.map(seedCategoryColor);
-    expect(colors.slice(0, 2)).toEqual([null, null]);
-    expect(colors.slice(2)).not.toContain(null);
-    expect(new Set(colors.slice(2)).size).toBe(SEED_CATEGORIES.length - 2);
+    expect(colors).not.toContain(null);
+    expect(new Set(colors).size).toBe(SEED_CATEGORIES.length);
     expect(seedCategoryColor("Food & Drink")).toBe("blue");
   });
 });
@@ -63,8 +68,12 @@ describe("seedBankCategoryMapping", () => {
     const mapping = seedBankCategoryMapping(categoryByName);
     expect([...mapping.keys()]).toEqual([...PFC_PRIMARIES]);
     expect(mapping.get("FOOD_AND_DRINK")).toBe("cat-food");
-    expect(mapping.get("TRANSFER_IN")).toBe("cat-transfers");
-    expect(mapping.get("TRANSFER_OUT")).toBe("cat-transfers");
+  });
+
+  it("leaves transfers unmapped even for a user with a Transfers category", () => {
+    const mapping = seedBankCategoryMapping(categoryByName);
+    expect(mapping.get("TRANSFER_IN")).toBeNull();
+    expect(mapping.get("TRANSFER_OUT")).toBeNull();
   });
 
   it("leaves a Bank Category unmapped when the user has no category of its name", () => {

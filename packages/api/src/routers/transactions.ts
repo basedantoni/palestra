@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { countsInTotals, isExcluded } from "../lib/counts-in-totals-sql";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
-import { resolveCategory, resolveFlow } from "../lib/rules";
+import { NO_CATEGORY_FLOWS, categoryOnFlowChange, resolveCategory, resolveFlow } from "../lib/rules";
 import { loadBankCategoryMapping, loadMatchableRules } from "../lib/rules-db";
 import { TRANSACTION_FLOWS, classifyFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
@@ -117,14 +117,23 @@ export const transactionsRouter = router({
     return { count: row?.count ?? 0, spent: Number(row?.spent ?? 0) };
   }),
 
-  /** Pick a category by hand; it becomes a Manual Category, even when null (ADR 0004). */
+  /**
+   * Pick a category by hand; it becomes a Manual Category, even when null (ADR 0004).
+   * Income and transfer rows carry no category (KOI-341), so they are left alone.
+   */
   setCategory: protectedProcedure
     .input(z.object({ id: z.string().uuid(), categoryId: z.string().uuid().nullable() }))
     .mutation(async ({ ctx, input }) => {
       await db
         .update(transaction)
         .set({ categoryId: input.categoryId, categoryOverridden: true })
-        .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
+        .where(
+          and(
+            eq(transaction.id, input.id),
+            eq(transaction.userId, ctx.session.user.id),
+            or(isNull(transaction.flow), notInArray(transaction.flow, [...NO_CATEGORY_FLOWS])),
+          ),
+        );
       return { ok: true };
     }),
 
@@ -135,18 +144,19 @@ export const transactionsRouter = router({
       const userId = ctx.session.user.id;
       const owned = and(eq(transaction.id, input.id), eq(transaction.userId, userId));
       const [row] = await db
-        .select({ name: transaction.name, plaidCategoryPrimary: transaction.plaidCategoryPrimary })
+        .select({ name: transaction.name, plaidCategoryPrimary: transaction.plaidCategoryPrimary, flow: transaction.flow })
         .from(transaction)
         .where(owned)
         .limit(1);
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
 
-      // Same resolution as a fresh sync: matching rule, else Default Category.
+      // Same resolution as a fresh sync: matching rule, else Default Category; none off expense.
       const categoryId = resolveCategory(
         row.name,
         row.plaidCategoryPrimary,
         await loadMatchableRules(db, userId),
         await loadBankCategoryMapping(db, userId),
+        row.flow,
       );
       await db.update(transaction).set({ categoryId, categoryOverridden: false }).where(owned);
       return { ok: true };
@@ -155,7 +165,8 @@ export const transactionsRouter = router({
   /**
    * Correct a transaction's flow; null resets to automatic (ADR 0001), as a
    * fresh sync resolves it: the bank's flow, then a matching flow Rule. The
-   * override flag makes the Plaid sync upsert leave `flow` alone.
+   * override flag makes the Plaid sync upsert leave `flow` alone. The category
+   * follows the flow (`categoryOnFlowChange`, KOI-341).
    */
   setFlow: protectedProcedure
     .input(
@@ -165,7 +176,8 @@ export const transactionsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const owned = and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id));
+      const userId = ctx.session.user.id;
+      const owned = and(eq(transaction.id, input.id), eq(transaction.userId, userId));
       await db.transaction(async (tx) => {
         // Locked so a concurrent sync/match can't change pending or the pair between read and write.
         const [row] = await tx
@@ -174,6 +186,9 @@ export const transactionsRouter = router({
             name: transaction.name,
             plaidCategoryPrimary: transaction.plaidCategoryPrimary,
             transferPairId: transaction.transferPairId,
+            flow: transaction.flow,
+            categoryId: transaction.categoryId,
+            categoryOverridden: transaction.categoryOverridden,
           })
           .from(transaction)
           .where(owned)
@@ -188,15 +203,18 @@ export const transactionsRouter = router({
           });
         }
 
+        const rules = await loadMatchableRules(tx, userId);
         const flow =
           input.flow ??
-          resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, await loadMatchableRules(tx, ctx.session.user.id), {
+          resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, rules, {
             flowOverridden: false,
             transferPairId: row.transferPairId,
           });
+        const mapping = await loadBankCategoryMapping(tx, userId);
+        const automaticCategoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, mapping, flow);
         await tx
           .update(transaction)
-          .set({ flow, flowOverridden: input.flow !== null })
+          .set({ flow, flowOverridden: input.flow !== null, categoryId: categoryOnFlowChange(row, flow, automaticCategoryId) })
           .where(owned);
         // A leg that is no longer a transfer breaks the Transfer Pair; the other leg stays an unpaired transfer.
         const { transferPairId } = row;
@@ -207,7 +225,7 @@ export const transactionsRouter = router({
             .where(
               and(
                 eq(transaction.transferPairId, transferPairId),
-                eq(transaction.userId, ctx.session.user.id),
+                eq(transaction.userId, userId),
               ),
             );
         }

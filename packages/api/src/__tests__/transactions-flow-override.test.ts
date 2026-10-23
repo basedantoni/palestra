@@ -31,7 +31,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
-import { financialAccount, plaidItem, rule, transaction } from "@life-tracker/db/schema/index";
+import { bankCategoryMapping, financialAccount, plaidItem, rule, transaction } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
@@ -109,6 +109,9 @@ function row(overrides: Record<string, unknown> = {}) {
     name: "ZELLE FROM JANE",
     plaidCategoryPrimary: "TRANSFER_IN",
     transferPairId: null,
+    flow: "transfer",
+    categoryId: null,
+    categoryOverridden: false,
     ...overrides,
   };
 }
@@ -121,7 +124,7 @@ describe("transactions.setFlow", () => {
 
     expect(mockDb.selected(transaction)).toEqual([[TXN_ID, USER_ID]]);
     const [update] = mockDb.updated(transaction);
-    expect(update!.set).toEqual({ flow: "income", flowOverridden: true });
+    expect(update!.set).toEqual({ flow: "income", flowOverridden: true, categoryId: null });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
   });
 
@@ -131,7 +134,7 @@ describe("transactions.setFlow", () => {
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: null });
 
     const [update] = mockDb.updated(transaction);
-    expect(update!.set).toEqual({ flow: "transfer", flowOverridden: false });
+    expect(update!.set).toEqual({ flow: "transfer", flowOverridden: false, categoryId: null });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
   });
 
@@ -144,7 +147,7 @@ describe("transactions.setFlow", () => {
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: null });
 
     expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
-    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "income", flowOverridden: false });
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "income", flowOverridden: false, categoryId: null });
   });
 
   it("unpairs both legs when overriding one leg of a transfer pair", async () => {
@@ -155,7 +158,7 @@ describe("transactions.setFlow", () => {
     const updates = mockDb.updated(transaction) as Array<{ set: Record<string, unknown>; where: unknown[] }>;
     expect(updates).toHaveLength(2);
     expect(updates).toContainEqual(
-      expect.objectContaining({ set: { flow: "income", flowOverridden: true } }),
+      expect.objectContaining({ set: { flow: "income", flowOverridden: true, categoryId: null } }),
     );
     const unpair = updates.find((u) => "transferPairId" in u.set)!;
     expect(unpair.set).toEqual({ transferPairId: null });
@@ -169,6 +172,38 @@ describe("transactions.setFlow", () => {
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "expense" });
 
     expect(mockDb.updated(transaction)).toHaveLength(1);
+  });
+
+  it("takes the category off a row moved off expense, even a Manual Category (KOI-341)", async () => {
+    mockDb.onSelect(transaction, [row({ flow: "expense", categoryId: "cat-food", categoryOverridden: true })]);
+
+    await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "transfer" });
+
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "transfer", flowOverridden: true, categoryId: null });
+  });
+
+  it("re-resolves the category of a row moved back to expense", async () => {
+    mockDb.onSelect(transaction, [row({ name: "VENMO RENT" })]);
+    mockDb.onSelect(rule, [
+      { id: "r1", pattern: "venmo rent", matchMode: "contains", categoryId: "cat-rent", setFlow: null, createdAt: new Date() },
+    ]);
+    mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "TRANSFER_IN", categoryId: null }]);
+
+    await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "expense" });
+
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: "cat-rent" });
+  });
+
+  it("keeps a Manual Category on a row moved back to expense", async () => {
+    mockDb.onSelect(transaction, [row({ name: "VENMO RENT", categoryOverridden: true })]);
+    mockDb.onSelect(rule, [
+      { id: "r1", pattern: "venmo rent", matchMode: "contains", categoryId: "cat-rent", setFlow: null, createdAt: new Date() },
+    ]);
+    mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "TRANSFER_IN", categoryId: null }]);
+
+    await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "expense" });
+
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: null });
   });
 
   it("rejects a pending transaction and writes nothing", async () => {

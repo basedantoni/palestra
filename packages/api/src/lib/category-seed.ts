@@ -29,10 +29,8 @@ export const PFC_PRIMARIES = [
   "RENT_AND_UTILITIES",
 ] as const;
 
+/** Spend Bank Categories only: income and transfers carry no category (KOI-341). */
 const PFC_TO_NAME: Record<string, string> = {
-  INCOME: "Income",
-  TRANSFER_IN: "Transfers",
-  TRANSFER_OUT: "Transfers",
   LOAN_PAYMENTS: "Loan Payments",
   BANK_FEES: "Bank Fees",
   ENTERTAINMENT: "Entertainment",
@@ -50,8 +48,6 @@ const PFC_TO_NAME: Record<string, string> = {
 
 /** Distinct seed category names (order is the suggested display order). */
 export const SEED_CATEGORIES: string[] = [
-  "Income",
-  "Transfers",
   "Food & Drink",
   "Shopping",
   "Transportation",
@@ -68,18 +64,15 @@ export const SEED_CATEGORIES: string[] = [
 ];
 
 /**
- * Seed colors (KOI-336): the expense seeds take the palette in order, so each
- * is distinct. Income and Transfers get none; they leave in KOI-341. The
- * KOI-336 migration backfilled existing users with the same colors.
+ * Seed colors (KOI-336): the seeds take the palette in order, so each is
+ * distinct. The KOI-336 migration backfilled existing users with the same colors.
  */
 export function seedCategoryColor(name: string): CategoryColor | null {
-  return CATEGORY_COLORS[SEED_CATEGORIES.indexOf(name) - 2] ?? null;
+  return CATEGORY_COLORS[SEED_CATEGORIES.indexOf(name)] ?? null;
 }
 
 /** Each seed's icon (KOI-336); the KOI-336 migration backfilled existing users with the same. */
 const SEED_ICONS: Record<string, CategoryIcon> = {
-  Income: "banknote",
-  Transfers: "arrow-left-right",
   "Food & Drink": "utensils",
   Shopping: "shopping-bag",
   Transportation: "car",
@@ -101,8 +94,8 @@ export function seedCategoryIcon(name: string): CategoryIcon | null {
 
 /**
  * The seed category name for a Bank Category, or null when it can't be
- * mapped: the transaction is then Uncategorized (no category), never put in a
- * category named "Uncategorized" (KOI-301).
+ * mapped (income, transfers, unknown): the transaction is then Uncategorized
+ * (no category), never put in a category named "Uncategorized" (KOI-301).
  */
 export function categoryNameForPfc(pfcPrimary: string | null | undefined): string | null {
   if (!pfcPrimary) return null;
@@ -111,5 +104,10 @@ export function categoryNameForPfc(pfcPrimary: string | null | undefined): strin
 
 /** The starting Bank Category mapping: every Bank Category → the user's category of its seed name, else null. */
 export function seedBankCategoryMapping(categoryByName: ReadonlyMap<string, string>): Map<string, string | null> {
-  return new Map(PFC_PRIMARIES.map((pfc) => [pfc, categoryByName.get(categoryNameForPfc(pfc)!) ?? null]));
+  return new Map(
+    PFC_PRIMARIES.map((pfc) => {
+      const name = categoryNameForPfc(pfc);
+      return [pfc, name ? (categoryByName.get(name) ?? null) : null];
+    }),
+  );
 }

@@ -85,14 +85,34 @@ function outranks(a: MatchableRule, b: MatchableRule): boolean {
   return a.id > b.id;
 }
 
-/** Automatic category: the matching rule's, else the Default Category. */
+/**
+ * Automatic category: the matching rule's, else the Default Category. None
+ * for income or transfer flow: categories describe spend only (KOI-341).
+ */
 export function resolveCategory(
   name: string,
   plaidCategoryPrimary: string | null | undefined,
   rules: readonly MatchableRule[],
   mapping: BankCategoryMapping,
+  flow: TransactionFlow | null,
 ): string | null {
+  if (flowTakesNoCategory(flow)) return null;
   return matchRule(name, rules, "categoryId")?.categoryId ?? defaultCategoryId(plaidCategoryPrimary, mapping);
+}
+
+/**
+ * A row's category once its flow becomes `flow` (KOI-341): none off expense,
+ * even a Manual Category; back on expense, `autoCategoryId` (from
+ * `resolveCategory`) unless the row holds a Manual Category; otherwise it stays.
+ */
+export function categoryOnFlowChange(
+  row: { flow: TransactionFlow | null; categoryId: string | null; categoryOverridden?: boolean },
+  flow: TransactionFlow | null,
+  autoCategoryId: string | null,
+): string | null {
+  if (flowTakesNoCategory(flow)) return null;
+  if (!flowTakesNoCategory(row.flow) || row.categoryOverridden) return row.categoryId;
+  return autoCategoryId;
 }
 
 /** What decides whether a transaction's flow is a Rule's to set. */
@@ -120,9 +140,12 @@ export function resolveFlow(
   return matchRule(name, rules, "setFlow")?.setFlow ?? baseFlow;
 }
 
+/** Flows that carry no category: categories describe spend only (KOI-341). */
+export const NO_CATEGORY_FLOWS = ["income", "transfer"] as const satisfies readonly TransactionFlow[];
+
 /** Income and transfer carry no category, so a rule setting either sets none. */
 export function flowTakesNoCategory(flow: TransactionFlow | null): boolean {
-  return flow === "income" || flow === "transfer";
+  return (NO_CATEGORY_FLOWS as readonly (TransactionFlow | null)[]).includes(flow);
 }
 
 /**
@@ -216,6 +239,7 @@ export interface CategorizableTransaction extends FlowLock {
  * never does. Flow re-resolves from the bank's classification, except on a
  * locked row (`isFlowLocked`). Only the fields the rule sets, or set before
  * the edit, re-resolve: a category rule never resets a flow, nor the reverse.
+ * A changed flow takes the category with it (`categoryOnFlowChange`).
  */
 export function ruleRecategorizations(
   rows: readonly CategorizableTransaction[],
@@ -229,19 +253,21 @@ export function ruleRecategorizations(
   const sets = (field: RuleField) => candidate[field] !== null || (previous !== undefined && previous[field] !== null);
   return touched.flatMap((row) => {
     const change: Recategorization = { id: row.id };
-    if (sets("categoryId")) {
-      // undefined: the category stays (a Manual Category takes only a rule's, and only when blank).
-      const categoryId = !row.categoryOverridden
-        ? resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping)
-        : row.categoryId === null
-          ? matchRule(row.name, saved, "categoryId")?.categoryId
-          : undefined;
-      if (categoryId !== undefined && categoryId !== row.categoryId) change.categoryId = categoryId;
-    }
     if (sets("setFlow") && !isFlowLocked(row)) {
       const flow = resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, saved, row);
       if (flow !== row.flow) change.flow = flow;
     }
+    const flow = change.flow ?? row.flow;
+    const automaticCategoryId = resolveCategory(row.name, row.plaidCategoryPrimary, saved, mapping, flow);
+    // undefined: the category stays.
+    let categoryId: string | null | undefined;
+    if (change.flow) categoryId = categoryOnFlowChange(row, flow, automaticCategoryId);
+    else if (sets("categoryId") && !row.categoryOverridden) categoryId = automaticCategoryId;
+    // A Manual Category takes only a rule's, and only when blank and on expense.
+    if (sets("categoryId") && row.categoryOverridden && row.categoryId === null && !flowTakesNoCategory(flow)) {
+      categoryId = matchRule(row.name, saved, "categoryId")?.categoryId;
+    }
+    if (categoryId !== undefined && categoryId !== row.categoryId) change.categoryId = categoryId;
     return "categoryId" in change || "flow" in change ? [change] : [];
   });
 }
@@ -258,7 +284,7 @@ export function bankCategoryRecategorizations(
 ): Recategorization[] {
   return rows.flatMap((row) => {
     if (row.categoryOverridden) return [];
-    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, mapping);
+    const categoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, mapping, row.flow);
     return categoryId === row.categoryId ? [] : [{ id: row.id, categoryId }];
   });
 }

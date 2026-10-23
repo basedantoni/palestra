@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
-import { suggestPattern, validatePattern } from "@life-tracker/api/lib/rules";
+import { flowTakesNoCategory, suggestPattern, validatePattern } from "@life-tracker/api/lib/rules";
 import { TRANSACTION_FLOWS, type TransactionFlow } from "@life-tracker/api/lib/transaction-flow";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
@@ -197,7 +197,7 @@ function FeedItem({
             {t.note && <StickyNote className="size-3 shrink-0 text-amber-500" aria-label="Has note" />}
           </span>
           <span className="truncate text-xs text-muted-foreground">
-            {t.flow === "transfer" ? "Transfer" : (t.categoryName ?? "Uncategorized")} · {t.accountName}
+            {t.flow && flowTakesNoCategory(t.flow) ? FLOW_LABELS[t.flow] : (t.categoryName ?? "Uncategorized")} · {t.accountName}
             {t.pending ? " · pending" : ""}
             {t.excluded ? " · excluded" : ""}
           </span>
@@ -270,7 +270,8 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <FlowPicker txn={txn} />
-        {txn.flow !== "transfer" && (
+        {/* Income and transfers carry no category (KOI-341). */}
+        {!flowTakesNoCategory(txn.flow) && (
           <CategoryPicker
             size="xs"
             aria-label="Category"

@@ -47,7 +47,7 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
-import { resolveCategory, resolveFlow } from "./rules";
+import { NO_CATEGORY_FLOWS, resolveCategory, resolveFlow } from "./rules";
 import { loadBankCategoryMapping, loadMatchableRules, ruleMaySetFlow } from "./rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
@@ -144,7 +144,7 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
       flowOverridden: false,
       transferPairId: null,
     });
-    const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping);
+    const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping, flow);
     await db
       .insert(transaction)
       .values({
@@ -174,6 +174,13 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
           // A user override wins over Plaid's re-classification (ADR 0001), and
           // a Transfer Pair's legs keep theirs: only an unlocked row takes the new flow.
           flow: sql`case when ${ruleMaySetFlow} then excluded.flow else ${transaction.flow} end`,
+          // The category follows that flow, as `categoryOnFlowChange` has it (KOI-341): none
+          // off expense; back on expense, the insert's resolved category unless it's Manual.
+          categoryId: sql`case
+            when not ${ruleMaySetFlow} then ${transaction.categoryId}
+            when ${inArray(sql`excluded.flow`, NO_CATEGORY_FLOWS)} then null
+            when ${inArray(transaction.flow, NO_CATEGORY_FLOWS)} and not ${transaction.categoryOverridden} then excluded.category_id
+            else ${transaction.categoryId} end`,
           plaidCategoryPrimary: up.plaidCategoryPrimary,
           plaidCategoryDetailed: up.plaidCategoryDetailed,
           isoCurrencyCode: up.isoCurrencyCode,

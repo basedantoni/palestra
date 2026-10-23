@@ -73,12 +73,13 @@ beforeEach(() => {
 // transactions.setCategory
 // ────────────────────────────────────────────────────────────────────────────
 describe("transactions.setCategory", () => {
-  it("sets the category and marks it manual, scoped to the caller", async () => {
+  it("sets the category and marks it manual, scoped to the caller and to expense rows", async () => {
     await makeCaller().transactions.setCategory({ id: TXN_ID, categoryId: CAT_ID });
 
     const [update] = transactionUpdates();
     expect(update!.set).toEqual({ categoryId: CAT_ID, categoryOverridden: true });
-    expect(update!.where).toEqual([TXN_ID, USER_ID]);
+    // Income and transfer rows carry no category (KOI-341).
+    expect(update!.where).toEqual([TXN_ID, USER_ID, "income", "transfer"]);
   });
 
   it("treats choosing Uncategorized as a manual choice", async () => {
@@ -133,6 +134,15 @@ describe("transactions.resetCategory", () => {
     expect(update!.set).toEqual({ categoryId: "cat-coffee", categoryOverridden: false });
   });
 
+  it("leaves an income or transfer row with no category (KOI-341)", async () => {
+    mockDb.onSelect(transaction, [{ name: "PAYROLL", plaidCategoryPrimary: "INCOME", flow: "income" }]);
+    mockDb.onSelect(bankCategoryMapping, [{ pfcPrimary: "INCOME", categoryId: "cat-salary" }]);
+
+    await makeCaller().transactions.resetCategory({ id: TXN_ID });
+
+    expect(transactionUpdates()[0]!.set).toEqual({ categoryId: null, categoryOverridden: false });
+  });
+
   it("rejects a transaction the caller doesn't own with NOT_FOUND", async () => {
     // Nothing queued: the lookup finds no transaction.
     await expect(makeCaller().transactions.resetCategory({ id: TXN_ID })).rejects.toMatchObject({
@@ -146,7 +156,7 @@ describe("transactions.resetCategory", () => {
 // Sync upsert
 // ────────────────────────────────────────────────────────────────────────────
 describe("syncPlaidItem upsert", () => {
-  it("never overwrites categoryId or the manual flag on a modified transaction", async () => {
+  it("never overwrites the manual flag on a modified transaction", async () => {
     mockDb.onSelect(plaidItem, [
       { id: ITEM_ID, userId: USER_ID, accessTokenEnc: "enc", transactionCursor: "c1", plaidEnv: env.PLAID_ENV },
     ]);
@@ -181,7 +191,7 @@ describe("syncPlaidItem upsert", () => {
     const onConflict = upsert.arg("onConflictDoUpdate") as {
       set: Record<string, unknown>;
     };
-    expect(onConflict.set).not.toHaveProperty("categoryId");
+    // categoryId only follows a flow change (KOI-341, spend-only-categories-db.test.ts).
     expect(onConflict.set).not.toHaveProperty("categoryOverridden");
   });
 });
