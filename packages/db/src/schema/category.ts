@@ -1,7 +1,8 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  check,
   index,
   integer,
   pgTable,
@@ -13,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
-import { ruleMatchModeEnum } from "./enums";
+import { ruleMatchModeEnum, transactionFlowEnum } from "./enums";
 
 /**
  * User-owned spending category. Seeded from the Bank Categories on first connect
@@ -91,12 +92,13 @@ export const bankCategoryMapping = pgTable(
 );
 
 /**
- * Rule (KOI-298, KOI-339): transactions whose bank description matches
- * `pattern` get `categoryId`. `matchMode` is `exact` (the whole trimmed
- * description) or `contains`; both ignore case and accents. Matching lives in
- * TypeScript (`rules.ts`), never SQL. `patternKey` is the folded pattern
- * (`fold`), so the same Pattern exists once per mode. Deleting the category
- * deletes its rules.
+ * Rule (KOI-298, KOI-339, KOI-340): transactions whose bank description
+ * matches `pattern` get `categoryId`, `setFlow`, or both; each resolves on its
+ * own. An income or transfer rule sets no category. `matchMode` is `exact`
+ * (the whole trimmed description) or `contains`; both ignore case and accents.
+ * Matching lives in TypeScript (`rules.ts`), never SQL. `patternKey` is the
+ * folded pattern (`fold`), so the same Pattern exists once per mode. Deleting
+ * the category deletes its rules.
  */
 export const rule = pgTable(
   "rule",
@@ -108,16 +110,19 @@ export const rule = pgTable(
     pattern: text("pattern").notNull(),
     patternKey: text("pattern_key").notNull(),
     matchMode: ruleMatchModeEnum("match_mode").default("contains").notNull(),
-    categoryId: uuid("category_id")
-      .notNull()
-      .references(() => category.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => category.id, { onDelete: "cascade" }),
+    setFlow: transactionFlowEnum("set_flow"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [uniqueIndex("rule_userId_matchMode_patternKey_unique_idx").on(table.userId, table.matchMode, table.patternKey)],
+  (table) => [
+    uniqueIndex("rule_userId_matchMode_patternKey_unique_idx").on(table.userId, table.matchMode, table.patternKey),
+    check("rule_sets_something", sql`${table.categoryId} is not null or ${table.setFlow} is not null`),
+    check("rule_no_category_off_expense", sql`${table.categoryId} is null or ${table.setFlow} is null or ${table.setFlow} = 'expense'`),
+  ],
 );
 
 export const ruleRelations = relations(rule, ({ one }) => ({

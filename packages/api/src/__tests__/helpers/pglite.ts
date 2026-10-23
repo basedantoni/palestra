@@ -28,6 +28,8 @@ type TestDb = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 /** Postgres SQLSTATE for a unique-constraint violation. */
 export const PG_UNIQUE_VIOLATION = "23505";
+/** Postgres SQLSTATE for a check-constraint violation. */
+export const PG_CHECK_VIOLATION = "23514";
 
 /**
  * Apply every migration in journal order. Not drizzle's pglite migrator: that

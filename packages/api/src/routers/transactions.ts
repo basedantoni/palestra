@@ -10,9 +10,9 @@ import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { countsInTotals, isExcluded } from "../lib/counts-in-totals-sql";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
-import { resolveCategory } from "../lib/rules";
+import { resolveCategory, resolveFlow } from "../lib/rules";
 import { loadBankCategoryMapping, loadMatchableRules } from "../lib/rules-db";
-import { effectiveFlow } from "../lib/transaction-flow";
+import { TRANSACTION_FLOWS, classifyFlow } from "../lib/transaction-flow";
 import { getUserTimezone } from "../lib/user-timezone";
 
 const filtersSchema = z.object({
@@ -153,14 +153,15 @@ export const transactionsRouter = router({
     }),
 
   /**
-   * Correct a transaction's flow; null resets to automatic (ADR 0001). The
+   * Correct a transaction's flow; null resets to automatic (ADR 0001), as a
+   * fresh sync resolves it: the bank's flow, then a matching flow Rule. The
    * override flag makes the Plaid sync upsert leave `flow` alone.
    */
   setFlow: protectedProcedure
     .input(
       z.object({
         id: z.string().uuid(),
-        flow: z.enum(["income", "expense", "transfer"]).nullable(),
+        flow: z.enum(TRANSACTION_FLOWS).nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -170,6 +171,7 @@ export const transactionsRouter = router({
         const [row] = await tx
           .select({
             pending: transaction.pending,
+            name: transaction.name,
             plaidCategoryPrimary: transaction.plaidCategoryPrimary,
             transferPairId: transaction.transferPairId,
           })
@@ -186,7 +188,12 @@ export const transactionsRouter = router({
           });
         }
 
-        const flow = effectiveFlow(input.flow, row.plaidCategoryPrimary);
+        const flow =
+          input.flow ??
+          resolveFlow(classifyFlow(row.plaidCategoryPrimary), row.name, await loadMatchableRules(tx, ctx.session.user.id), {
+            flowOverridden: false,
+            transferPairId: row.transferPairId,
+          });
         await tx
           .update(transaction)
           .set({ flow, flowOverridden: input.flow !== null })

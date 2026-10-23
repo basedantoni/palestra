@@ -4,11 +4,13 @@
  * Pulls a Plaid Item's transaction delta and persists it, leaning on the pure
  * seams for the actual logic:
  *  - `applyTransactionSyncDelta` maps the Plaid response to mutations
- *  - `classifyFlow` sets income/expense/transfer
+ *  - `classifyFlow` sets income/expense/transfer, and `resolveFlow` lets a
+ *    matching flow Rule override it
  *  - `resolveCategory` assigns a new transaction's category: the matching
  *    Rule, else the Default Category from the Bank Category mapping
  *    (written on first read by `loadBankCategoryMapping`)
- *  - `matchInternalTransfers` links transfer legs via `transferPairId`
+ *  - `matchInternalTransfers` links transfer legs via `transferPairId`, by
+ *    each row's final flow
  *
  * Accounts the app has no row for (opened after linking, or shared during a
  * reconnect) are created first, unless the user removed them (KOI-317). Their
@@ -45,8 +47,8 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
-import { resolveCategory } from "./rules";
-import { loadBankCategoryMapping, loadMatchableRules } from "./rules-db";
+import { resolveCategory, resolveFlow } from "./rules";
+import { loadBankCategoryMapping, loadMatchableRules, ruleMaySetFlow } from "./rules-db";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -131,12 +133,17 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const mapping = await loadBankCategoryMapping(db, userId);
   const rules = await loadMatchableRules(db, userId);
 
-  // Transaction upserts — fold in flow classification + category resolution.
-  // The category only applies on insert: a known transaction keeps its own.
+  // Transaction upserts — fold in flow (bank classification, then flow Rules) +
+  // category resolution. The category only applies on insert: a known
+  // transaction keeps its own.
   for (const up of mutations.upserts) {
     const accountId = accountIdByPlaid.get(up.plaidAccountId);
     if (!accountId) continue;
-    const flow = classifyFlow(up.plaidCategoryPrimary);
+    // A new row is never hand-set or paired; the conflict update re-checks a known one.
+    const flow = resolveFlow(classifyFlow(up.plaidCategoryPrimary), up.name, rules, {
+      flowOverridden: false,
+      transferPairId: null,
+    });
     const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping);
     await db
       .insert(transaction)
@@ -164,8 +171,9 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
           name: up.name,
           merchantName: up.merchantName,
           pending: up.pending,
-          // A user override wins over Plaid's re-classification (ADR 0001).
-          flow: sql`case when ${transaction.flowOverridden} then ${transaction.flow} else excluded.flow end`,
+          // A user override wins over Plaid's re-classification (ADR 0001), and
+          // a Transfer Pair's legs keep theirs: only an unlocked row takes the new flow.
+          flow: sql`case when ${ruleMaySetFlow} then excluded.flow else ${transaction.flow} end`,
           plaidCategoryPrimary: up.plaidCategoryPrimary,
           plaidCategoryDetailed: up.plaidCategoryDetailed,
           isoCurrencyCode: up.isoCurrencyCode,

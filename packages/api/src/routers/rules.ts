@@ -15,18 +15,29 @@ import {
   MIN_PATTERN_LENGTH,
   type MatchableRule,
   fold,
+  ruleTargetsError,
   validatePattern,
 } from "../lib/rules";
+import { TRANSACTION_FLOWS } from "../lib/transaction-flow";
 import { type Conn, applyRecategorizations, loadMatchableRules, planRuleApply } from "../lib/rules-db";
 import { isUniqueViolation } from "../lib/pg-error";
 
 const ruleInput = z.object({
   pattern: z.string().max(MAX_PATTERN_LENGTH),
   matchMode: z.enum(MATCH_MODES).default("contains"),
-  categoryId: z.string().uuid(),
+  categoryId: z.string().uuid().nullable().default(null),
+  setFlow: z.enum(TRANSACTION_FLOWS).nullable().default(null),
 });
 
-async function assertOwnedCategory(conn: Conn, userId: string, categoryId: string): Promise<void> {
+/** A rule sets a flow, a category, or both, and the category must be the caller's. */
+async function assertRuleTargets(
+  conn: Conn,
+  userId: string,
+  { setFlow, categoryId }: { setFlow: MatchableRule["setFlow"]; categoryId: string | null },
+): Promise<void> {
+  const error = ruleTargetsError(setFlow, categoryId);
+  if (error) throw new TRPCError({ code: "BAD_REQUEST", message: error });
+  if (!categoryId) return;
   const [owned] = await conn
     .select({ id: category.id })
     .from(category)
@@ -40,8 +51,8 @@ function assertOwnedRule(rules: readonly MatchableRule[], ruleId: string): void 
 }
 
 /**
- * Rules (KOI-298/299, KOI-339): user-defined Patterns, exact or contains, that categorize
- * transactions at Plaid sync and, when asked, retroactively. Applying is a
+ * Rules (KOI-298/299, KOI-339, KOI-340): user-defined Patterns, exact or contains, that set
+ * a transaction's category, flow, or both at Plaid sync and, when asked, retroactively. Applying is a
  * one-shot write (ADR 0004): deleting or editing a rule without apply leaves
  * past transactions as they are. Deleting a category cascades to its rules.
  */
@@ -54,22 +65,23 @@ export const rulesRouter = router({
         matchMode: rule.matchMode,
         categoryId: rule.categoryId,
         categoryName: category.name,
+        setFlow: rule.setFlow,
         createdAt: rule.createdAt,
       })
       .from(rule)
-      .innerJoin(category, eq(category.id, rule.categoryId))
+      .leftJoin(category, eq(category.id, rule.categoryId))
       .where(eq(rule.userId, ctx.session.user.id))
       .orderBy(desc(rule.createdAt));
   }),
 
-  /** How many non-manual transactions would change if this rule were saved (new, or as `ruleId`). */
+  /** How many transactions' category or flow would change if this rule were saved (new, or as `ruleId`). */
   preview: protectedProcedure
     .input(ruleInput.extend({ ruleId: z.string().uuid().optional() }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const pattern = input.pattern.trim();
       if (pattern.length < MIN_PATTERN_LENGTH) return { matchCount: 0 };
-      await assertOwnedCategory(db, userId, input.categoryId);
+      await assertRuleTargets(db, userId, input);
       const rules = await loadMatchableRules(db, userId);
       if (input.ruleId) assertOwnedRule(rules, input.ruleId);
 
@@ -78,6 +90,7 @@ export const rulesRouter = router({
         pattern,
         matchMode: input.matchMode,
         categoryId: input.categoryId,
+        setFlow: input.setFlow,
       });
       return { matchCount: changes.length };
     }),
@@ -88,7 +101,7 @@ export const rulesRouter = router({
       const userId = ctx.session.user.id;
       // Rules are read inside the transaction so the apply sees the set the save lands in.
       return db.transaction(async (tx) => {
-        await assertOwnedCategory(tx, userId, input.categoryId);
+        await assertRuleTargets(tx, userId, input);
         const rules = await loadMatchableRules(tx, userId);
         const valid = validatePattern(input.pattern, input.matchMode, rules);
         if (!valid.ok) throw new TRPCError({ code: "BAD_REQUEST", message: valid.reason });
@@ -103,6 +116,7 @@ export const rulesRouter = router({
             patternKey: fold(valid.pattern),
             matchMode: input.matchMode,
             categoryId: input.categoryId,
+            setFlow: input.setFlow,
           })
           .onConflictDoNothing()
           .returning({
@@ -110,6 +124,7 @@ export const rulesRouter = router({
             pattern: rule.pattern,
             matchMode: rule.matchMode,
             categoryId: rule.categoryId,
+            setFlow: rule.setFlow,
             createdAt: rule.createdAt,
           });
         if (!saved) throw new TRPCError({ code: "BAD_REQUEST", message: DUPLICATE_PATTERN_REASON });
@@ -127,13 +142,19 @@ export const rulesRouter = router({
       const userId = ctx.session.user.id;
       try {
         return await db.transaction(async (tx) => {
-          await assertOwnedCategory(tx, userId, input.categoryId);
+          await assertRuleTargets(tx, userId, input);
           const rules = await loadMatchableRules(tx, userId);
           assertOwnedRule(rules, input.id);
           const valid = validatePattern(input.pattern, input.matchMode, rules, input.id);
           if (!valid.ok) throw new TRPCError({ code: "BAD_REQUEST", message: valid.reason });
 
-          const edited = { id: input.id, pattern: valid.pattern, matchMode: input.matchMode, categoryId: input.categoryId };
+          const edited = {
+            id: input.id,
+            pattern: valid.pattern,
+            matchMode: input.matchMode,
+            categoryId: input.categoryId,
+            setFlow: input.setFlow,
+          };
           const [saved] = await tx
             .update(rule)
             .set({
@@ -141,6 +162,7 @@ export const rulesRouter = router({
               patternKey: fold(edited.pattern),
               matchMode: edited.matchMode,
               categoryId: edited.categoryId,
+              setFlow: edited.setFlow,
             })
             .where(and(eq(rule.id, edited.id), eq(rule.userId, userId)))
             .returning({ id: rule.id });

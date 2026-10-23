@@ -31,7 +31,7 @@ vi.mock("../lib/plaid-client", async (importOriginal) => ({
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 
-import { financialAccount, plaidItem, transaction } from "@life-tracker/db/schema/index";
+import { financialAccount, plaidItem, rule, transaction } from "@life-tracker/db/schema/index";
 
 import { syncPlaidItem } from "../lib/plaid-sync-db";
 import { appRouter } from "../routers/index";
@@ -94,7 +94,7 @@ describe("syncPlaidItem upsert", () => {
       set: Record<string, unknown>;
     };
     expect(render(onConflict.set.flow).sql).toBe(
-      'case when "transaction"."flow_overridden" then "transaction"."flow" else excluded.flow end',
+      'case when ("transaction"."flow_overridden" = $1 and "transaction"."transfer_pair_id" is null) then excluded.flow else "transaction"."flow" end',
     );
   });
 });
@@ -106,6 +106,7 @@ function row(overrides: Record<string, unknown> = {}) {
   return {
     id: TXN_ID,
     pending: false,
+    name: "ZELLE FROM JANE",
     plaidCategoryPrimary: "TRANSFER_IN",
     transferPairId: null,
     ...overrides,
@@ -132,6 +133,18 @@ describe("transactions.setFlow", () => {
     const [update] = mockDb.updated(transaction);
     expect(update!.set).toEqual({ flow: "transfer", flowOverridden: false });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
+  });
+
+  it("resets to automatic through the caller's flow rules, as a fresh sync would", async () => {
+    mockDb.onSelect(transaction, [row()]);
+    mockDb.onSelect(rule, [
+      { id: "r1", pattern: "zelle from jane", matchMode: "contains", categoryId: null, setFlow: "income", createdAt: new Date() },
+    ]);
+
+    await makeCaller().transactions.setFlow({ id: TXN_ID, flow: null });
+
+    expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "income", flowOverridden: false });
   });
 
   it("unpairs both legs when overriding one leg of a transfer pair", async () => {
