@@ -23,8 +23,8 @@ export interface LimitlessVariant {
   artist: string | null;
   /** Limitless's print label for this variant ("aa", "manga", "wanted"…), null when blank. */
   label: string | null;
-  /** Links to the card's other prints (`/cards/OP05-069?v=1`), to fetch from the base page. */
-  versions: string[];
+  /** The card's other prints (`?v=1` → 1), to fetch from the base page's path. */
+  versions: number[];
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
@@ -42,8 +42,10 @@ const text = (html: string) =>
 
 export function parseLimitlessCardPage(html: string): LimitlessVariant {
   // The card image is named after the variant (`.../OP05/OP05-069_p1_EN.webp`); `?v=N` is not
-  // a stable mapping (OP01-120's v=4 is `_p4`, not `_r1`).
-  const image = /<img class="card[\s"][^>]*\bsrc="([^"]*\/([^/"]+?)_(?:EN|JP)\.\w+)"/.exec(html);
+  // a stable mapping (OP01-120's v=4 is `_p4`, not `_r1`). Some Japanese promo pages leave the
+  // language out of the filename (`P-111_p1_.webp`) and of their links (`/cards//P-111?v=1`, a 500),
+  // so only `?v=N` is taken from a link.
+  const image = /<img class="card[\s"][^>]*\bsrc="([^"]*\/([^/"]+?)_(?:EN|JP)?\.\w+)"/.exec(html);
   const artist = /<div class="[^"]*\bcard-text-artist\b[^"]*">[\s\S]*?<a\b[^>]*>([\s\S]*?)<\/a>/.exec(html);
   const table = /<table class="card-prints-versions">([\s\S]*?)<\/table>/.exec(html)?.[1] ?? "";
   const current = /<tr\s+class="current"\s*>[\s\S]*?<span class="prints-table-card-number">([\s\S]*?)<\/span>/.exec(table);
@@ -52,7 +54,7 @@ export function parseLimitlessCardPage(html: string): LimitlessVariant {
     imageUrl: image?.[1] ?? null,
     artist: artist ? text(artist[1]!) : null,
     label: current ? text(current[1]!) : null,
-    versions: [...table.matchAll(/href="(\/cards\/[^"]*\?v=\d+)"/g)].map((m) => m[1]!),
+    versions: [...table.matchAll(/href="\/cards\/[^"]*\?v=(\d+)"/g)].map((m) => Number(m[1])),
   };
 }
 
