@@ -60,8 +60,8 @@ async function variantsOf(basePath: string): Promise<LimitlessVariant[]> {
   if (!html) return [];
   const base = parseLimitlessCardPage(html);
   const pages = [base];
-  for (const path of base.versions) {
-    const page = await getPage(path);
+  for (const v of base.versions) {
+    const page = await getPage(`${basePath}?v=${v}`);
     if (page) pages.push(parseLimitlessCardPage(page));
   }
   return pages;
@@ -99,10 +99,13 @@ async function main() {
       const flagged = updates.filter((u) => u.artistConflict).map((u) => u.variantId);
       // A print with no same-art Artwork: a stamped promo in the gray zone, or a print the catalog lacks.
       const unmatched = [...printArt.keys()].filter((id) => !artworks.some((a) => sameArt(a.variantId, id)));
+      // A page whose card image the parser can't read credits nobody: Limitless changed a template.
+      const unread = [...pages.en, ...pages.ja].filter((p) => !p.limitlessId).length;
       console.log(
         `${cardNumber}: ${updates.length}/${artworks.length} artworks` +
           (flagged.length ? `, conflict: ${flagged.join(", ")}` : "") +
-          (unmatched.length ? `, unmatched Limitless: ${unmatched.join(", ")}` : ""),
+          (unmatched.length ? `, unmatched Limitless: ${unmatched.join(", ")}` : "") +
+          (unread ? `, ${unread} Limitless pages without a card image` : ""),
       );
     } catch (e) {
       failed++;

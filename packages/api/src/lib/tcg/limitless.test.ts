@@ -10,7 +10,7 @@ describe("parseLimitlessCardPage", () => {
       imageUrl: "https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/one-piece/OP05/OP05-069_EN.webp",
       artist: "Minato Sashima",
       label: null,
-      versions: ["/cards/OP05-069?v=1", "/cards/OP05-069?v=2"],
+      versions: [1, 2],
     });
   });
 
@@ -37,11 +37,24 @@ describe("parseLimitlessCardPage", () => {
       imageUrl: "https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/one-piece/OP05/OP05-069_JP.webp",
       artist: "Minato Sashima",
       label: null,
-      versions: ["/cards/jp/OP05-069?v=1", "/cards/jp/OP05-069?v=2"],
+      versions: [1, 2],
     });
     expect(parseLimitlessCardPage(limitlessPage("jp-OP05-069-v1"))).toMatchObject({
       limitlessId: "OP05-069_p1",
       artist: "AKIRA EGAWA",
+    });
+  });
+
+  it("reads a Japanese promo page whose template leaves out the language", () => {
+    // Limitless's /cards/jp/P-111, October 2026: image `P-111_p1_.webp`, version links `/cards//P-111?v=1`.
+    const cdn = "https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/one-piece/P/";
+    const html = `<img class="card shadow resp-w" src="${cdn}P-111_p1_.webp" width=600 height=838>
+      <table class="card-prints-versions"><tr><td><a href="/cards//P-111">P-111</a></td></tr>
+      <tr class="current"><td><a href="/cards//P-111?v=1"><span class="prints-table-card-number"></span></a></td></tr></table>`;
+    expect(parseLimitlessCardPage(html)).toMatchObject({
+      limitlessId: "P-111_p1",
+      imageUrl: `${cdn}P-111_p1_.webp`,
+      versions: [1],
     });
   });
 
