@@ -270,7 +270,6 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <FlowPicker txn={txn} />
-        {/* Income and transfers carry no category (KOI-341). */}
         {!flowTakesNoCategory(txn.flow) && (
           <CategoryPicker
             size="xs"

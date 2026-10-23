@@ -145,7 +145,7 @@ export const NO_CATEGORY_FLOWS = ["income", "transfer"] as const satisfies reado
 
 /** Income and transfer carry no category, so a rule setting either sets none. */
 export function flowTakesNoCategory(flow: TransactionFlow | null): boolean {
-  return (NO_CATEGORY_FLOWS as readonly (TransactionFlow | null)[]).includes(flow);
+  return flow === "income" || flow === "transfer";
 }
 
 /**

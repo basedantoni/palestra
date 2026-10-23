@@ -104,10 +104,5 @@ export function categoryNameForPfc(pfcPrimary: string | null | undefined): strin
 
 /** The starting Bank Category mapping: every Bank Category → the user's category of its seed name, else null. */
 export function seedBankCategoryMapping(categoryByName: ReadonlyMap<string, string>): Map<string, string | null> {
-  return new Map(
-    PFC_PRIMARIES.map((pfc) => {
-      const name = categoryNameForPfc(pfc);
-      return [pfc, name ? (categoryByName.get(name) ?? null) : null];
-    }),
-  );
+  return new Map(PFC_PRIMARIES.map((pfc) => [pfc, categoryByName.get(categoryNameForPfc(pfc) ?? "") ?? null]));
 }
