@@ -129,3 +129,21 @@ describe("categories.remove", () => {
     expect(await db.select().from(rule)).toEqual([]);
   });
 });
+
+describe("rules.create with apply (KOI-341)", () => {
+  it("takes a Manual Category off a row a flow rule moves to income, keeping the flag", async () => {
+    const { transactionId } = await seedFinanceUser(db, USER);
+    await db.update(transaction).set({ categoryOverridden: true }).where(eq(transaction.id, transactionId));
+
+    await makeCaller().rules.create({
+      pattern: "climbing gym",
+      matchMode: "contains",
+      categoryId: null,
+      setFlow: "income",
+      applyToExisting: true,
+    });
+
+    const [txn] = await db.select().from(transaction).where(eq(transaction.id, transactionId));
+    expect(txn).toMatchObject({ flow: "income", categoryId: null, categoryOverridden: true });
+  });
+});

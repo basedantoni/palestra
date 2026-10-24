@@ -9,6 +9,7 @@ import {
   isManualCategory,
   matchRule,
   bankCategoryRecategorizations,
+  categoryOnFlowChange,
   ruleRecategorizations,
   suggestPattern,
   resolveCategory,
@@ -156,19 +157,47 @@ describe("matchRule", () => {
 describe("resolveCategory", () => {
   it("uses the matching rule's category", () => {
     expect(
-      resolveCategory("STARBUCKS", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping),
+      resolveCategory("STARBUCKS", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping, "expense"),
     ).toBe("cat-coffee");
   });
 
   it("falls back to the Default Category when no rule matches", () => {
     expect(
-      resolveCategory("CHIPOTLE", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping),
+      resolveCategory("CHIPOTLE", "FOOD_AND_DRINK", [rule("r1", "starbucks", "cat-coffee")], mapping, "expense"),
     ).toBe("cat-food");
   });
 
   it("takes the category from another rule when the best match sets only a flow", () => {
-    const rules = [rule("r1", "zelle", "cat-gifts"), flowRule("r2", "zelle from jane", "income")];
-    expect(resolveCategory("ZELLE FROM JANE", "TRANSFER_IN", rules, mapping)).toBe("cat-gifts");
+    const rules = [rule("r1", "venmo", "cat-gifts"), flowRule("r2", "venmo to jane", "expense")];
+    expect(resolveCategory("VENMO TO JANE", "TRANSFER_OUT", rules, mapping, "expense")).toBe("cat-gifts");
+  });
+
+  it("is null for income and transfer flow: categories describe spend only", () => {
+    const rules = [rule("r1", "starbucks", "cat-coffee")];
+    expect(resolveCategory("STARBUCKS", "FOOD_AND_DRINK", rules, mapping, "income")).toBeNull();
+    expect(resolveCategory("CHIPOTLE", "FOOD_AND_DRINK", rules, mapping, "transfer")).toBeNull();
+  });
+});
+
+describe("categoryOnFlowChange", () => {
+  const expense = { flow: "expense" as const, categoryId: "cat-food", categoryOverridden: false };
+  const income = { flow: "income" as const, categoryId: null, categoryOverridden: false };
+
+  it("clears the category when the flow leaves expense, even a Manual Category", () => {
+    expect(categoryOnFlowChange(expense, "income", null)).toBeNull();
+    expect(categoryOnFlowChange({ ...expense, categoryOverridden: true }, "transfer", null)).toBeNull();
+  });
+
+  it("re-resolves the category when the flow comes back to expense", () => {
+    expect(categoryOnFlowChange(income, "expense", "cat-gifts")).toBe("cat-gifts");
+  });
+
+  it("keeps a Manual Category when the flow comes back to expense", () => {
+    expect(categoryOnFlowChange({ ...income, categoryOverridden: true }, "expense", "cat-gifts")).toBeNull();
+  });
+
+  it("keeps the category when the row was already expense", () => {
+    expect(categoryOnFlowChange(expense, "expense", "cat-gifts")).toBe("cat-food");
   });
 });
 
@@ -421,25 +450,54 @@ describe("ruleRecategorizations", () => {
   });
 
   it("lets a category rule and a flow rule each set their own field", () => {
-    // Saving the category rule doesn't undo the income the flow rule already set.
-    const rules = [flowRule("r1", "zelle from jane", "income")];
-    const rows = [{ ...transferIn("t1", "ZELLE FROM JANE"), flow: "income" as const }];
-    const candidate = { id: "new", pattern: "zelle", matchMode: "contains" as const, categoryId: "cat-gifts", setFlow: null };
-    expect(ruleRecategorizations(rows, rules, candidate, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts" }]);
+    // Saving the category rule doesn't undo the expense the flow rule already set.
+    const rules = [flowRule("r1", "venmo rent", "expense")];
+    const rows = [{ ...transferIn("t1", "VENMO RENT"), flow: "expense" as const }];
+    const candidate = { id: "new", pattern: "venmo", matchMode: "contains" as const, categoryId: "cat-rent", setFlow: null };
+    expect(ruleRecategorizations(rows, rules, candidate, mapping)).toEqual([{ id: "t1", categoryId: "cat-rent" }]);
   });
 
   it("re-resolves only the fields the rule sets, or set before the edit", () => {
-    // t1's income came from a since-deleted flow rule; a category rule leaves it be.
-    const rows = [{ ...transferIn("t1", "ZELLE FROM JANE"), flow: "income" as const }];
-    const categoryOnly = { id: "new", pattern: "zelle", matchMode: "contains" as const, categoryId: "cat-gifts", setFlow: null };
-    expect(ruleRecategorizations(rows, [], categoryOnly, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts" }]);
-    // A flow-only rule leaves a category a deleted rule set.
-    const categorized = [{ ...row("t2", "ZELLE FROM JANE", "cat-old"), plaidCategoryPrimary: "TRANSFER_IN", flow: "transfer" as const }];
-    expect(ruleRecategorizations(categorized, [], flowCandidate("income"), mapping)).toEqual([{ id: "t2", flow: "income" }]);
-    // Editing a flow rule into a category rule still returns its rows' flow.
-    const rules = [flowRule("r1", "zelle", "income")];
-    const edited = { ...categoryOnly, id: "r1" };
-    expect(ruleRecategorizations(rows, rules, edited, mapping)).toEqual([{ id: "t1", categoryId: "cat-gifts", flow: "transfer" }]);
+    // t1's expense came from a since-deleted flow rule; a category rule leaves it be.
+    const rows = [{ ...transferIn("t1", "VENMO RENT"), flow: "expense" as const }];
+    const categoryOnly = { id: "new", pattern: "venmo", matchMode: "contains" as const, categoryId: "cat-rent", setFlow: null };
+    expect(ruleRecategorizations(rows, [], categoryOnly, mapping)).toEqual([{ id: "t1", categoryId: "cat-rent" }]);
+    // Editing a flow rule into a category rule still returns its rows' flow, which takes the category off.
+    const rules = [flowRule("r1", "venmo", "expense")];
+    const categorized = [{ ...rows[0]!, categoryId: "cat-rent" }];
+    expect(ruleRecategorizations(categorized, rules, { ...categoryOnly, id: "r1" }, mapping)).toEqual([
+      { id: "t1", categoryId: null, flow: "transfer" },
+    ]);
+  });
+
+  it("fills a blank Manual Category when a rule brings the row back to expense with a category", () => {
+    // Already-expense blank Manual rows take a matching rule's category; returning ones do too.
+    const rows = [{ ...transferIn("t1", "VENMO RENT"), categoryOverridden: true }];
+    const candidate = { id: "new", pattern: "venmo rent", matchMode: "contains" as const, categoryId: "cat-rent", setFlow: "expense" as const };
+    expect(ruleRecategorizations(rows, [], candidate, mapping)).toEqual([{ id: "t1", categoryId: "cat-rent", flow: "expense" }]);
+  });
+
+  it("gives an income or transfer row no category from a category rule", () => {
+    const rows = [{ ...transferIn("t1", "ZELLE FROM JANE"), flow: "income" as const }, transferIn("t2", "ZELLE TO BOB")];
+    const candidate = { id: "new", pattern: "zelle", matchMode: "contains" as const, categoryId: "cat-gifts", setFlow: null };
+    expect(ruleRecategorizations(rows, [], candidate, mapping)).toEqual([]);
+  });
+
+  it("clears the category when a flow rule takes a row off expense, even a Manual Category", () => {
+    const rows = [row("t1", "ZELLE FROM JANE", "cat-food"), { ...row("t2", "ZELLE FROM JANE", "cat-shop"), categoryOverridden: true }];
+    expect(ruleRecategorizations(rows, [], flowCandidate("income"), mapping)).toEqual([
+      { id: "t1", categoryId: null, flow: "income" },
+      { id: "t2", categoryId: null, flow: "income" },
+    ]);
+  });
+
+  it("re-resolves the category when a flow rule brings a row back to expense, unless it holds a Manual Category", () => {
+    const rules = [rule("r1", "venmo", "cat-rent")];
+    const rows = [transferIn("t1", "VENMO RENT"), { ...transferIn("t2", "VENMO RENT"), categoryOverridden: true }];
+    expect(ruleRecategorizations(rows, rules, flowCandidate("expense", "venmo rent"), mapping)).toEqual([
+      { id: "t1", categoryId: "cat-rent", flow: "expense" },
+      { id: "t2", flow: "expense" },
+    ]);
   });
 
   it("keeps longest-pattern precedence from other rules", () => {
@@ -470,6 +528,13 @@ describe("bankCategoryRecategorizations", () => {
     const rows = [row("t1", "STARBUCKS #1", "cat-coffee"), row("t2", "CHIPOTLE", "cat-food")];
     expect(bankCategoryRecategorizations(rows, [rule("r1", "starbucks", "cat-coffee")], remapped)).toEqual([
       { id: "t2", categoryId: "cat-dining" },
+    ]);
+  });
+
+  it("gives income and transfer rows no category", () => {
+    const rows = [{ ...row("t1", "PAYROLL", "cat-old"), plaidCategoryPrimary: "INCOME", flow: "income" as const }];
+    expect(bankCategoryRecategorizations(rows, [], new Map([["INCOME", "cat-salary"]]))).toEqual([
+      { id: "t1", categoryId: null },
     ]);
   });
 

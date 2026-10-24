@@ -18,6 +18,7 @@ import {
   type CategorizableTransaction,
   type MatchableRule,
   type Recategorization,
+  flowTakesNoCategory,
   ruleRecategorizations,
 } from "./rules";
 import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
@@ -179,7 +180,8 @@ export async function planRuleApply(
  * Write recategorizations: one UPDATE per distinct change (category, flow or
  * both), scoped to the user and re-checking eligibility for each field it
  * sets (`mayCategorize`, a rule's by default; a rule's flow guard) so a
- * concurrent hand-pick wins. A filled blank Manual Category becomes automatic.
+ * concurrent hand-pick wins. A filled blank Manual Category becomes automatic;
+ * an income or transfer flow clears any category.
  * Returns how many transactions were actually updated.
  */
 export async function applyRecategorizations(
@@ -192,10 +194,16 @@ export async function applyRecategorizations(
   // ponytail: one UPDATE per distinct change, unchunked; chunk the ids if a pattern ever matches >65k rows (bind-param limit).
   for (const group of Map.groupBy(changes, (c) => `${c.categoryId}|${c.flow}`).values()) {
     const { categoryId, flow } = group[0]!;
-    const setsCategory = categoryId !== undefined;
+    // Off expense the category goes with the flow, Manual or not, and the flag stays (KOI-341).
+    const clears = flowTakesNoCategory(flow ?? null);
+    const setsCategory = categoryId !== undefined && !clears;
     const result = await conn
       .update(transaction)
-      .set({ ...(setsCategory && { categoryId, categoryOverridden: false }), ...(flow && { flow }) })
+      .set({
+        ...(setsCategory && { categoryId, categoryOverridden: false }),
+        ...(clears && { categoryId: null }),
+        ...(flow && { flow }),
+      })
       .where(
         and(
           eq(transaction.userId, userId),

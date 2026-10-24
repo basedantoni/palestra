@@ -79,7 +79,7 @@ The text a Rule compares against a transaction's bank description.
 _Avoid_: Keyword, query, match string
 
 **Manual Category**:
-A category the user chose by hand for one transaction, including choosing Uncategorized. No Rule or Default Category replaces it until the user resets the transaction to automatic, except that applying a matching Rule fills one left Uncategorized. Every Split's category is a Manual Category.
+A category the user chose by hand for one transaction, including choosing Uncategorized. No Rule or Default Category replaces it until the user resets the transaction to automatic, except that applying a matching Rule fills one left Uncategorized. A flow change off expense clears it, since only expense carries a Category; the flag stays. Every Split's category is a Manual Category.
 _Avoid_: Override (unqualified), custom category
 
 **Default Category**:

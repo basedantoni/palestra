@@ -216,6 +216,11 @@ describe("a user with categories but no mapping yet (before the backfill)", () =
     const list = await makeCaller().bankCategories.list();
 
     expect((await categoryNames()).toSorted()).toEqual(SEED_CATEGORIES.toSorted());
-    expect(list.every((b) => b.categoryId !== null)).toBe(true);
+    // Income and transfers carry no category (KOI-341); every spend Bank Category is mapped.
+    expect(list.filter((b) => b.categoryId === null).map((b) => b.bankCategory).toSorted()).toEqual([
+      "INCOME",
+      "TRANSFER_IN",
+      "TRANSFER_OUT",
+    ]);
   });
 });

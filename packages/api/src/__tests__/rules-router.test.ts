@@ -340,8 +340,9 @@ describe("flow rules", () => {
     const result = await makeCaller().rules.create({ pattern: "zelle from jane", setFlow: "income", applyToExisting: true });
 
     expect(result.applied).toBe(1);
-    expect(transactionUpdates()).toEqual([{ set: { flow: "income" }, params: [USER_ID, false, "t1"] }]);
-    // A flow hand-set or paired since the read is left alone; the category guard doesn't apply.
+    // Off expense the category goes with the flow (KOI-341).
+    expect(transactionUpdates()).toEqual([{ set: { categoryId: null, flow: "income" }, params: [USER_ID, false, "t1"] }]);
+    // A flow hand-set or paired since the read is left alone; the category guard doesn't apply, even to a Manual Category.
     const where = sqlText(mockDb.opsOn(transaction, "update")[0]!.arg("where"));
     expect(where).toMatch(/"flow_overridden" = \$\d+ and "transaction"."transfer_pair_id" is null/);
     expect(where).not.toMatch(/category_overridden/);
@@ -553,14 +554,15 @@ describe("syncPlaidItem with Rules", () => {
     expect(insertedCategoryIds()).toEqual(["cat-coffee", "cat-food"]);
   });
 
-  it("still leaves categoryId alone on conflict", async () => {
+  it("leaves categoryId alone on conflict unless the flow moves it (KOI-341)", async () => {
     syncWith(["STARBUCKS"], [{ id: "r1", pattern: "starbucks", categoryId: "cat-coffee", createdAt: new Date() }]);
 
     await syncPlaidItem(ITEM_ID);
 
     const upsert = mockDb.opsOn(transaction, "insert")[0]!;
     const onConflict = upsert.arg("onConflictDoUpdate") as { set: Record<string, unknown> };
-    expect(onConflict.set).not.toHaveProperty("categoryId");
+    // The flow-change cases run against Postgres in spend-only-categories-db.test.ts.
+    expect(sqlText(onConflict.set.categoryId)).toMatch(/else "transaction"."category_id" end$/);
   });
 });
 
@@ -571,20 +573,21 @@ describe("syncPlaidItem with flow rules", () => {
   it("lets a flow rule override the bank's flow, and another rule still set the category", async () => {
     syncWithPrimaries(
       [
-        ["ZELLE FROM JANE", "TRANSFER_IN"],
-        ["ZELLE TO BOB", "TRANSFER_OUT"],
+        ["VENMO RENT", "TRANSFER_OUT"],
+        ["VENMO TO BOB", "TRANSFER_OUT"],
       ],
       [
-        existingRule("r1", "zelle from jane", null, "2026-01-01", "income"),
-        existingRule("r2", "zelle", "cat-gifts"),
+        existingRule("r1", "venmo rent", null, "2026-01-01", "expense"),
+        existingRule("r2", "venmo", "cat-rent"),
       ],
     );
 
     await syncPlaidItem(ITEM_ID);
 
+    // The transfer takes no category, even from a matching rule (KOI-341).
     expect(insertedFlowsAndCategories()).toEqual([
-      ["income", "cat-gifts"],
-      ["transfer", "cat-gifts"],
+      ["expense", "cat-rent"],
+      ["transfer", null],
     ]);
   });
 
