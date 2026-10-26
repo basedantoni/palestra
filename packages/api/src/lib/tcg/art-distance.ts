@@ -9,6 +9,10 @@ import sharp from "sharp";
 
 /** Below this two scans show the same art. True pairs land at 0.00–0.15, different art at 0.6–1.3. */
 export const SAME_ART = 0.2;
+/** Up to here it may still be the same art with a stamp or lettering difference (the gray zone); above, different art. */
+export const GRAY_ART = 0.6;
+/** Below this two scans are identical: twins (a reprint, a foil) that only list order tells apart. */
+export const TWIN = 0.05;
 
 const SIZE = 64;
 const BLOCK = 16;

@@ -49,7 +49,11 @@ export const tcgArtwork = pgTable(
   (table) => [index("tcg_artwork_cardNumber_idx").on(table.cardNumber)],
 );
 
-/** An Artwork released in one language, with its set and hotlinked Bandai image. */
+/**
+ * An Artwork released in one language, with its set and hotlinked Bandai image.
+ * Identified by its language's own list ID: an English Printing is paired to its
+ * Japanese Artwork by pack and image, so its variant ID can differ (KOI-332).
+ */
 export const tcgPrinting = pgTable(
   "tcg_printing",
   {
@@ -58,13 +62,20 @@ export const tcgPrinting = pgTable(
       .notNull()
       .references(() => tcgArtwork.variantId, { onDelete: "cascade" }),
     language: tcgLanguageEnum("language").notNull(),
+    /** Bandai's ID in this language's card list (e.g. English `OP05-119_p4` is Japanese `OP05-119_p3`). */
+    listId: text("list_id"),
     /** punk-records pack id (e.g. `550105`). */
     packId: text("pack_id").notNull(),
     /** Set code (`OP-05`) or product title. */
     setName: text("set_name").notNull(),
     imageUrl: text("image_url").notNull(),
   },
-  (table) => [uniqueIndex("tcg_printing_variantId_language_unique_idx").on(table.variantId, table.language)],
+  // One Printing per Artwork per language is the pairing's job, not a constraint:
+  // re-pairing swaps English Printings between Artworks with plain UPDATEs.
+  (table) => [
+    uniqueIndex("tcg_printing_language_listId_unique_idx").on(table.language, table.listId),
+    index("tcg_printing_variantId_idx").on(table.variantId),
+  ],
 );
 
 /**

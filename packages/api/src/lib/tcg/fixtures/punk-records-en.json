@@ -1,6 +1,79 @@
 [
   {
     "attributes": [
+      "Special"
+    ],
+    "block_number": 3,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 3,
+    "counter": 2000,
+    "effect": "[On Play] Your opponent cannot activate up to 1 [Blocker] Character that has 4000 power or less during this turn.",
+    "id": "OP09-014_r1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP09-014_r1.png?261007",
+    "img_url": "../images/cardlist/card/OP09-014_r1.png?261007",
+    "name": "Limejuice",
+    "pack_id": "569023",
+    "power": 3000,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Red-Haired Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_p3",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_p3.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_p3.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569024",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006.png?261007",
+    "name": "Otama",
+    "pack_id": "569101",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
+    ]
+  },
+  {
+    "attributes": [
       "Strike"
     ],
     "block_number": 1,
@@ -103,6 +176,105 @@
   },
   {
     "attributes": [
+      "Special"
+    ],
+    "block_number": 3,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 3,
+    "counter": 2000,
+    "effect": "[On Play] Your opponent cannot activate up to 1 [Blocker] Character that has 4000 power or less during this turn.",
+    "id": "OP09-014",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP09-014.png?261007",
+    "img_url": "../images/cardlist/card/OP09-014.png?261007",
+    "name": "Limejuice",
+    "pack_id": "569109",
+    "power": 3000,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Red-Haired Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Strike"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Purple"
+    ],
+    "cost": 10,
+    "counter": null,
+    "effect": "[On Play] DON!! −10: Place all of your Characters except this Character at the bottom of your deck in any order. Then, take an extra turn after this one. [Activate: Main] [Once Per Turn] You may rest 1 of your DON!! cards: Add up to 1 DON!! card from your DON!! deck and set it as active.",
+    "id": "OP05-119_p6",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP05-119_p6.png?261007",
+    "img_url": "../images/cardlist/card/OP05-119_p6.png?261007",
+    "name": "Monkey.D.Luffy",
+    "pack_id": "569109",
+    "power": 12000,
+    "rarity": "Special",
+    "trigger": null,
+    "types": [
+      "The Four Emperors",
+      "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
+      "Strike"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Purple"
+    ],
+    "cost": 10,
+    "counter": null,
+    "effect": "[On Play] DON!! −10: Place all of your Characters except this Character at the bottom of your deck in any order. Then, take an extra turn after this one. [Activate: Main] [Once Per Turn] You may rest 1 of your DON!! cards: Add up to 1 DON!! card from your DON!! deck and set it as active.",
+    "id": "OP05-119_p7",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP05-119_p7.png?261007",
+    "img_url": "../images/cardlist/card/OP05-119_p7.png?261007",
+    "name": "Monkey.D.Luffy",
+    "pack_id": "569111",
+    "power": 12000,
+    "rarity": "Special",
+    "trigger": null,
+    "types": [
+      "The Four Emperors",
+      "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
+      "Strike"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Purple"
+    ],
+    "cost": 10,
+    "counter": null,
+    "effect": "[On Play] DON!! −10: Place all of your Characters except this Character at the bottom of your deck in any order. Then, take an extra turn after this one. [Activate: Main] [Once Per Turn] You may rest 1 of your DON!! cards: Add up to 1 DON!! card from your DON!! deck and set it as active.",
+    "id": "OP05-119_p8",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP05-119_p8.png?261007",
+    "img_url": "../images/cardlist/card/OP05-119_p8.png?261007",
+    "name": "Monkey.D.Luffy",
+    "pack_id": "569111",
+    "power": 12000,
+    "rarity": "Special",
+    "trigger": null,
+    "types": [
+      "The Four Emperors",
+      "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
       "Strike"
     ],
     "block_number": 4,
@@ -151,6 +323,127 @@
       "Fish-Man Island",
       "Supernovas",
       "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569201",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006_p3",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006_p3.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006_p3.png?261007",
+    "name": "Otama",
+    "pack_id": "569301",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006_p4",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006_p4.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006_p4.png?261007",
+    "name": "Otama",
+    "pack_id": "569301",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006_p5",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006_p5.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006_p5.png?261007",
+    "name": "Otama",
+    "pack_id": "569301",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006_r1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006_r1.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006_r1.png?261007",
+    "name": "Otama",
+    "pack_id": "569301",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
     ]
   },
   {
@@ -205,6 +498,177 @@
   },
   {
     "attributes": [
+      "Strike"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Purple"
+    ],
+    "cost": 10,
+    "counter": null,
+    "effect": "[On Play] DON!! −10: Place all of your Characters except this Character at the bottom of your deck in any order. Then, take an extra turn after this one. [Activate: Main] [Once Per Turn] ➀ (You may rest the specified number of DON!! cards in your cost area.): Add up to 1 DON!! card from your DON!! deck and set it as active.",
+    "id": "OP05-119_r2",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP05-119_r2.png?261007",
+    "img_url": "../images/cardlist/card/OP05-119_r2.png?261007",
+    "name": "Monkey.D.Luffy",
+    "pack_id": "569301",
+    "power": 12000,
+    "rarity": "SecretRare",
+    "trigger": null,
+    "types": [
+      "The Four Emperors",
+      "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_p5",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_p5.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_p5.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569302",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_r1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_r1.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_r1.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569302",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 3,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 3,
+    "counter": 2000,
+    "effect": "[On Play] Your opponent cannot activate up to 1 [Blocker] Character that has 4000 power or less during this turn.",
+    "id": "OP09-014_p1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP09-014_p1.png?261007",
+    "img_url": "../images/cardlist/card/OP09-014_p1.png?261007",
+    "name": "Limejuice",
+    "pack_id": "569302",
+    "power": 3000,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Red-Haired Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 3,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 3,
+    "counter": 2000,
+    "effect": "[On Play] Your opponent cannot activate up to 1 [Blocker] Character that has 4000 power or less during this turn.",
+    "id": "OP09-014_p2",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP09-014_p2.png?261007",
+    "img_url": "../images/cardlist/card/OP09-014_p2.png?261007",
+    "name": "Limejuice",
+    "pack_id": "569302",
+    "power": 3000,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Red-Haired Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 3,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 3,
+    "counter": 2000,
+    "effect": "[On Play] Your opponent cannot activate up to 1 [Blocker] Character that has 4000 power or less during this turn.",
+    "id": "OP09-014_r2",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP09-014_r2.png?261007",
+    "img_url": "../images/cardlist/card/OP09-014_r2.png?261007",
+    "name": "Limejuice",
+    "pack_id": "569302",
+    "power": 3000,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Red-Haired Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 1,
+    "category": "Character",
+    "colors": [
+      "Red"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Give up to 1 of your opponent's Characters −2000 power during this turn.",
+    "id": "OP01-006_p1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/OP01-006_p1.png?261007",
+    "img_url": "../images/cardlist/card/OP01-006_p1.png?261007",
+    "name": "Otama",
+    "pack_id": "569801",
+    "power": null,
+    "rarity": "Uncommon",
+    "trigger": null,
+    "types": [
+      "Land of Wano"
+    ]
+  },
+  {
+    "attributes": [
       "Special"
     ],
     "block_number": 2,
@@ -225,6 +689,81 @@
     "trigger": null,
     "types": [
       "Straw Hat Crew"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_p1",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_p1.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_p1.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569901",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_p2",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_p2.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_p2.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569901",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
+    ]
+  },
+  {
+    "attributes": [
+      "Special"
+    ],
+    "block_number": 2,
+    "category": "Character",
+    "colors": [
+      "Green"
+    ],
+    "cost": 1,
+    "counter": 2000,
+    "effect": "[On Play] Rest up to 1 of your opponent's Characters with a cost of 2 or less.",
+    "id": "EB01-015_p4",
+    "img_full_url": "https://en.onepiece-cardgame.com/images/cardlist/card/EB01-015_p4.png?261007",
+    "img_url": "../images/cardlist/card/EB01-015_p4.png?261007",
+    "name": "Scratchmen Apoo",
+    "pack_id": "569901",
+    "power": 1000,
+    "rarity": "Rare",
+    "trigger": null,
+    "types": [
+      "Supernovas",
+      "On-Air Pirates"
     ]
   },
   {

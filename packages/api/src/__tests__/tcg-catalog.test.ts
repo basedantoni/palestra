@@ -1,6 +1,7 @@
 /**
- * TCG catalog against a real Postgres (PGlite): the import upsert is idempotent
- * and leaves data it doesn't own alone; browse filters run as SQL.
+ * TCG catalog against a real Postgres (PGlite): the import upsert is idempotent,
+ * re-pairs English Printings in place and leaves data it doesn't own alone;
+ * browse filters run as SQL.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,15 +9,14 @@ vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pglit
 
 import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCard, tcgPrinting, user } from "@life-tracker/db/schema/index";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-import { applyArtistUpdates, upsertCatalog } from "../lib/tcg/catalog-db";
+import { applyArtistUpdates, storedPairings, upsertCatalog } from "../lib/tcg/catalog-db";
 import { transformCatalog } from "../lib/tcg/catalog-transform";
-import { en, ja, packs } from "../lib/tcg/fixtures";
+import { catalog, en, fixtureDistance, ja, packs } from "../lib/tcg/fixtures";
+import { pairEnglish } from "../lib/tcg/pairing";
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
-
-const catalog = transformCatalog({ ja, en, packs });
 
 const caller = appRouter.createCaller({ session: { user: { id: "user-tcg" } } } as any);
 
@@ -69,18 +69,120 @@ describe("upsertCatalog", () => {
   });
 });
 
+/** An English Printing by its list ID. */
+const enPrinting = async (listId: string) =>
+  (
+    await db
+      .select()
+      .from(tcgPrinting)
+      .where(and(eq(tcgPrinting.language, "en"), eq(tcgPrinting.listId, listId)))
+  )[0]!;
+
+describe("upsertCatalog re-pairing English Printings (KOI-332)", () => {
+  /** The catalog as imported before KOI-332: each English record on the Artwork of its own ID. */
+  const unpaired = transformCatalog({ ja, en, packs, pairs: new Map(en.map((r) => [r.id, r.id])) });
+  const terms = { languages: ["en" as const], maxPrice: 25, minCondition: "LP" as const };
+
+  beforeEach(async () => {
+    await upsertCatalog(unpaired);
+    await db.insert(user).values({ id: "user-tcg", name: "user-tcg", email: "user-tcg@test.internal" });
+  });
+
+  it("moves an English Printing to its paired Artwork in place, its Copies with it", async () => {
+    const before = await enPrinting("OP05-119_p4");
+    expect(before.variantId).toBe("OP05-119_p4");
+    await caller.tcg.copies.create({ printingId: before.id, condition: "NM", pricePaid: null, acquiredOn: "2026-10-01" });
+
+    const { deleted } = await upsertCatalog(catalog);
+
+    expect(await enPrinting("OP05-119_p4")).toMatchObject({ id: before.id, variantId: "OP05-119_p3" });
+    const [copy] = await caller.tcg.copies.list();
+    expect(copy).toMatchObject({ printingId: before.id, variantId: "OP05-119_p3" });
+    // The Artworks made from English IDs Japanese doesn't have are gone.
+    expect(deleted.toSorted()).toEqual([
+      "EB01-015_p3",
+      "EB01-015_p4",
+      "EB01-015_p5",
+      "OP01-006_p5",
+      "OP05-119_p4",
+      "OP09-014_p1",
+    ]);
+    expect(await artwork("OP05-119_p4")).toBeUndefined();
+  });
+
+  it("swaps English Printings between Artworks that both exist (OP01-006)", async () => {
+    await upsertCatalog(catalog);
+
+    expect(
+      await Promise.all(["OP01-006_p1", "OP01-006_p3", "OP01-006_p4", "OP01-006_p5"].map(async (id) => (await enPrinting(id)).variantId)),
+    ).toEqual(["OP01-006_p4", "OP01-006_p1", "OP01-006_p2", "OP01-006_p3"]);
+  });
+
+  it.each([
+    ["an Art Rating", () => caller.tcg.setRating({ variantId: "OP05-119_p4", rating: 5 })],
+    [
+      "a Theme tag",
+      async () => {
+        const theme = await caller.tcg.createTheme({ name: "Luffy" });
+        await caller.tcg.tagArtwork({ themeId: theme.id, variantId: "OP05-119_p4" });
+      },
+    ],
+    ["a Want", () => caller.tcg.wants.create({ variantId: "OP05-119_p4", ...terms })],
+  ])("rolls back the whole import rather than delete an Artwork with %s", async (_, userData) => {
+    await userData();
+
+    await expect(upsertCatalog(catalog)).rejects.toThrow(/OP05-119_p4/);
+    expect((await enPrinting("OP05-119_p4")).variantId).toBe("OP05-119_p4");
+    expect(await artwork("OP05-119_p4")).toBeDefined();
+  });
+
+  it("reports an Offer whose Printing moved off its Want's Artwork", async () => {
+    const { id: wantId } = await caller.tcg.wants.create({ variantId: "OP01-006_p3", ...terms });
+    const printing = await enPrinting("OP01-006_p3");
+    const { id: offerId } = await caller.tcg.offers.create({ wantId, printingId: printing.id, seller: "TCGplayer", price: 9, seenOn: "2026-10-10" });
+
+    const { offerMismatches } = await upsertCatalog(catalog);
+
+    expect(offerMismatches).toEqual([
+      { offerId, wantVariantId: "OP01-006_p3", printingVariantId: "OP01-006_p1", listId: "OP01-006_p3" },
+    ]);
+  });
+
+  it("a second identical import changes nothing", async () => {
+    await upsertCatalog(catalog);
+    const printings = await db.select().from(tcgPrinting);
+
+    expect(await upsertCatalog(catalog)).toEqual({ deleted: [], offerMismatches: [] });
+    expect(await db.select().from(tcgPrinting)).toEqual(expect.arrayContaining(printings));
+    expect(await counts()).toMatchObject({ printings: printings.length });
+  });
+});
+
+describe("storedPairings", () => {
+  it("lets the next import re-pair from the database alone, fetching no images", async () => {
+    await upsertCatalog(catalog);
+    const stored = await storedPairings();
+    expect(stored.pairs.get("OP05-119_p4")).toBe("OP05-119_p3");
+    expect(stored.pairs.get("EB01-015_p2")).toBeNull();
+
+    const again = pairEnglish({ ja, en, overrides: {}, stored, distance: () => undefined });
+    expect(again.needsImages).toEqual({ en: [], ja: [] });
+    expect(again.pairs).toEqual(pairEnglish({ ja, en, overrides: {}, distance: fixtureDistance }).pairs);
+  });
+});
+
 describe("applyArtistUpdates", () => {
   beforeEach(() => upsertCatalog(catalog));
 
   it("writes artist and conflict flag, and a Limitless manga label survives re-importing the catalog", async () => {
     await applyArtistUpdates([
       { variantId: "OP05-119_p1", artist: "Nakamaru", artistConflict: false, manga: true },
-      { variantId: "OP05-119_p4", artist: null, artistConflict: true, manga: false },
+      { variantId: "OP05-119_p3", artist: null, artistConflict: true, manga: false },
     ]);
     await upsertCatalog(catalog);
 
     expect(await artwork("OP05-119_p1")).toMatchObject({ artist: "Nakamaru", artistConflict: false, variantKind: "manga" });
-    expect(await artwork("OP05-119_p4")).toMatchObject({ artist: null, artistConflict: true, variantKind: "parallel" });
+    expect(await artwork("OP05-119_p3")).toMatchObject({ artist: null, artistConflict: true, variantKind: "parallel" });
   });
 
   it("re-running clears a resolved flag and never demotes a manga", async () => {
@@ -148,8 +250,8 @@ describe("tcg.artworks", () => {
     expect(ids(await caller.tcg.artworks({ character: "カイドウ" }))).toEqual(["OP08-119"]);
   });
 
-  it("filters by set", async () => {
-    expect(ids(await caller.tcg.artworks({ set: "PRB-01" }))).toEqual(["OP05-119_p3", "OP05-119_p4", "OP05-119_r1"]);
+  it("filters by set, a reprint under its Japanese variant ID", async () => {
+    expect(ids(await caller.tcg.artworks({ set: "OP-09" }))).toEqual(["OP05-119_p5", "OP09-014"]);
   });
 
   it("filters by variant kind", async () => {
@@ -158,9 +260,12 @@ describe("tcg.artworks", () => {
 
   it("sections Artworks by card-number prefix, with counts", async () => {
     expect(await caller.tcg.artworkSections({})).toEqual([
-      { key: "OP05", count: 6 },
+      { key: "EB01", count: 7 },
+      { key: "OP01", count: 6 },
+      { key: "OP05", count: 10 },
       { key: "OP07", count: 1 },
       { key: "OP08", count: 1 },
+      { key: "OP09", count: 5 },
       { key: "OP13", count: 2 },
     ]);
   });
@@ -204,24 +309,38 @@ describe("tcg.artworks", () => {
       { key: "4", count: 2 },
       { key: "2", count: 1 },
       { key: "0", count: 1 },
-      { key: "unrated", count: 6 },
+      { key: "unrated", count: 28 },
     ]);
     expect(await caller.tcg.artworkSections({ sort: "rating", minRating: 3 })).toEqual([{ key: "4", count: 2 }]);
     expect(ids(await caller.tcg.artworks({ sort: "rating", section: "4" }))).toEqual(["OP08-119", "OP13-118"]);
-    expect(await caller.tcg.artworks({ sort: "rating", section: "unrated" })).toHaveLength(6);
+    expect(await caller.tcg.artworks({ sort: "rating", section: "unrated" })).toHaveLength(28);
   });
 
   it("lists one section's Artworks, reprints under their Card's prefix", async () => {
     expect(ids(await caller.tcg.artworks({ section: "OP13" }))).toEqual(["OP13-118", "OP13-118_p3"]);
     expect(ids(await caller.tcg.artworks({ section: "OP05", set: "PRB-01" }))).toEqual([
       "OP05-119_p3",
-      "OP05-119_p4",
       "OP05-119_r1",
+      "OP05-119_r2",
     ]);
   });
 
   it("lists the sets to filter by", async () => {
-    expect(await caller.tcg.sets()).toEqual(["OP-05", "OP-08", "OP-13", "Other Product Card", "PRB-01"]);
+    expect(await caller.tcg.sets()).toEqual([
+      "EB-01",
+      "OP-01",
+      "OP-05",
+      "OP-08",
+      "OP-09",
+      "OP-11",
+      "OP-13",
+      "Other Product Card",
+      "PRB-01",
+      "PRB-02",
+      "Promotion card",
+      "ST-23",
+      "ST-24",
+    ]);
   });
 });
 

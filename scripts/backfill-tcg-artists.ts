@@ -6,27 +6,21 @@
  * One request per second per host; re-runnable: every run recomputes the same
  * artist and conflict flag from the pages. Run the catalog import first.
  *
- * Run: pnpm db:backfill:tcg-artists [--set OP-05]
+ * Run: pnpm db:backfill:tcg-artists [--set OP-05] [--reset]
  * Without --set it walks the whole catalog (~10k pages plus their images, a few hours).
+ * --reset also clears the artist and flag on Artworks no Limitless print matches:
+ * run it once after the catalog import re-pairs English prints (KOI-332).
  */
 import { parseArgs } from "node:util";
 
 import { type ArtSignature, artDistance, artSignature, SAME_ART } from "../packages/api/src/lib/tcg/art-distance";
 import { applyArtistUpdates, artworksByCard } from "../packages/api/src/lib/tcg/catalog-db";
 import { type LimitlessVariant, parseLimitlessCardPage, reconcileArtists } from "../packages/api/src/lib/tcg/limitless";
+import { throttledFetch } from "../packages/api/src/lib/tcg/throttled-fetch";
 
 const BASE = "https://onepiece.limitlesstcg.com";
-const DELAY_MS = 1000;
 
-const next = new Map<string, number>();
-/** GET a URL at most once per DELAY_MS per host. */
-async function get(url: string): Promise<Response> {
-  const host = new URL(url).host;
-  const at = Math.max(Date.now(), next.get(host) ?? 0);
-  next.set(host, at + DELAY_MS);
-  await new Promise((r) => setTimeout(r, at - Date.now()));
-  return fetch(url, { headers: { "User-Agent": "palestra-tcg-artist-backfill (personal use)" } });
-}
+const get = throttledFetch(1000, "palestra-tcg-artist-backfill (personal use)");
 
 /** GET a Limitless page; null on 404. */
 async function getPage(path: string): Promise<string | null> {
@@ -68,7 +62,7 @@ async function variantsOf(basePath: string): Promise<LimitlessVariant[]> {
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { set: { type: "string" } } });
+  const { values } = parseArgs({ options: { set: { type: "string" }, reset: { type: "boolean", default: false } } });
   const cards = await artworksByCard(values.set);
   console.log(`${cards.size} cards${values.set ? ` in ${values.set}` : ""}`);
 
@@ -94,7 +88,7 @@ async function main() {
         const b = printArt.get(limitlessId);
         return !!a && !!b && artDistance(a, b) < SAME_ART;
       };
-      const updates = reconcileArtists(artworks, pages, sameArt);
+      const updates = reconcileArtists(artworks, pages, sameArt, { reset: values.reset });
       await applyArtistUpdates(updates);
       const flagged = updates.filter((u) => u.artistConflict).map((u) => u.variantId);
       // A print with no same-art Artwork: a stamped promo in the gray zone, or a print the catalog lacks.

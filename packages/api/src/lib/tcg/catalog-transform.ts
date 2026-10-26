@@ -1,9 +1,10 @@
 /**
  * punk-records catalog → Card, Artwork and Printing rows (ADR 0006).
  *
- * Pure: the import script fetches the Japanese and English catalogs and upserts
- * what this returns. One variant ID (e.g. `OP05-069_p1`) is one Artwork across
- * both languages; each language it appears in is a Printing.
+ * Pure: the import script fetches the Japanese and English catalogs, pairs the
+ * English records (`pairing.ts`) and upserts what this returns. An Artwork is a
+ * Japanese variant ID (e.g. `OP05-069_p1`), or `EN-<list ID>` for an English-only
+ * print; each language it is printed in is a Printing, under that language's list ID.
  */
 
 /** The fields we read from a punk-records card record (`<lang>/data/<pack>.json`). */
@@ -25,13 +26,20 @@ export type CardRow = { number: string; nameEn: string | null; nameJa: string | 
 export type ArtworkRow = { variantId: string; cardNumber: string; variantKind: VariantKind };
 export type PrintingRow = {
   variantId: string;
+  listId: string;
   language: Language;
   packId: string;
   setName: string;
   imageUrl: string;
 };
 
-export function transformCatalog(input: { ja: PunkRecord[]; en: PunkRecord[]; packs: PunkPacks }) {
+export function transformCatalog(input: {
+  ja: PunkRecord[];
+  en: PunkRecord[];
+  packs: PunkPacks;
+  /** EN list ID → paired JA variant ID; null or missing = English-only. */
+  pairs: Map<string, string | null>;
+}) {
   const cards = new Map<string, CardRow>();
   const artworks = new Map<string, ArtworkRow>();
   const printings = new Map<string, PrintingRow>();
@@ -46,9 +54,11 @@ export function transformCatalog(input: { ja: PunkRecord[]; en: PunkRecord[]; pa
       if (language === "ja") card.nameJa ??= name;
       else card.nameEn ??= name;
       cards.set(cardNumber, card);
-      if (!artworks.has(r.id)) {
-        artworks.set(r.id, {
-          variantId: r.id,
+      // Japanese comes first, so a paired English record finds its Artwork already made.
+      const variantId = language === "ja" ? r.id : (input.pairs.get(r.id) ?? `EN-${r.id}`);
+      if (!artworks.has(variantId)) {
+        artworks.set(variantId, {
+          variantId,
           cardNumber,
           variantKind: variantKind(r, basePack.get(cardNumber)),
         });
@@ -57,7 +67,8 @@ export function transformCatalog(input: { ja: PunkRecord[]; en: PunkRecord[]; pa
       const key = `${r.id}|${language}`;
       if (!printings.has(key)) {
         printings.set(key, {
-          variantId: r.id,
+          variantId,
+          listId: r.id,
           language,
           packId: r.pack_id,
           setName: setName(input.packs, r.pack_id),
