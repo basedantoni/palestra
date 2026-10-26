@@ -82,7 +82,7 @@ export function pairEnglish(input: {
     twinContests: [],
     englishOnly: [],
   };
-  const needs = { en: [] as string[], ja: [] as string[] };
+  const needsImages = { en: [] as string[], ja: [] as string[] };
 
   for (const [card, enRecords] of byCard(input.en)) {
     const jaRecords = jaCards.get(card) ?? [];
@@ -126,8 +126,8 @@ export function pairEnglish(input: {
     }
 
     if (freeEn.size && freeJa.size) {
-      needs.en.push(...freeEn);
-      needs.ja.push(...freeJa);
+      needsImages.en.push(...freeEn);
+      needsImages.ja.push(...freeJa);
     }
 
     const candidates = enRecords
@@ -173,5 +173,5 @@ export function pairEnglish(input: {
     }
   }
 
-  return { pairs, report, needsImages: needs };
+  return { pairs, report, needsImages };
 }

@@ -11,7 +11,8 @@
  *
  * Run: pnpm db:import:tcg [--repair]
  * --repair ignores the stored pairings and re-pairs every English print (about
- * 6,300 images, an hour). Use it once to fix a catalog imported before KOI-332.
+ * 6,300 images, an hour). A catalog imported before KOI-332, with no English
+ * print paired yet, is re-paired that way on its own.
  */
 import { parseArgs } from "node:util";
 
@@ -47,20 +48,33 @@ async function fetchLanguage(folder: "japanese" | "english"): Promise<PunkRecord
   return records;
 }
 
-/** Art signature per list ID, from each record's Bandai image. Throws, before anything is written, if any fails. */
+/**
+ * Art signature per list ID, from each record's Bandai image. An image Bandai no
+ * longer has (404) is skipped and listed: its print can't pair by art, so an
+ * override settles it. Any other failure throws, before anything is written.
+ */
 async function signatures(ids: string[], records: PunkRecord[]): Promise<Map<string, ArtSignature>> {
   // Reversed so a record listed in two packs keeps its first listing's image, as its Printing does.
   const urls = new Map(records.toReversed().map((r) => [r.id, r.img_full_url]));
   const out = new Map<string, ArtSignature>();
   const failed: string[] = [];
+  const missing: string[] = [];
   for (const id of ids) {
     const url = urls.get(id)!;
-    const res = await getImage(url).catch((e: unknown) => e as Error);
+    // Bandai's CDN sends the odd 502: retry before one image costs a whole run.
+    let res: Response | Error = new Error("not fetched");
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      res = await getImage(url).catch((e: unknown) => e as Error);
+      if (res instanceof Response && (res.ok || res.status === 404)) break;
+      if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 5000));
+    }
     if (res instanceof Response && res.ok) out.set(id, await artSignature(new Uint8Array(await res.arrayBuffer())));
+    else if (res instanceof Response && res.status === 404) missing.push(id);
     else failed.push(`${url}: ${res instanceof Response ? res.status : res.message}`);
     if (out.size % 250 === 0 && out.size) console.log(`  ${out.size}/${ids.length} images`);
   }
   if (failed.length) throw new Error(`${failed.length} images failed, nothing imported:\n${failed.join("\n")}`);
+  if (missing.length) console.log(`  No Bandai image (404), can't pair by art: ${missing.join(", ")}`);
   return out;
 }
 
@@ -92,7 +106,13 @@ async function main() {
     getJson<PunkPacks>(`${RAW}/english/packs.json`),
   ]);
 
-  const input = { ja, en, overrides: pairingOverrides, stored: values.repair ? undefined : await storedPairings() };
+  let stored = values.repair ? undefined : await storedPairings();
+  // A catalog imported before KOI-332 stores each English print on its own ID: those pairings are the bug.
+  if (stored && [...stored.pairs].every(([listId, variantId]) => variantId === listId)) {
+    if (stored.pairs.size) console.log("No English print has been paired yet: re-pairing all, as --repair does");
+    stored = undefined;
+  }
+  const input = { ja, en, overrides: pairingOverrides, stored };
   const { needsImages } = pairEnglish({ ...input, distance: () => undefined });
   console.log(`Fetching ${needsImages.en.length} English and ${needsImages.ja.length} Japanese images`);
   // The two languages' images come from different hosts, so they download side by side.
