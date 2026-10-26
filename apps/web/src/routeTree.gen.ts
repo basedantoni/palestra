@@ -35,6 +35,7 @@ import { Route as FinanceGoalsRouteImport } from './routes/finance/goals'
 import { Route as FinanceBudgetsRouteImport } from './routes/finance/budgets'
 import { Route as FinanceAccountsRouteImport } from './routes/finance/accounts'
 import { Route as AdminExercisesIndexRouteImport } from './routes/admin/exercises/index'
+import { Route as FinanceCategoriesIdRouteImport } from './routes/finance/categories.$id'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -166,6 +167,11 @@ const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   path: '/exercises/',
   getParentRoute: () => AdminRoute,
 } as any)
+const FinanceCategoriesIdRoute = FinanceCategoriesIdRouteImport.update({
+  id: '/finance/categories/$id',
+  path: '/finance/categories/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
+  '/finance/categories/$id': typeof FinanceCategoriesIdRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/tcg': typeof TcgIndexRoute
   '/templates': typeof TemplatesIndexRoute
   '/workouts': typeof WorkoutsIndexRoute
+  '/finance/categories/$id': typeof FinanceCategoriesIdRoute
   '/admin/exercises': typeof AdminExercisesIndexRoute
 }
 export interface FileRoutesById {
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/tcg/': typeof TcgIndexRoute
   '/templates/': typeof TemplatesIndexRoute
   '/workouts/': typeof WorkoutsIndexRoute
+  '/finance/categories/$id': typeof FinanceCategoriesIdRoute
   '/admin/exercises/': typeof AdminExercisesIndexRoute
 }
 export interface FileRouteTypes {
@@ -279,6 +288,7 @@ export interface FileRouteTypes {
     | '/tcg/'
     | '/templates/'
     | '/workouts/'
+    | '/finance/categories/$id'
     | '/admin/exercises/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
     | '/tcg'
     | '/templates'
     | '/workouts'
+    | '/finance/categories/$id'
     | '/admin/exercises'
   id:
     | '__root__'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '/tcg/'
     | '/templates/'
     | '/workouts/'
+    | '/finance/categories/$id'
     | '/admin/exercises/'
   fileRoutesById: FileRoutesById
 }
@@ -362,6 +374,7 @@ export interface RootRouteChildren {
   TcgIndexRoute: typeof TcgIndexRoute
   TemplatesIndexRoute: typeof TemplatesIndexRoute
   WorkoutsIndexRoute: typeof WorkoutsIndexRoute
+  FinanceCategoriesIdRoute: typeof FinanceCategoriesIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -548,6 +561,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminExercisesIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/finance/categories/$id': {
+      id: '/finance/categories/$id'
+      path: '/finance/categories/$id'
+      fullPath: '/finance/categories/$id'
+      preLoaderRoute: typeof FinanceCategoriesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -588,6 +608,7 @@ const rootRouteChildren: RootRouteChildren = {
   TcgIndexRoute: TcgIndexRoute,
   TemplatesIndexRoute: TemplatesIndexRoute,
   WorkoutsIndexRoute: WorkoutsIndexRoute,
+  FinanceCategoriesIdRoute: FinanceCategoriesIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

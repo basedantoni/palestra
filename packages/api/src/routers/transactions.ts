@@ -10,6 +10,7 @@ import { category, financialAccount, transaction } from "@life-tracker/db/schema
 import { resolvePeriodBounds, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { categoryTreeIds } from "../lib/budget-spend-sql";
 import { countsInTotals, hasSplits, isExcluded } from "../lib/counts-in-totals-sql";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { NO_CATEGORY_FLOWS, categoryOnFlowChange, resolveCategory, resolveFlow } from "../lib/rules";
@@ -23,6 +24,8 @@ const filtersSchema = z.object({
   accountIds: z.array(z.string().uuid()).max(50).default([]),
   /** A category, or null for Uncategorized; omitted = every category. */
   categoryId: z.string().uuid().nullable().optional(),
+  /** With a categoryId: its Subcategories' transactions too. */
+  subcategories: z.boolean().optional(),
   /** false = the Unreviewed queue; omitted = both. */
   reviewed: z.boolean().optional(),
 });
@@ -37,7 +40,9 @@ async function filterConditions(userId: string, filters: z.infer<typeof filtersS
   if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
   // Uncategorized is spend with no category, not every row without one: a split parent carries none (ADR 0007).
   if (filters.categoryId === null) conds.push(isNull(transaction.categoryId), takesCategory, not(hasSplits));
-  else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
+  else if (filters.categoryId && filters.subcategories) {
+    conds.push(inArray(transaction.categoryId, await categoryTreeIds(userId, filters.categoryId)));
+  } else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
   if (filters.reviewed !== undefined) conds.push(eq(transaction.reviewed, filters.reviewed));
   return conds;
 }
