@@ -7,7 +7,8 @@
  * Category rows, pending rows, a transfer pair, and an unknown Bank Category,
  * plus a zero-account bank linked under the other PLAID_ENV (KOI-288), and a
  * Parent Category with a Subcategory (Golf under Entertainment), both budgeted
- * this month (KOI-337), and Unreviewed rows for the review queue (KOI-342).
+ * this month (KOI-337), Unreviewed rows for the review queue (KOI-342), and a
+ * split transaction with an Uncategorized Split (KOI-343).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
  * transactions), the dev user's rules and Bank Category mapping, then
@@ -63,6 +64,8 @@ type Fixture = {
   transferPair?: string;
   /** Unreviewed: newly arrived and not yet confirmed (KOI-342). Every other row is reviewed. */
   unreviewed?: boolean;
+  /** Splits (ADR 0007), summing to `amount`; the parent then carries no category. Null category = Uncategorized. */
+  splits?: Array<{ amount: number; category: string | null; note?: string }>;
 };
 
 const FIXTURES: Fixture[] = [
@@ -89,6 +92,21 @@ const FIXTURES: Fixture[] = [
   { key: "netflix", account: "credit", amount: 15.49, daysAgo: 9, name: "NETFLIX.COM", merchantName: "Netflix", pfc: "ENTERTAINMENT" },
   // A Subcategory's spend, rolled into its parent's (Entertainment) budget.
   { key: "topgolf", account: "credit", amount: 85, daysAgo: 5, name: "TOPGOLF AUSTIN", merchantName: "Topgolf", pfc: "ENTERTAINMENT", manualCategory: "Golf" },
+  // Split: totals count the three Splits, never the $120 parent.
+  {
+    key: "target-split",
+    account: "credit",
+    amount: 120,
+    daysAgo: 6,
+    name: "TARGET 00012345",
+    merchantName: "Target",
+    pfc: "GENERAL_MERCHANDISE",
+    splits: [
+      { amount: 70, category: "Food & Drink", note: "groceries" },
+      { amount: 35, category: "Home" },
+      { amount: 15, category: null },
+    ],
+  },
 ];
 
 /** This month's limits on the Parent Category and its Subcategory. */
@@ -221,7 +239,7 @@ async function seedFinance() {
         plaidCategoryPrimary: f.pfc,
         categoryId: f.manualCategory
           ? categoryByName.get(f.manualCategory)!
-          : f.blankManual
+          : f.blankManual || f.splits
             ? null
             : defaultCategoryId(f.pfc, mapping),
         categoryOverridden: !!(f.blankManual || f.manualCategory),
@@ -229,6 +247,26 @@ async function seedFinance() {
         reviewed: !f.unreviewed,
         isoCurrencyCode: "USD",
       })),
+    );
+    await tx.insert(transaction).values(
+      FIXTURES.flatMap((f) =>
+        (f.splits ?? []).map((piece, i) => ({
+          id: id(`transaction:${f.key}:split-${i}`),
+          userId,
+          accountId: id(`account:${f.account}`),
+          parentTransactionId: id(`transaction:${f.key}`),
+          amount: piece.amount,
+          date: fixtureDate(f.daysAgo),
+          name: f.name,
+          merchantName: f.merchantName ?? null,
+          flow: "expense" as const,
+          categoryId: piece.category ? categoryByName.get(piece.category)! : null,
+          categoryOverridden: true,
+          note: piece.note ?? null,
+          reviewed: true,
+          isoCurrencyCode: "USD",
+        })),
+      ),
     );
   });
 

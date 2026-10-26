@@ -13,6 +13,8 @@ export type FeedRow = {
   flow: "income" | "expense" | "transfer" | null;
   excluded: boolean;
   transferPairId: string | null;
+  /** A split transaction's pieces (ADR 0007): they count in its place. */
+  splits?: ReadonlyArray<Pick<FeedRow, "amount" | "flow" | "excluded">>;
 };
 
 export type FeedEntry<T extends FeedRow> =
@@ -54,7 +56,9 @@ export function buildFeedDays<T extends FeedRow>(
       day = { date, spent: 0, entries: [] };
       days.push(day);
     }
-    if (txn.flow === "expense" && !txn.excluded) day.spent += txn.amount;
+    for (const piece of txn.splits?.length ? txn.splits : [txn]) {
+      if (piece.flow === "expense" && !piece.excluded) day.spent += piece.amount;
+    }
 
     const legs = txn.transferPairId ? legsByPair.get(txn.transferPairId)! : [];
     const out = legs.find((l) => l.amount > 0);

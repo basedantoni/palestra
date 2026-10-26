@@ -9,7 +9,7 @@ import { protectedProcedure, router } from "../index";
 import { calendarMonthOf } from "../lib/budget-spend";
 import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
 import { categorySpend } from "../lib/category-spend";
-import { isExcluded } from "../lib/counts-in-totals-sql";
+import { skippedInTotals } from "../lib/counts-in-totals-sql";
 import { netWorthHistory, TIMEFRAMES, timeframeWindow } from "../lib/net-worth";
 import { dateBoundConditions, periodSchema } from "../lib/transaction-period-sql";
 import { getUserTimezone } from "../lib/user-timezone";
@@ -33,7 +33,7 @@ export const financeRouter = router({
       const columns = {
         amount: transaction.amount,
         flow: transaction.flow,
-        excluded: isExcluded,
+        excluded: skippedInTotals,
         date: transaction.date,
       };
 
@@ -69,7 +69,7 @@ export const financeRouter = router({
         .select({
           amount: transaction.amount,
           flow: transaction.flow,
-          excluded: isExcluded,
+          excluded: skippedInTotals,
           date: transaction.date,
           categoryId: transaction.categoryId,
           categoryName: category.name,

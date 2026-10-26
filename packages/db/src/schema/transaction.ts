@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   date,
   index,
@@ -38,7 +39,8 @@ export const transaction = pgTable(
     accountId: uuid("account_id")
       .notNull()
       .references(() => financialAccount.id, { onDelete: "cascade" }),
-    plaidTransactionId: text("plaid_transaction_id").notNull(),
+    /** Null on a Split, which no bank reported (ADR 0007). */
+    plaidTransactionId: text("plaid_transaction_id"),
     amount: real("amount").notNull(),
     date: timestamp("date").notNull(),
     name: text("name").notNull(),
@@ -59,6 +61,10 @@ export const transaction = pgTable(
     /** False = Unreviewed: a posted row the user hasn't confirmed or edited by hand (KOI-342). Pending rows arrive reviewed. */
     reviewed: boolean("reviewed").default(false).notNull(),
     transferPairId: uuid("transfer_pair_id"),
+    /** Set on a Split: the transaction it is a piece of (ADR 0007). Deleting the parent deletes its Splits. */
+    parentTransactionId: uuid("parent_transaction_id").references((): AnyPgColumn => transaction.id, {
+      onDelete: "cascade",
+    }),
     isoCurrencyCode: text("iso_currency_code"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -71,6 +77,7 @@ export const transaction = pgTable(
     index("transaction_accountId_idx").on(table.accountId),
     uniqueIndex("transaction_plaidTransactionId_unique_idx").on(table.plaidTransactionId),
     index("transaction_userId_date_idx").on(table.userId, table.date),
+    index("transaction_parentTransactionId_idx").on(table.parentTransactionId),
     // Supports compute-on-read budget spend (slice 5).
     index("transaction_budget_idx").on(
       table.userId,
