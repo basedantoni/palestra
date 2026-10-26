@@ -162,6 +162,9 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
         plaidCategoryDetailed: up.plaidCategoryDetailed,
         categoryId,
         isoCurrencyCode: up.isoCurrencyCode,
+        // Posted rows start Unreviewed (KOI-342). A pending row posts under a new
+        // Plaid id, arriving as a new unreviewed row, so the pending one skips the queue.
+        reviewed: up.pending,
       })
       .onConflictDoUpdate({
         target: transaction.plaidTransactionId,

@@ -56,6 +56,8 @@ export const transaction = pgTable(
     categoryOverridden: boolean("category_overridden").default(false).notNull(),
     excluded: boolean("excluded").default(false).notNull(),
     note: text("note"),
+    /** False = Unreviewed: a posted row the user hasn't confirmed or edited by hand (KOI-342). Pending rows arrive reviewed. */
+    reviewed: boolean("reviewed").default(false).notNull(),
     transferPairId: uuid("transfer_pair_id"),
     isoCurrencyCode: text("iso_currency_code"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

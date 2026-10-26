@@ -7,7 +7,7 @@
  * Category rows, pending rows, a transfer pair, and an unknown Bank Category,
  * plus a zero-account bank linked under the other PLAID_ENV (KOI-288), and a
  * Parent Category with a Subcategory (Golf under Entertainment), both budgeted
- * this month (KOI-337).
+ * this month (KOI-337), and Unreviewed rows for the review queue (KOI-342).
  *
  * Idempotent: every run deletes the fixture item (cascading to its accounts and
  * transactions), the dev user's rules and Bank Category mapping, then
@@ -61,11 +61,13 @@ type Fixture = {
   /** Manual Category picked by hand: a Subcategory the Bank Category can't map to. */
   manualCategory?: "Golf";
   transferPair?: string;
+  /** Unreviewed: newly arrived and not yet confirmed (KOI-342). Every other row is reviewed. */
+  unreviewed?: boolean;
 };
 
 const FIXTURES: Fixture[] = [
   // Repeated merchant: same description several times (rule preview / "categorize like this").
-  { key: "coffee-1", account: "credit", amount: 5.75, daysAgo: 0, name: "BLUE BOTTLE COFFEE #12", merchantName: "Blue Bottle Coffee", pfc: "FOOD_AND_DRINK" },
+  { key: "coffee-1", account: "credit", amount: 5.75, daysAgo: 0, name: "BLUE BOTTLE COFFEE #12", merchantName: "Blue Bottle Coffee", pfc: "FOOD_AND_DRINK", unreviewed: true },
   { key: "coffee-2", account: "credit", amount: 6.25, daysAgo: 2, name: "BLUE BOTTLE COFFEE #12", merchantName: "Blue Bottle Coffee", pfc: "FOOD_AND_DRINK" },
   { key: "coffee-3", account: "credit", amount: 4.5, daysAgo: 4, name: "BLUE BOTTLE COFFEE #12", merchantName: "Blue Bottle Coffee", pfc: "FOOD_AND_DRINK" },
   { key: "coffee-4", account: "checking", amount: 5.75, daysAgo: 6, name: "BLUE BOTTLE COFFEE #12", merchantName: "Blue Bottle Coffee", pfc: "FOOD_AND_DRINK" },
@@ -78,11 +80,11 @@ const FIXTURES: Fixture[] = [
   // Transfer pair: checking → savings, linked by transferPairId.
   { key: "transfer-out", account: "checking", amount: 500, daysAgo: 5, name: "ONLINE TRANSFER TO SAV ...4821", pfc: "TRANSFER_OUT", transferPair: "transfer-1" },
   { key: "transfer-in", account: "savings", amount: -500, daysAgo: 4, name: "ONLINE TRANSFER FROM CHK ...1094", pfc: "TRANSFER_IN", transferPair: "transfer-1" },
-  // Unknown Bank Category (not one of the 16) → Uncategorized (no category), expense.
-  { key: "unknown-pfc", account: "checking", amount: 12.0, daysAgo: 2, name: "SQ *MYSTERY VENDOR", pfc: "SOME_NEW_PFC_PRIMARY" },
-  { key: "null-pfc", account: "checking", amount: 3.0, daysAgo: 3, name: "POS DEBIT 8812", pfc: null },
+  // Unknown Bank Category (not one of the 16) → Uncategorized (no category), expense. Both Unreviewed.
+  { key: "unknown-pfc", account: "checking", amount: 12.0, daysAgo: 2, name: "SQ *MYSTERY VENDOR", pfc: "SOME_NEW_PFC_PRIMARY", unreviewed: true },
+  { key: "null-pfc", account: "checking", amount: 3.0, daysAgo: 3, name: "POS DEBIT 8812", pfc: null, unreviewed: true },
   // Ordinary rows so the feed and budgets look normal.
-  { key: "paycheck", account: "checking", amount: -2400, daysAgo: 7, name: "ACME CORP PAYROLL", pfc: "INCOME" },
+  { key: "paycheck", account: "checking", amount: -2400, daysAgo: 7, name: "ACME CORP PAYROLL", pfc: "INCOME", unreviewed: true },
   { key: "rent", account: "checking", amount: 1650, daysAgo: 8, name: "ZELLE TO LANDLORD", pfc: "RENT_AND_UTILITIES" },
   { key: "netflix", account: "credit", amount: 15.49, daysAgo: 9, name: "NETFLIX.COM", merchantName: "Netflix", pfc: "ENTERTAINMENT" },
   // A Subcategory's spend, rolled into its parent's (Entertainment) budget.
@@ -224,6 +226,7 @@ async function seedFinance() {
             : defaultCategoryId(f.pfc, mapping),
         categoryOverridden: !!(f.blankManual || f.manualCategory),
         transferPairId: f.transferPair ? id(`pair:${f.transferPair}`) : null,
+        reviewed: !f.unreviewed,
         isoCurrencyCode: "USD",
       })),
     );

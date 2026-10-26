@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { periodToSearch, searchToPeriod, transactionPeriodSearchSchema } from "@life-tracker/shared";
 import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
+import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { trpc } from "@/utils/trpc";
+import { Button } from "@/components/ui/button";
 import { CategoryPicker } from "@/components/finance/category-picker";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 import { TransactionPeriodPicker } from "@/components/finance/transaction-period-picker";
@@ -18,6 +20,8 @@ const UNCATEGORIZED = "uncategorized";
 const transactionsSearchSchema = transactionPeriodSearchSchema.extend({
   accounts: z.array(z.string().uuid()).optional().catch(undefined),
   category: z.union([z.string().uuid(), z.literal(UNCATEGORIZED)]).optional().catch(undefined),
+  /** false = the Unreviewed queue (KOI-342). */
+  reviewed: z.boolean().optional().catch(undefined),
 });
 type TransactionsSearch = z.infer<typeof transactionsSearchSchema>;
 
@@ -51,8 +55,13 @@ function TransactionsPage() {
     period,
     accountIds,
     categoryId: search.category === UNCATEGORIZED ? null : search.category,
+    reviewed: search.reviewed,
   };
   const { data: summary } = useQuery(trpc.transactions.summary.queryOptions(filters));
+  const { data: unreviewed } = useQuery(trpc.transactions.unreviewedCount.queryOptions());
+  const markAllReviewed = useMutation(
+    trpc.transactions.markAllReviewed.mutationOptions({ onSuccess: useInvalidateFinance() }),
+  );
 
   const update = (next: Partial<TransactionsSearch>) =>
     navigate({ search: (prev) => ({ ...prev, ...next }), replace: true });
@@ -63,7 +72,19 @@ function TransactionsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-6">
-      <h1 className="text-2xl font-bold">Transactions</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Transactions</h1>
+        {!!unreviewed && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={markAllReviewed.isPending}
+            onClick={() => markAllReviewed.mutate()}
+          >
+            Mark all reviewed
+          </Button>
+        )}
+      </div>
       <TransactionPeriodPicker
         period={period}
         today={today}
@@ -75,6 +96,21 @@ function TransactionsPage() {
           : " "}
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {(search.reviewed === false || !!unreviewed) && (
+          <button
+            type="button"
+            aria-pressed={search.reviewed === false}
+            // The queue (and its count) spans all time.
+            onClick={() =>
+              update(search.reviewed === false ? { reviewed: undefined } : { reviewed: false, ...periodToSearch({ kind: "all" }, today) })
+            }
+            className={`rounded-full border px-3 py-1 text-xs ${
+              search.reviewed === false ? "border-primary bg-primary text-primary-foreground" : "border-border"
+            }`}
+          >
+            To review{unreviewed ? ` (${unreviewed})` : ""}
+          </button>
+        )}
         {(accounts ?? []).map((a) => {
           const on = accountIds.includes(a.id);
           return (

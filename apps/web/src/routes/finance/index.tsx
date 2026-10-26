@@ -14,7 +14,7 @@ import { CashFlowChart, CashFlowTiles } from "@/components/finance/cash-flow";
 import { GoalsList } from "@/components/finance/goals-list";
 import { NetWorthChart, NetWorthTile } from "@/components/finance/net-worth";
 import { SpendByCategory } from "@/components/finance/spend-by-category";
-import { TransactionFeed } from "@/components/finance/transaction-feed";
+import { TransactionFeed, UnreviewedDot } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
 import { SyncNowButton } from "@/components/finance/sync-now-button";
 
@@ -83,6 +83,7 @@ function FinanceOverview() {
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const { cashFlow, range, setRange, selectedMonth, selectMonth, period, setPeriod } = useOverviewFilters(hasAccounts);
   const netWorth = useQuery({ ...trpc.finance.netWorthHistory.queryOptions({ timeframe: "1M" }), enabled: hasAccounts });
+  const { data: unreviewed } = useQuery(trpc.transactions.unreviewedCount.queryOptions());
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-6">
@@ -93,6 +94,20 @@ function FinanceOverview() {
           <PlaidLinkButton />
         </div>
       </div>
+      {/* The count spans all time, so the queue opens on all time. */}
+      {!!unreviewed && (
+        <Link
+          to="/finance/transactions"
+          search={{ reviewed: false, all: true }}
+          className="flex items-center justify-between border border-border px-4 py-3 text-sm hover:bg-muted/50"
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <UnreviewedDot />
+            {unreviewed} to review
+          </span>
+          <span className="text-muted-foreground">Review →</span>
+        </Link>
+      )}
       {/* No accounts linked: charts stay hidden; the Connect button above is the CTA. */}
       {hasAccounts && (netWorth.data || cashFlow.data) && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

@@ -33,6 +33,8 @@ export type TransactionFilters = {
   accountIds?: string[];
   /** null = Uncategorized. */
   categoryId?: string | null;
+  /** false = the Unreviewed queue. */
+  reviewed?: boolean;
 };
 
 type Txn = RouterOutputs["transactions"]["list"]["items"][number];
@@ -144,6 +146,7 @@ function FeedItem({
   const open = expanded === key;
 
   if (entry.kind === "pair") {
+    const unreviewedLegs = [entry.out, entry.in].filter((leg) => !leg.reviewed);
     return (
       <li className="border-l-2 border-l-blue-500">
         <button
@@ -154,6 +157,7 @@ function FeedItem({
         >
           <span className="flex min-w-0 items-center gap-2">
             {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+            {unreviewedLegs.length > 0 && <UnreviewedDot />}
             <span className="truncate font-medium">{entry.out.accountName}</span>
             <ArrowRight className="size-3.5 shrink-0 text-blue-600" aria-label="to" />
             <span className="truncate font-medium">{entry.in.accountName}</span>
@@ -173,7 +177,10 @@ function FeedItem({
                 </span>
               </li>
             ))}
-            <li className="pt-1 text-[10px]">Matched transfer — not counted as spending.</li>
+            <li className="flex items-center justify-between gap-3 pt-1 text-[10px]">
+              Matched transfer — not counted as spending.
+              {unreviewedLegs.length > 0 && <MarkReviewedButton ids={unreviewedLegs.map((leg) => leg.id)} />}
+            </li>
           </ul>
         )}
       </li>
@@ -193,6 +200,7 @@ function FeedItem({
       >
         <span className="flex min-w-0 flex-col">
           <span className="flex items-center gap-1.5 truncate text-sm font-medium">
+            {!t.reviewed && <UnreviewedDot />}
             {t.merchantName ?? t.name}
             {t.note && <StickyNote className="size-3 shrink-0 text-amber-500" aria-label="Has note" />}
           </span>
@@ -216,6 +224,22 @@ function FeedItem({
   );
 }
 
+/** Marks an Unreviewed row in the feed. */
+export function UnreviewedDot() {
+  return <span role="img" aria-label="Unreviewed" title="Unreviewed" className="size-2 shrink-0 rounded-full bg-primary" />;
+}
+
+/** Clear Unreviewed without editing anything: a row, or both legs of a Transfer Pair. */
+function MarkReviewedButton({ ids }: { ids: string[] }) {
+  const markReviewed = useMutation(
+    trpc.transactions.markReviewed.mutationOptions({ onSuccess: useInvalidateFinance() }),
+  );
+  return (
+    <Button size="xs" variant="outline" disabled={markReviewed.isPending} onClick={() => markReviewed.mutate({ ids })}>
+      Mark reviewed
+    </Button>
+  );
+}
 
 /**
  * Correct a transaction's flow, or return it to "Automatic" (Plaid-derived).
@@ -303,6 +327,11 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
         </label>
         {txn.excluded && !txn.excludedByHand && (
           <span className="text-xs text-muted-foreground">Excluded with its category</span>
+        )}
+        {!txn.reviewed && (
+          <span className="ml-auto">
+            <MarkReviewedButton ids={[txn.id]} />
+          </span>
         )}
       </div>
       <textarea

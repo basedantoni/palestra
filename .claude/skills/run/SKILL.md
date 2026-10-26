@@ -69,6 +69,7 @@ curl -s -b "$CLAUDE_JOB_DIR/tmp/cookies.txt" -G localhost:3000/trpc/transactions
 | Pending | `UBER *TRIP`, `WHOLEFDS AUS 10234` |
 | Transfer pair (linked `transferPairId`) | `ONLINE TRANSFER TO SAV` / `FROM CHK`, $500 |
 | Unknown Plaid category → Uncategorized | `SQ *MYSTERY VENDOR` (unknown PFC), `POS DEBIT 8812` (null PFC) |
+| Unreviewed (review queue, `/finance/transactions?reviewed=false`) | both Uncategorized rows above, one Blue Bottle row (today), `ACME CORP PAYROLL` (income) |
 | Bank from the other `PLAID_ENV`, zero accounts | "Old Other-Env Bank" on `/finance/accounts`: skipped by Sync now, removable only with force |
 
 Re-running `pnpm db:seed:finance` puts the fixtures back. It also deletes the dev user's Rules, so you can mutate the data freely while testing. "Sync now" on Fixture Bank fails because it has no real Plaid token. That is expected.
