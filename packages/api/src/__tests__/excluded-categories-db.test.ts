@@ -102,7 +102,7 @@ describe("totals", () => {
     const period = { kind: "month", month: "2026-09" } as const;
 
     const byCategory = await caller.finance.spendByCategory({ period });
-    expect(byCategory.map((r) => [r.name, r.spend])).toEqual([["Climbing", 42]]);
+    expect(byCategory.map((r) => [r.name, r.total])).toEqual([["Climbing", 42]]);
 
     const cashFlow = await caller.finance.cashFlow({ range: "All" });
     expect(cashFlow.months.find((m) => m.monthKey === "2026-09")?.spend).toBe(42);
@@ -116,5 +116,21 @@ describe("totals", () => {
         ["MOVEMENT CLIMBING GYM", false, false],
       ]),
     );
+  });
+
+  it("roll a Subcategory into its parent's spend by category, leaving out an Excluded one", async () => {
+    const fun = await addCategory("Entertainment", { color: "violet" });
+    const golf = await addCategory("Golf", { parentId: fun, sortOrder: 1 });
+    const work = await addCategory("Work events", { parentId: fun, sortOrder: 2, excluded: true });
+    await spend("ARCADE", 10, fun);
+    await spend("DRIVING RANGE", 60, golf);
+    await spend("TEAM OUTING", 500, work);
+
+    const byCategory = await makeCaller().finance.spendByCategory({ period: { kind: "month", month: "2026-09" } });
+    expect(byCategory).toMatchObject([
+      { name: "Entertainment", total: 70, own: 10, children: [{ name: "Golf", color: "violet", tint: 25, total: 60 }] },
+      { name: "Climbing", total: 42, children: [] },
+    ]);
+    expect(byCategory[0]?.children).toHaveLength(1);
   });
 });

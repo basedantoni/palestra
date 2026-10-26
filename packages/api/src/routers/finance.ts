@@ -9,7 +9,7 @@ import { protectedProcedure, router } from "../index";
 import { calendarMonthOf, totalBudget } from "../lib/budget-spend";
 import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
-import { categorySpend } from "../lib/category-spend";
+import { categorySpendTree } from "../lib/category-spend";
 import { skippedInTotals } from "../lib/counts-in-totals-sql";
 import { cumulativeByDay, elapsedDays, monthLength, overUnder, pacePoints } from "../lib/month-pace";
 import { netWorthHistory, TIMEFRAMES, timeframeWindow } from "../lib/net-worth";
@@ -58,15 +58,31 @@ export const financeRouter = router({
     }),
 
   /**
-   * Spend per category for a period (same model as the transaction feed),
-   * largest first, Uncategorized as its own row (categoryId null). Rows add up
-   * to Spend for that range (`cashFlow`, `transactions.summary`).
+   * Spend per category for a period (same model as the transaction feed) as
+   * the category tree: each Parent Category's `total` rolls up its
+   * Subcategories', `own` is its own transactions'. Both levels largest first;
+   * Uncategorized is its own top-level row (categoryId null). Top-level totals
+   * add up to Spend for that range (`cashFlow`, `transactions.summary`).
    */
   spendByCategory: protectedProcedure
     .input(z.object({ period: periodSchema }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const bounds = resolvePeriodBounds(input.period, todayInTimeZone(new Date(), await getUserTimezone(userId)));
+      const [timezone, categories] = await Promise.all([
+        getUserTimezone(userId),
+        db
+          .select({
+            id: category.id,
+            name: category.name,
+            parentId: category.parentId,
+            color: category.color,
+            icon: category.icon,
+          })
+          .from(category)
+          .where(eq(category.userId, userId))
+          .orderBy(category.sortOrder, category.name),
+      ]);
+      const bounds = resolvePeriodBounds(input.period, todayInTimeZone(new Date(), timezone));
       const txns = await db
         .select({
           amount: transaction.amount,
@@ -74,14 +90,10 @@ export const financeRouter = router({
           excluded: skippedInTotals,
           date: transaction.date,
           categoryId: transaction.categoryId,
-          categoryName: category.name,
-          categoryColor: category.color,
-          categoryIcon: category.icon,
         })
         .from(transaction)
-        .leftJoin(category, eq(category.id, transaction.categoryId))
         .where(and(eq(transaction.userId, userId), ...dateBoundConditions(bounds)));
-      return categorySpend(txns, bounds);
+      return categorySpendTree(txns, categories, bounds);
     }),
 
   /**

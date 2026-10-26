@@ -236,7 +236,7 @@ describe("list and totals", () => {
     expect(await caller.transactions.summary({ period: SEPTEMBER, categoryId: null })).toEqual({ count: 1, spent: 12 });
 
     const byCategory = await caller.finance.spendByCategory({ period: SEPTEMBER });
-    expect(byCategory.map((r) => [r.categoryId, r.spend])).toEqual([
+    expect(byCategory.map((r) => [r.categoryId, r.total])).toEqual([
       [seeded.categoryId, 30],
       [null, 12],
     ]);

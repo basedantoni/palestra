@@ -1,92 +1,90 @@
 /**
- * Pure Spend per category for a period (KOI-292, KOI-294). Unlike budget-spend's
- * `spendByCategory` (Budgeted Spend), Uncategorized is kept as its own row, so
- * the rows add up to Spend in `cashFlow` for the same range.
+ * Pure Spend per category for a period (KOI-292, KOI-294, KOI-345). Unlike
+ * budget-spend's `spendByCategory` (Budgeted Spend), Uncategorized is kept as
+ * its own row, so the top-level totals add up to Spend in `cashFlow` for the
+ * same range.
  */
+import { categoryTree } from "@life-tracker/shared";
+
 import { type CashFlowTransaction, cents, isSpend } from "./cash-flow";
 
 export interface CategorySpendTransaction extends CashFlowTransaction {
   categoryId: string | null;
-  categoryName: string | null;
-  categoryColor: string | null;
-  categoryIcon: string | null;
 }
 
-export interface CategorySpendRow {
+export interface SpendCategory {
+  id: string;
+  name: string;
+  parentId: string | null;
+  /** Palette token; null when uncolored. */
+  color: string | null;
+  icon: string | null;
+}
+
+export interface CategorySpendNode {
   /** null = Uncategorized. */
   categoryId: string | null;
   name: string;
-  /** Palette token; null for Uncategorized or an uncolored category. */
+  /** Palette token (a Subcategory's is its parent's); null for Uncategorized or an uncolored category. */
   color: string | null;
+  /** A Subcategory's `subcategoryTint`; null at the top level. */
+  tint: number | null;
   /** Lucide icon name (`CATEGORY_ICONS`); null for none. */
   icon: string | null;
-  /** Net of refunds, so it can be negative. */
-  spend: number;
-  /** Fraction of the positive categories' total Spend (negative for a net-refund row); null when there is none. */
-  share: number | null;
+  /** Its own Spend plus its Subcategories'. Net of refunds, so it can be negative. */
+  total: number;
+  /** Spend on transactions filed under the category itself. */
+  own: number;
+  /** Subcategories with Spend, largest first. */
+  children: CategorySpendNode[];
 }
 
 export const UNCATEGORIZED = "Uncategorized";
 
+const byTotal = (a: CategorySpendNode, b: CategorySpendNode) => b.total - a.total;
+
 /**
  * Spend per category between inclusive calendar-day bounds ("YYYY-MM-DD",
- * from `resolvePeriodBounds`; a missing bound is open), largest first;
- * categories netting to zero are left out.
+ * from `resolvePeriodBounds`; a missing bound is open), as the two-level
+ * tree: each Parent Category's total rolls up its Subcategories'. Both levels
+ * are ranked largest first; categories netting to zero are left out.
+ * `categories` come in manual order, which sets Subcategory tints.
  */
-export function categorySpend(
+export function categorySpendTree(
   transactions: CategorySpendTransaction[],
+  categories: SpendCategory[],
   { from, to }: { from?: string; to?: string },
-): CategorySpendRow[] {
-  const byCategory = new Map<string | null, Omit<CategorySpendRow, "categoryId" | "share">>();
+): CategorySpendNode[] {
+  const ownByCategory = new Map<string | null, number>();
   for (const t of transactions) {
     // Plaid dates are UTC midnight of the bank's calendar date (see calendarMonthOf).
     const day = t.date.toISOString().slice(0, 10);
     if (!isSpend(t) || (from && day < from) || (to && day > to)) continue;
-    const row = byCategory.get(t.categoryId) ?? {
-      name: t.categoryName ?? UNCATEGORIZED,
-      color: t.categoryColor,
-      icon: t.categoryIcon,
-      spend: 0,
-    };
-    row.spend += t.amount;
-    byCategory.set(t.categoryId, row);
+    ownByCategory.set(t.categoryId, (ownByCategory.get(t.categoryId) ?? 0) + t.amount);
   }
 
-  const rows = [...byCategory]
-    .map(([categoryId, row]) => ({ categoryId, ...row, spend: cents(row.spend) }))
-    .filter((r) => r.spend !== 0);
-  // Against positive categories only, so positive shares sum to 100% even in a refund-heavy month.
-  const total = rows.reduce((s, r) => s + Math.max(r.spend, 0), 0);
-  return rows
-    .toSorted((a, b) => b.spend - a.spend)
-    .map((r) => ({ ...r, share: total > 0 ? r.spend / total : null }));
-}
+  const node = (
+    c: { id: string | null; name: string; color: string | null; tint: number | null; icon: string | null },
+    children: CategorySpendNode[] = [],
+  ): CategorySpendNode => {
+    const own = cents(ownByCategory.get(c.id) ?? 0);
+    const total = cents(children.reduce((s, child) => s + child.total, own));
+    return { categoryId: c.id, name: c.name, color: c.color, tint: c.tint, icon: c.icon, total, own, children: children.toSorted(byTotal) };
+  };
 
-export interface DonutSlice {
-  /** Category id, or "uncategorized" / "other". */
-  key: string;
-  name: string;
-  /** Palette token; null for Uncategorized, an uncolored category and "Other". */
-  color: string | null;
-  spend: number;
-}
-
-/** Slices before the rest fold into "Other". */
-export const DONUT_TOP = 6;
-
-/**
- * Donut slices for `categorySpend` rows (sorted, largest first): the top
- * categories plus "Other". Negative categories are left out; a slice can't be
- * negative.
- */
-export function donutSlices(rows: CategorySpendRow[]): DonutSlice[] {
-  const positive = rows.filter((r) => r.spend > 0);
-  const slices = positive
-    .slice(0, DONUT_TOP)
-    .map((r) => ({ key: r.categoryId ?? "uncategorized", name: r.name, color: r.color, spend: r.spend }));
-  const rest = positive.slice(DONUT_TOP);
-  if (rest.length > 0) {
-    slices.push({ key: "other", name: "Other", color: null, spend: cents(rest.reduce((s, r) => s + r.spend, 0)) });
-  }
-  return slices;
+  const tree = categoryTree(categories);
+  const ids = new Set(categories.map((c) => c.id));
+  const top = tree
+    .filter((c) => !c.parentId || !ids.has(c.parentId))
+    .map((parent) =>
+      node(
+        parent,
+        tree
+          .filter((c) => c.parentId === parent.id)
+          .map((c) => node(c))
+          .filter((n) => n.total !== 0),
+      ),
+    );
+  top.push(node({ id: null, name: UNCATEGORIZED, color: null, tint: null, icon: null }));
+  return top.filter((n) => n.total !== 0).toSorted(byTotal);
 }
