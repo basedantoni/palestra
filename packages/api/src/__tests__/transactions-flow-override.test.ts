@@ -124,7 +124,7 @@ describe("transactions.setFlow", () => {
 
     expect(mockDb.selected(transaction)).toEqual([[TXN_ID, USER_ID]]);
     const [update] = mockDb.updated(transaction);
-    expect(update!.set).toEqual({ flow: "income", flowOverridden: true, categoryId: null });
+    expect(update!.set).toEqual({ flow: "income", flowOverridden: true, categoryId: null, reviewed: true });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
   });
 
@@ -134,7 +134,7 @@ describe("transactions.setFlow", () => {
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: null });
 
     const [update] = mockDb.updated(transaction);
-    expect(update!.set).toEqual({ flow: "transfer", flowOverridden: false, categoryId: null });
+    expect(update!.set).toEqual({ flow: "transfer", flowOverridden: false, categoryId: null, reviewed: true });
     expect(update!.where).toEqual([TXN_ID, USER_ID]);
   });
 
@@ -147,7 +147,7 @@ describe("transactions.setFlow", () => {
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: null });
 
     expect(mockDb.selected(rule)).toEqual([[USER_ID]]);
-    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "income", flowOverridden: false, categoryId: null });
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "income", flowOverridden: false, categoryId: null, reviewed: true });
   });
 
   it("unpairs both legs when overriding one leg of a transfer pair", async () => {
@@ -158,7 +158,7 @@ describe("transactions.setFlow", () => {
     const updates = mockDb.updated(transaction) as Array<{ set: Record<string, unknown>; where: unknown[] }>;
     expect(updates).toHaveLength(2);
     expect(updates).toContainEqual(
-      expect.objectContaining({ set: { flow: "income", flowOverridden: true, categoryId: null } }),
+      expect.objectContaining({ set: { flow: "income", flowOverridden: true, categoryId: null, reviewed: true } }),
     );
     const unpair = updates.find((u) => "transferPairId" in u.set)!;
     expect(unpair.set).toEqual({ transferPairId: null });
@@ -179,7 +179,7 @@ describe("transactions.setFlow", () => {
 
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "transfer" });
 
-    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "transfer", flowOverridden: true, categoryId: null });
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "transfer", flowOverridden: true, categoryId: null, reviewed: true });
   });
 
   it("re-resolves the category of a row moved back to expense", async () => {
@@ -191,7 +191,7 @@ describe("transactions.setFlow", () => {
 
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "expense" });
 
-    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: "cat-rent" });
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: "cat-rent", reviewed: true });
   });
 
   it("keeps a Manual Category on a row moved back to expense", async () => {
@@ -203,7 +203,7 @@ describe("transactions.setFlow", () => {
 
     await makeCaller().transactions.setFlow({ id: TXN_ID, flow: "expense" });
 
-    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: null });
+    expect(mockDb.updated(transaction)[0]!.set).toEqual({ flow: "expense", flowOverridden: true, categoryId: null, reviewed: true });
   });
 
   it("rejects a pending transaction and writes nothing", async () => {

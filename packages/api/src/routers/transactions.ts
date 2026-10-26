@@ -20,17 +20,26 @@ const filtersSchema = z.object({
   accountIds: z.array(z.string().uuid()).max(50).default([]),
   /** A category, or null for Uncategorized; omitted = every category. */
   categoryId: z.string().uuid().nullable().optional(),
+  /** false = the Unreviewed queue; omitted = both. */
+  reviewed: z.boolean().optional(),
 });
+
+/** Rows that can carry a Category: expense, or no flow yet. Income and transfer carry none (KOI-341). */
+const takesCategory = or(isNull(transaction.flow), notInArray(transaction.flow, [...NO_CATEGORY_FLOWS]))!;
 
 /** WHERE conditions for the caller's filtered transactions; "today" (for shortcut periods) is the user's local date. */
 async function filterConditions(userId: string, filters: z.infer<typeof filtersSchema>): Promise<SQL[]> {
   const today = todayInTimeZone(new Date(), await getUserTimezone(userId));
   const conds: SQL[] = [eq(transaction.userId, userId), ...dateBoundConditions(resolvePeriodBounds(filters.period, today))];
   if (filters.accountIds.length > 0) conds.push(inArray(transaction.accountId, filters.accountIds));
-  if (filters.categoryId === null) conds.push(isNull(transaction.categoryId));
+  // Uncategorized is spend with no category, not every row without one.
+  if (filters.categoryId === null) conds.push(isNull(transaction.categoryId), takesCategory);
   else if (filters.categoryId) conds.push(eq(transaction.categoryId, filters.categoryId));
+  if (filters.reviewed !== undefined) conds.push(eq(transaction.reviewed, filters.reviewed));
   return conds;
 }
+
+const unreviewedOf = (userId: string) => and(eq(transaction.userId, userId), eq(transaction.reviewed, false));
 
 /** "<ISO date>|<uuid>" — the last row of the previous page. */
 const cursorSchema = z.string().transform((value, ctx) => {
@@ -79,6 +88,7 @@ export const transactionsRouter = router({
           excluded: isExcluded,
           excludedByHand: transaction.excluded,
           note: transaction.note,
+          reviewed: transaction.reviewed,
           transferPairId: transaction.transferPairId,
           categoryId: transaction.categoryId,
           categoryOverridden: transaction.categoryOverridden,
@@ -126,12 +136,12 @@ export const transactionsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await db
         .update(transaction)
-        .set({ categoryId: input.categoryId, categoryOverridden: true })
+        .set({ categoryId: input.categoryId, categoryOverridden: true, reviewed: true })
         .where(
           and(
             eq(transaction.id, input.id),
             eq(transaction.userId, ctx.session.user.id),
-            or(isNull(transaction.flow), notInArray(transaction.flow, [...NO_CATEGORY_FLOWS])),
+            takesCategory,
           ),
         );
       return { ok: true };
@@ -214,7 +224,7 @@ export const transactionsRouter = router({
         const automaticCategoryId = resolveCategory(row.name, row.plaidCategoryPrimary, rules, mapping, flow);
         await tx
           .update(transaction)
-          .set({ flow, flowOverridden: input.flow !== null, categoryId: categoryOnFlowChange(row, flow, automaticCategoryId) })
+          .set({ flow, flowOverridden: input.flow !== null, categoryId: categoryOnFlowChange(row, flow, automaticCategoryId), reviewed: true })
           .where(owned);
         // A leg that is no longer a transfer breaks the Transfer Pair; the other leg stays an unpaired transfer.
         const { transferPairId } = row;
@@ -239,17 +249,42 @@ export const transactionsRouter = router({
     .mutation(async ({ ctx, input }) => {
       await db
         .update(transaction)
-        .set({ excluded: input.excluded })
+        .set({ excluded: input.excluded, reviewed: true })
         .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
       return { ok: true };
     }),
+
+  /** Clear Unreviewed on the given transactions (a row, or both legs of a Transfer Pair). */
+  markReviewed: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(transaction)
+        .set({ reviewed: true })
+        .where(and(eq(transaction.userId, ctx.session.user.id), inArray(transaction.id, input.ids)));
+      return { ok: true };
+    }),
+
+  markAllReviewed: protectedProcedure.mutation(async ({ ctx }) => {
+    await db.update(transaction).set({ reviewed: true }).where(unreviewedOf(ctx.session.user.id));
+    return { ok: true };
+  }),
+
+  /** How many of the caller's transactions are Unreviewed (the "N to review" badge). */
+  unreviewedCount: protectedProcedure.query(async ({ ctx }) => {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transaction)
+      .where(unreviewedOf(ctx.session.user.id));
+    return row?.count ?? 0;
+  }),
 
   setNote: protectedProcedure
     .input(z.object({ id: z.string().uuid(), note: z.string().max(500).nullable() }))
     .mutation(async ({ ctx, input }) => {
       await db
         .update(transaction)
-        .set({ note: input.note })
+        .set({ note: input.note, reviewed: true })
         .where(and(eq(transaction.id, input.id), eq(transaction.userId, ctx.session.user.id)));
       return { ok: true };
     }),
