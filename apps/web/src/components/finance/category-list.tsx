@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Check, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
 import { CATEGORY_COLORS, CATEGORY_ICONS, type CategoryIcon } from "@life-tracker/shared";
 import { cn } from "@/lib/utils";
@@ -108,10 +109,14 @@ export function CategoryList() {
                   className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5"
                 />
               ) : (
-                <span className={cn("min-w-0 flex-1 truncate", (c.excluded || c.excludedByParent) && "text-muted-foreground")}>
+                <Link
+                  to="/finance/categories/$id"
+                  params={{ id: c.id }}
+                  className={cn("min-w-0 flex-1 truncate hover:underline", (c.excluded || c.excludedByParent) && "text-muted-foreground")}
+                >
                   {c.name}
                   {(c.excluded || c.excludedByParent) && <span className="ms-1.5 text-xs">· excluded</span>}
-                </span>
+                </Link>
               )}
               <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                 {!hasSubcategories(c.id) && (

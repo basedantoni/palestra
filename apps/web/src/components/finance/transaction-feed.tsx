@@ -35,6 +35,8 @@ export type TransactionFilters = {
   accountIds?: string[];
   /** null = Uncategorized. */
   categoryId?: string | null;
+  /** With a categoryId: its Subcategories' transactions too. */
+  subcategories?: boolean;
   /** false = the Unreviewed queue. */
   reviewed?: boolean;
 };

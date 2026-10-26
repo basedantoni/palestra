@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-import { CategoryMark } from "./category-icon";
+import { CategoryMark, categoryColor } from "./category-icon";
 import { monthLabel } from "./month-label";
+import { MonthlyBars } from "./monthly-bars";
 
 type BudgetRow = RouterOutputs["budgets"]["forMonth"]["categories"][number];
 
@@ -188,13 +190,19 @@ function BudgetSheetBody({ row, month, onDone }: { row: BudgetRow; month: string
   );
   const amount = Number(draft);
   const valid = draft.trim() !== "" && Number.isFinite(amount) && amount >= 0;
-  const peak = Math.max(1, ...(history ?? []).flatMap((h) => [h.spent, h.limit ?? 0]));
   const error = upsert.error ?? remove.error;
 
   return (
     <>
       <SheetHeader className="p-0">
         <SheetTitle className="text-base">{row.categoryName}</SheetTitle>
+        <Link
+          to="/finance/categories/$id"
+          params={{ id: row.categoryId }}
+          className="text-sm text-muted-foreground hover:underline"
+        >
+          View category →
+        </Link>
       </SheetHeader>
 
       <section className="space-y-2">
@@ -235,21 +243,7 @@ function BudgetSheetBody({ row, month, onDone }: { row: BudgetRow; month: string
 
       <section className="space-y-1">
         <h4 className="text-xs font-semibold uppercase text-muted-foreground">Last 6 months</h4>
-        <div className="flex h-20 items-end gap-1">
-          {(history ?? []).map((h) => (
-            <div
-              key={h.monthKey}
-              className="flex flex-1 flex-col items-center gap-0.5"
-              title={`${monthLabel(h.monthKey, "MMM yyyy")}: ${usd.format(h.spent)}${h.limit !== null ? ` of ${usd.format(h.limit)}` : ""}`}
-            >
-              <div
-                className={`w-full ${h.limit !== null && h.spent > h.limit ? "bg-destructive" : "bg-primary/70"}`}
-                style={{ height: `${Math.round((h.spent / peak) * 64)}px` }}
-              />
-              <span className="text-[9px] text-muted-foreground">{monthLabel(h.monthKey, "MMMMM")}</span>
-            </div>
-          ))}
-        </div>
+        {history && <MonthlyBars data={history} color={categoryColor(row.color, row.tint)} height={140} />}
       </section>
     </>
   );

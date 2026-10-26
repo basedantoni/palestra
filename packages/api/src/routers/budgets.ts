@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq, gte, inArray, lt, lte, max } from "drizzle-orm";
+import { and, eq, lt, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { budget, category, transaction } from "@life-tracker/db/schema/index";
-import { addMonths, categoryTree, todayInTimeZone } from "@life-tracker/shared";
+import { categoryTree, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { rollUpSpend, spendByCategory, spendHistory, totalBudget } from "../lib/budget-spend";
-import { categoryTreeIds, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
+import { rollUpSpend, spendByCategory, totalBudget } from "../lib/budget-spend";
+import { loadCategoryMonthly, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { getUserTimezone } from "../lib/user-timezone";
 
 /**
@@ -110,43 +110,7 @@ export const budgetsRouter = router({
         months: z.number().int().min(1).max(24).default(6),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const monthKeys = Array.from({ length: input.months }, (_, i) =>
-        addMonths(input.monthKey, i - input.months + 1),
-      );
-      const first = monthKeys[0]!;
-      const limits = await db
-        .select({ monthKey: budget.monthKey, limitAmount: budget.limitAmount })
-        .from(budget)
-        .where(
-          and(
-            eq(budget.userId, userId),
-            eq(budget.categoryId, input.categoryId),
-            gte(budget.monthKey, first),
-            lte(budget.monthKey, input.monthKey),
-          ),
-        );
-      const categoryIds = await categoryTreeIds(userId, input.categoryId);
-      const txns = await db
-        .select(spendColumns)
-        .from(transaction)
-        .where(
-          and(
-            eq(transaction.userId, userId),
-            inArray(transaction.categoryId, categoryIds),
-            ...monthRange(first, input.monthKey),
-          ),
-        );
-
-      const spent = spendHistory(txns, categoryIds, monthKeys);
-      const limitByMonth = new Map(limits.map((l) => [l.monthKey, l.limitAmount]));
-      return monthKeys.map((monthKey, i) => ({
-        monthKey,
-        spent: spent[i]!,
-        limit: limitByMonth.get(monthKey) ?? null,
-      }));
-    }),
+    .query(({ ctx, input }) => loadCategoryMonthly(ctx.session.user.id, input.categoryId, input.monthKey, input.months)),
 
   /**
    * What "Copy limits" would do for a month: the latest earlier month with

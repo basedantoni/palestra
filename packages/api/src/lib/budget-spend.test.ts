@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { rollUpSpend, spendByCategory, spendHistory, totalBudget } from "./budget-spend";
+import { categoryMonthly, rollUpSpend, spendByCategory, spendHistory, totalBudget } from "./budget-spend";
 
 describe("spend rules", () => {
   const txns = [
@@ -112,5 +112,38 @@ describe("totalBudget", () => {
 
   it("is zero with no budgets", () => {
     expect(totalBudget([], categories)).toEqual({ limitAmount: 0, spent: 0 });
+  });
+});
+
+describe("categoryMonthly", () => {
+  const txns = [
+    // A parent's own spend and its Subcategory's, both in August
+    { categoryId: "fun", amount: 10, flow: "expense", excluded: false, date: new Date("2026-08-03T00:00:00Z") },
+    { categoryId: "golf", amount: 120.5, flow: "expense", excluded: false, date: new Date("2026-08-31T00:00:00Z") },
+    // the 1st of October belongs to October, not September
+    { categoryId: "golf", amount: 40, flow: "expense", excluded: false, date: new Date("2026-10-01T00:00:00Z") },
+    // excluded, income, and another category's spend → ignored
+    { categoryId: "fun", amount: 99, flow: "expense", excluded: true, date: new Date("2026-08-03T00:00:00Z") },
+    { categoryId: "fun", amount: -500, flow: "income", excluded: false, date: new Date("2026-08-03T00:00:00Z") },
+    { categoryId: "food", amount: 77, flow: "expense", excluded: false, date: new Date("2026-08-03T00:00:00Z") },
+    // before the window → ignored
+    { categoryId: "fun", amount: 15, flow: "expense", excluded: false, date: new Date("2026-07-31T00:00:00Z") },
+  ] as const;
+
+  it("buckets the category tree's spend into the months ending at monthKey, with each month's limit", () => {
+    const limits = [
+      { monthKey: "2026-08", limitAmount: 100 },
+      { monthKey: "2026-10", limitAmount: 150 },
+    ];
+
+    expect(categoryMonthly([...txns], ["fun", "golf"], limits, "2026-10", 3)).toEqual([
+      { monthKey: "2026-08", spent: 130.5, limit: 100 },
+      { monthKey: "2026-09", spent: 0, limit: null },
+      { monthKey: "2026-10", spent: 40, limit: 150 },
+    ]);
+  });
+
+  it("covers only the given category ids (a category without its Subcategories)", () => {
+    expect(categoryMonthly([...txns], ["fun"], [], "2026-08", 1)).toEqual([{ monthKey: "2026-08", spent: 10, limit: null }]);
   });
 });

@@ -5,6 +5,7 @@
  * calendar month. No materialized spend table — this runs over
  * already-fetched rows.
  */
+import { addMonths } from "@life-tracker/shared";
 
 export type TransactionFlow = "income" | "expense" | "transfer";
 
@@ -55,6 +56,24 @@ export function spendHistory(transactions: SpendTransaction[], categoryIds: stri
     byMonth.set(month, (byMonth.get(month) ?? 0) + t.amount);
   }
   return monthKeys.map((m) => byMonth.get(m) ?? 0);
+}
+
+/**
+ * The `months` months ending at `monthKey`, oldest first: the spend of
+ * `categoryIds` together (a category, or a Parent Category with its
+ * Subcategories) and that month's limit, null when it has none.
+ */
+export function categoryMonthly(
+  transactions: SpendTransaction[],
+  categoryIds: string[],
+  limits: Array<{ monthKey: string; limitAmount: number }>,
+  monthKey: string,
+  months: number,
+): Array<{ monthKey: string; spent: number; limit: number | null }> {
+  const monthKeys = Array.from({ length: months }, (_, i) => addMonths(monthKey, i - months + 1));
+  const spent = spendHistory(transactions, categoryIds, monthKeys);
+  const limitByMonth = new Map(limits.map((l) => [l.monthKey, l.limitAmount]));
+  return monthKeys.map((m, i) => ({ monthKey: m, spent: spent[i]!, limit: limitByMonth.get(m) ?? null }));
 }
 
 /** Where a category sits in the two-level tree: top level (parentId null) or a Subcategory. */
