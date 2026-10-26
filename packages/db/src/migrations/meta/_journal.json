@@ -323,6 +323,13 @@
       "when": 1792978187195,
       "tag": "0045_transaction_reviewed",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793033657014,
+      "tag": "0046_transaction_splits",
+      "breakpoints": true
     }
   ]
 }

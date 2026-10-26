@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { type SQL, and, eq, inArray, isNull, or } from "drizzle-orm";
+import { type SQL, and, eq, inArray, isNull, not, or } from "drizzle-orm";
 
 import { db } from "@life-tracker/db";
 import { bankCategoryMapping, category, rule, transaction } from "@life-tracker/db/schema/index";
@@ -21,6 +21,7 @@ import {
   flowTakesNoCategory,
   ruleRecategorizations,
 } from "./rules";
+import { hasSplits } from "./counts-in-totals-sql";
 import { SEED_CATEGORIES, seedBankCategoryMapping, seedCategoryColor, seedCategoryIcon } from "./category-seed";
 
 type Db = typeof db;
@@ -129,6 +130,9 @@ const categorizableColumns = {
   transferPairId: transaction.transferPairId,
 };
 
+/** Neither a Split nor split: Rules and the Default Category never touch either (ADR 0007). */
+export const notSplit = and(isNull(transaction.parentTransactionId), not(hasSplits));
+
 /**
  * The user's rows of one Bank Category, for remapping it. Manual ones included:
  * `bankCategoryRecategorizations` skips them, and `remapMayCategorize` guards the write.
@@ -141,7 +145,7 @@ export function loadBankCategoryTransactions(
   return conn
     .select(categorizableColumns)
     .from(transaction)
-    .where(and(eq(transaction.userId, userId), eq(transaction.plaidCategoryPrimary, bankCategory)));
+    .where(and(eq(transaction.userId, userId), eq(transaction.plaidCategoryPrimary, bankCategory), notSplit));
 }
 
 /** A rule may set these: automatic, or a blank (Uncategorized) Manual Category (ADR 0004). */
@@ -161,7 +165,7 @@ export function loadRuleApplicableTransactions(conn: Conn, userId: string): Prom
   return conn
     .select(categorizableColumns)
     .from(transaction)
-    .where(and(eq(transaction.userId, userId), or(ruleMayCategorize, ruleMaySetFlow)));
+    .where(and(eq(transaction.userId, userId), notSplit, or(ruleMayCategorize, ruleMaySetFlow)));
 }
 
 /** Transactions whose category or flow changes once `candidate` is saved against `rules`. */
@@ -180,7 +184,7 @@ export async function planRuleApply(
  * Write recategorizations: one UPDATE per distinct change (category, flow or
  * both), scoped to the user and re-checking eligibility for each field it
  * sets (`mayCategorize`, a rule's by default; a rule's flow guard) so a
- * concurrent hand-pick wins. A filled blank Manual Category becomes automatic;
+ * concurrent hand-pick or split wins. A filled blank Manual Category becomes automatic;
  * an income or transfer flow clears any category.
  * Returns how many transactions were actually updated.
  */
@@ -207,6 +211,7 @@ export async function applyRecategorizations(
       .where(
         and(
           eq(transaction.userId, userId),
+          notSplit,
           setsCategory ? mayCategorize : undefined,
           flow ? ruleMaySetFlow : undefined,
           inArray(transaction.id, group.map((c) => c.id)),

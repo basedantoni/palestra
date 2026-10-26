@@ -12,6 +12,10 @@
  *  - `matchInternalTransfers` links transfer legs via `transferPairId`, by
  *    each row's final flow
  *
+ * A removed split parent takes its Splits with it (FK cascade); a changed
+ * amount, or a flow off expense, on one undoes the split, and a new date moves
+ * its Splits too (ADR 0007).
+ *
  * Accounts the app has no row for (opened after linking, or shared during a
  * reconnect) are created first, unless the user removed them (KOI-317). Their
  * transactions were skipped by earlier syncs while the cursor moved on, so
@@ -47,8 +51,10 @@ import {
   applyTransactionSyncDelta,
 } from "./plaid-sync-transform";
 import { classifyFlow, matchInternalTransfers } from "./transaction-flow";
+import { hasSplits } from "./counts-in-totals-sql";
 import { NO_CATEGORY_FLOWS, resolveCategory, resolveFlow } from "./rules";
-import { loadBankCategoryMapping, loadMatchableRules, ruleMaySetFlow } from "./rules-db";
+import { type Conn, loadBankCategoryMapping, loadMatchableRules, ruleMaySetFlow } from "./rules-db";
+import { toCents } from "./splits";
 
 const TRANSFER_MATCH_WINDOW_DAYS = 3;
 
@@ -133,6 +139,27 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
   const mapping = await loadBankCategoryMapping(db, userId);
   const rules = await loadMatchableRules(db, userId);
 
+  // Split parents in this delta, by Plaid id: the loop below keeps their Splits in step.
+  const splitParents = new Map<string | null, { id: string; amount: number; flowOverridden: boolean }>();
+  if (mutations.upserts.length > 0) {
+    const rows = await db
+      .select({
+        id: transaction.id,
+        plaidTransactionId: transaction.plaidTransactionId,
+        amount: transaction.amount,
+        flowOverridden: transaction.flowOverridden,
+      })
+      .from(transaction)
+      .where(
+        and(
+          eq(transaction.userId, userId),
+          inArray(transaction.plaidTransactionId, mutations.upserts.map((up) => up.plaidTransactionId)),
+          hasSplits,
+        ),
+      );
+    for (const r of rows) splitParents.set(r.plaidTransactionId, r);
+  }
+
   // Transaction upserts — fold in flow (bank classification, then flow Rules) +
   // category resolution. The category only applies on insert: a known
   // transaction keeps its own.
@@ -145,50 +172,75 @@ export async function syncPlaidItem(plaidItemId: string): Promise<{
       transferPairId: null,
     });
     const categoryId = resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping, flow);
-    await db
-      .insert(transaction)
-      .values({
-        id: randomUUID(),
-        userId,
-        accountId,
-        plaidTransactionId: up.plaidTransactionId,
-        amount: up.amount,
-        date: up.date,
-        name: up.name,
-        merchantName: up.merchantName,
-        pending: up.pending,
-        flow,
-        plaidCategoryPrimary: up.plaidCategoryPrimary,
-        plaidCategoryDetailed: up.plaidCategoryDetailed,
-        categoryId,
-        isoCurrencyCode: up.isoCurrencyCode,
-        // Posted rows start Unreviewed (KOI-342). A pending row posts under a new
-        // Plaid id, arriving as a new unreviewed row, so the pending one skips the queue.
-        reviewed: up.pending,
-      })
-      .onConflictDoUpdate({
-        target: transaction.plaidTransactionId,
-        set: {
+    // Splits that no longer sum to their parent, or an unlocked parent the bank moves off expense,
+    // can't be trusted (ADR 0007): delete them, and the parent goes back to Unreviewed with its
+    // automatic category, as for its flow below (a locked flow stays the parent's expense). A split
+    // parent is never paired, so only a hand-set flow locks it.
+    const splitParent = splitParents.get(up.plaidTransactionId);
+    const unsplit =
+      splitParent !== undefined &&
+      (toCents(splitParent.amount) !== toCents(up.amount) || (!splitParent.flowOverridden && flow !== "expense"));
+    const upsert = (conn: Conn) =>
+      conn
+        .insert(transaction)
+        .values({
+          id: randomUUID(),
+          userId,
+          accountId,
+          plaidTransactionId: up.plaidTransactionId,
           amount: up.amount,
           date: up.date,
           name: up.name,
           merchantName: up.merchantName,
           pending: up.pending,
-          // A user override wins over Plaid's re-classification (ADR 0001), and
-          // a Transfer Pair's legs keep theirs: only an unlocked row takes the new flow.
-          flow: sql`case when ${ruleMaySetFlow} then excluded.flow else ${transaction.flow} end`,
-          // The category follows that flow, as `categoryOnFlowChange` has it (KOI-341): none
-          // off expense; back on expense, the insert's resolved category unless it's Manual.
-          categoryId: sql`case
-            when not ${ruleMaySetFlow} then ${transaction.categoryId}
-            when ${inArray(sql`excluded.flow`, NO_CATEGORY_FLOWS)} then null
-            when ${inArray(transaction.flow, NO_CATEGORY_FLOWS)} and not ${transaction.categoryOverridden} then excluded.category_id
-            else ${transaction.categoryId} end`,
+          flow,
           plaidCategoryPrimary: up.plaidCategoryPrimary,
           plaidCategoryDetailed: up.plaidCategoryDetailed,
+          categoryId,
           isoCurrencyCode: up.isoCurrencyCode,
-        },
+          // Posted rows start Unreviewed (KOI-342). A pending row posts under a new
+          // Plaid id, arriving as a new unreviewed row, so the pending one skips the queue.
+          reviewed: up.pending,
+        })
+        .onConflictDoUpdate({
+          target: transaction.plaidTransactionId,
+          set: {
+            amount: up.amount,
+            date: up.date,
+            name: up.name,
+            merchantName: up.merchantName,
+            pending: up.pending,
+            // A user override wins over Plaid's re-classification (ADR 0001), and
+            // a Transfer Pair's legs keep theirs: only an unlocked row takes the new flow.
+            flow: sql`case when ${ruleMaySetFlow} then excluded.flow else ${transaction.flow} end`,
+            // The category follows that flow, as `categoryOnFlowChange` has it (KOI-341): none
+            // off expense; back on expense, the insert's resolved category unless it's Manual.
+            categoryId: sql`case
+              when not ${ruleMaySetFlow} then ${transaction.categoryId}
+              when ${inArray(sql`excluded.flow`, NO_CATEGORY_FLOWS)} then null
+              when ${inArray(transaction.flow, NO_CATEGORY_FLOWS)} and not ${transaction.categoryOverridden} then excluded.category_id
+              else ${transaction.categoryId} end`,
+            plaidCategoryPrimary: up.plaidCategoryPrimary,
+            plaidCategoryDetailed: up.plaidCategoryDetailed,
+            isoCurrencyCode: up.isoCurrencyCode,
+            ...(unsplit && {
+              categoryId: sql`case when ${ruleMaySetFlow} then excluded.category_id
+                else ${resolveCategory(up.name, up.plaidCategoryPrimary, rules, mapping, "expense")}::uuid end`,
+              categoryOverridden: false,
+              reviewed: false,
+            }),
+          },
+        });
+    if (splitParent) {
+      await db.transaction(async (tx) => {
+        const ofParent = eq(transaction.parentTransactionId, splitParent.id);
+        // Splits share their parent's date.
+        await (unsplit ? tx.delete(transaction).where(ofParent) : tx.update(transaction).set({ date: up.date }).where(ofParent));
+        await upsert(tx);
       });
+    } else {
+      await upsert(db);
+    }
   }
 
   if (mutations.deletes.length > 0) {
