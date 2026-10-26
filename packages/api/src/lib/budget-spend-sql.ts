@@ -1,4 +1,4 @@
-/** Budget Spend query pieces (month key input, transaction columns, month date bounds, category tree), shared by the budgets and TCG fund routers. */
+/** Budget Spend query pieces (month key input, transaction columns, month date bounds, category tree), shared by the budgets, finance and TCG fund routers. */
 import { and, eq, gte, lt, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 

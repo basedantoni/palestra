@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AccountsList } from "@/components/finance/accounts-list";
 import { BudgetGrid } from "@/components/finance/budget-grid";
 import { CashFlowChart, CashFlowTiles } from "@/components/finance/cash-flow";
+import { MonthPaceChart } from "@/components/finance/month-pace";
 import { GoalsList } from "@/components/finance/goals-list";
 import { NetWorthChart, NetWorthTile } from "@/components/finance/net-worth";
 import { SpendByCategory } from "@/components/finance/spend-by-category";
@@ -109,6 +110,11 @@ function FinanceOverview() {
         </Link>
       )}
       {/* No accounts linked: charts stay hidden; the Connect button above is the CTA. */}
+      {hasAccounts && (
+        <Section title="This month">
+          <MonthPaceChart monthKey={today.slice(0, 7)} />
+        </Section>
+      )}
       {hasAccounts && (netWorth.data || cashFlow.data) && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {netWorth.data && <NetWorthTile data={netWorth.data} />}

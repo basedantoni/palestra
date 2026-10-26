@@ -34,7 +34,7 @@ function addDays(day: string, n: number): string {
   d.setUTCDate(d.getUTCDate() + n);
   return formatDay(d);
 }
-function daysInMonth(year: number, month1: number): number {
+export function daysInMonth(year: number, month1: number): number {
   return new Date(Date.UTC(year, month1, 0)).getUTCDate();
 }
 
