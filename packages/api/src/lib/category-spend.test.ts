@@ -3,182 +3,179 @@ import { describe, expect, it } from "vitest";
 import { resolvePeriodBounds } from "@life-tracker/shared";
 
 import { cashFlow } from "./cash-flow";
-import { categorySpend, type CategorySpendRow, type CategorySpendTransaction, donutSlices } from "./category-spend";
+import { type CategorySpendTransaction, categorySpendTree, type SpendCategory } from "./category-spend";
 
 const tx = (
   date: string,
   amount: number,
-  category: [id: string, name: string, color?: string] | null,
+  categoryId: string | null,
   flow: CategorySpendTransaction["flow"] = "expense",
   excluded = false,
-): CategorySpendTransaction => ({
-  date: new Date(`${date}T00:00:00Z`),
-  amount,
-  flow,
-  excluded,
-  categoryId: category?.[0] ?? null,
-  categoryName: category?.[1] ?? null,
-  categoryColor: category?.[2] ?? null,
-  categoryIcon: null,
+): CategorySpendTransaction => ({ date: new Date(`${date}T00:00:00Z`), amount, flow, excluded, categoryId });
+
+const cat = (id: string, name: string, extra: Partial<SpendCategory> = {}): SpendCategory => ({
+  id,
+  name,
+  parentId: null,
+  color: null,
+  icon: null,
+  ...extra,
 });
 
-const groceries: [string, string, string] = ["c-groc", "Groceries", "aqua"];
-const dining: [string, string] = ["c-dine", "Dining"];
-const shopping: [string, string] = ["c-shop", "Shopping"];
+// In manual order: Entertainment, then its Subcategories Golf and Movies.
+const categories = [
+  cat("groc", "Groceries", { color: "aqua", icon: "shopping-cart" }),
+  cat("ent", "Entertainment", { color: "violet" }),
+  cat("golf", "Golf", { parentId: "ent" }),
+  cat("movies", "Movies", { parentId: "ent" }),
+  cat("dine", "Dining"),
+];
 
 const today = "2026-06-20";
 const june = resolvePeriodBounds({ kind: "month", month: "2026-06" }, today);
 
-describe("categorySpend", () => {
-  it("totals a month's spend per category, largest first, uncategorized as its own row", () => {
-    const rows = categorySpend(
+describe("categorySpendTree", () => {
+  it("rolls Subcategories into their Parent Category, ranks by total, Uncategorized as its own row", () => {
+    const tree = categorySpendTree(
       [
-        tx("2026-06-02", 50, dining),
-        tx("2026-06-03", 120, groceries),
-        tx("2026-06-20", 30, groceries),
-        tx("2026-06-21", 100, null),
-        tx("2026-05-31", 999, groceries), // previous month
-        tx("2026-06-05", 999, dining, "expense", true), // excluded
-        tx("2026-06-06", 999, dining, "transfer"),
+        tx("2026-06-02", 50, "dine"),
+        tx("2026-06-03", 120, "groc"),
+        tx("2026-06-04", 30, "ent"), // the parent's own
+        tx("2026-06-05", 80, "golf"),
+        tx("2026-06-06", 90, "movies"),
+        tx("2026-06-07", 10, "golf"),
+        tx("2026-06-08", 60, null),
+      ],
+      categories,
+      june,
+    );
+    expect(tree).toEqual([
+      {
+        categoryId: "ent",
+        name: "Entertainment",
+        color: "violet",
+        tint: null,
+        icon: null,
+        total: 210,
+        own: 30,
+        children: [
+          // Tints follow manual sibling order (Golf first), not the ranking.
+          { categoryId: "golf", name: "Golf", color: "violet", tint: 25, icon: null, total: 90, own: 90, children: [] },
+          { categoryId: "movies", name: "Movies", color: "violet", tint: 40, icon: null, total: 90, own: 90, children: [] },
+        ],
+      },
+      { categoryId: "groc", name: "Groceries", color: "aqua", tint: null, icon: "shopping-cart", total: 120, own: 120, children: [] },
+      { categoryId: null, name: "Uncategorized", color: null, tint: null, icon: null, total: 60, own: 60, children: [] },
+      { categoryId: "dine", name: "Dining", color: null, tint: null, icon: null, total: 50, own: 50, children: [] },
+    ]);
+  });
+});
+
+describe("categorySpendTree filtering and refunds", () => {
+  it("counts only the period's non-excluded expense spend", () => {
+    const tree = categorySpendTree(
+      [
+        tx("2026-06-03", 120, "groc"),
+        tx("2026-05-31", 999, "groc"), // previous month
+        tx("2026-06-05", 999, "dine", "expense", true), // excluded or split
+        tx("2026-06-06", 999, "dine", "transfer"),
         tx("2026-06-01", -3000, null, "income"),
       ],
+      categories,
       june,
     );
-    expect(rows).toEqual([
-      { categoryId: "c-groc", name: "Groceries", color: "aqua", icon: null, spend: 150, share: 0.5 },
-      { categoryId: null, name: "Uncategorized", color: null, icon: null, spend: 100, share: 1 / 3 },
-      { categoryId: "c-dine", name: "Dining", color: null, icon: null, spend: 50, share: 1 / 6 },
-    ]);
+    expect(tree.map((n) => [n.name, n.total])).toEqual([["Groceries", 120]]);
   });
 
-  it("nets refunds in, so a refund month leaves a category negative and last", () => {
-    const rows = categorySpend(
+  it("nets refunds in, leaving a category negative and last, and drops what nets to zero", () => {
+    const tree = categorySpendTree(
       [
-        tx("2026-06-02", 200, groceries),
-        tx("2026-06-04", 40, shopping),
-        tx("2026-06-09", -90, shopping), // refund of a May purchase
-        tx("2026-06-10", 25, dining),
-        tx("2026-06-11", -25, dining), // fully refunded: nothing to show
+        tx("2026-06-02", 200, "groc"),
+        tx("2026-06-04", 40, "golf"),
+        tx("2026-06-09", -90, "golf"), // refund of a May purchase
+        tx("2026-06-10", 25, "dine"),
+        tx("2026-06-11", -25, "dine"), // fully refunded: nothing to show
+        tx("2026-06-12", 15, "movies"),
+        tx("2026-06-13", -15, "movies"),
       ],
+      categories,
       june,
     );
-    expect(rows.map((r) => [r.name, r.spend])).toEqual([
-      ["Groceries", 200],
-      ["Shopping", -50],
+    expect(tree).toMatchObject([
+      { name: "Groceries", total: 200 },
+      { name: "Entertainment", total: -50, own: 0, children: [{ name: "Golf", total: -50 }] },
     ]);
-    // Shares are of the positive categories' spend, so they never exceed 100%.
-    expect(rows.map((r) => r.share)).toEqual([1, -0.25]);
+    expect(tree).toHaveLength(2);
   });
 
-  it("has no share when no category has positive spend", () => {
-    expect(categorySpend([tx("2026-06-09", -90, shopping)], june)).toEqual([
-      { categoryId: "c-shop", name: "Shopping", color: null, icon: null, spend: -90, share: null },
+  it("ranks Subcategories largest first within their parent", () => {
+    const tree = categorySpendTree([tx("2026-06-04", 5, "golf"), tx("2026-06-05", 9, "movies")], categories, june);
+    expect(tree[0]?.children.map((c) => [c.name, c.total])).toEqual([
+      ["Movies", 9],
+      ["Golf", 5],
     ]);
   });
 
-  it("returns no rows for a month without spend", () => {
-    expect(categorySpend([tx("2026-05-09", 90, shopping)], june)).toEqual([]);
+  it("gives an uncolored parent's Subcategories no color or tint", () => {
+    const tree = categorySpendTree(
+      [tx("2026-06-04", 5, "tea")],
+      [cat("drinks", "Drinks"), cat("tea", "Tea", { parentId: "drinks" })],
+      june,
+    );
+    expect(tree).toMatchObject([{ name: "Drinks", total: 5, own: 0, children: [{ name: "Tea", color: null, tint: null }] }]);
   });
 
-  it("adds up to the month's spend in cashFlow", () => {
+  it("adds up to the period's spend in cashFlow", () => {
     const txns = [
-      tx("2026-06-01", 10.1, groceries),
-      tx("2026-06-02", 20.2, groceries),
+      tx("2026-06-01", 10.1, "groc"),
+      tx("2026-06-02", 20.2, "golf"),
       tx("2026-06-03", 0.3, null),
-      tx("2026-06-04", 33.33, dining),
-      tx("2026-06-05", -12.07, dining),
-      tx("2026-06-06", 7.77, shopping, "expense", true),
+      tx("2026-06-04", 33.33, "ent"),
+      tx("2026-06-05", -12.07, "movies"),
+      tx("2026-06-06", 7.77, "dine", "expense", true),
       tx("2026-06-07", 500, null, "transfer"),
       tx("2026-06-08", 41.99, null, null),
     ];
-    const total = categorySpend(txns, june).reduce((s, r) => s + r.spend, 0);
+    const total = categorySpendTree(txns, categories, june).reduce((s, n) => s + n.total, 0);
     const { months } = cashFlow(txns, { currentMonth: "2026-06", months: 1, firstMonth: "2026-06" });
     expect(Math.round(total * 100) / 100).toBe(months[0]?.spend);
     expect(months[0]?.spend).toBe(51.86);
   });
 });
 
-describe("categorySpend over a period", () => {
+describe("categorySpendTree over a period", () => {
   const txns = [
-    tx("2025-12-31", 1000, groceries), // before this year
-    tx("2026-01-01", 10, groceries),
-    tx("2026-03-22", 5, dining), // the day before the last 90 days
-    tx("2026-03-23", 20, dining), // first of the last 90 days
+    tx("2025-12-31", 1000, "groc"), // before this year
+    tx("2026-01-01", 10, "groc"),
+    tx("2026-03-22", 5, "dine"), // the day before the last 90 days
+    tx("2026-03-23", 20, "dine"), // first of the last 90 days
     tx("2026-05-15", 40, null),
-    tx("2026-06-20", 2, groceries), // today
+    tx("2026-06-20", 2, "groc"), // today
   ];
+  const totals = (period: Parameters<typeof resolvePeriodBounds>[0]) =>
+    categorySpendTree(txns, categories, resolvePeriodBounds(period, today)).map((n) => [n.name, n.total]);
 
   it("includes both ends of a preset's range", () => {
-    expect(categorySpend(txns, resolvePeriodBounds({ kind: "preset", preset: "90d" }, today))).toMatchObject([
-      { name: "Uncategorized", spend: 40 },
-      { name: "Dining", spend: 20 },
-      { name: "Groceries", spend: 2 },
+    expect(totals({ kind: "preset", preset: "90d" })).toEqual([
+      ["Uncategorized", 40],
+      ["Dining", 20],
+      ["Groceries", 2],
     ]);
   });
 
   it("starts year to date on January 1st", () => {
-    const rows = categorySpend(txns, resolvePeriodBounds({ kind: "preset", preset: "ytd" }, today));
-    expect(rows.map((r) => [r.name, r.spend])).toEqual([
+    expect(totals({ kind: "preset", preset: "ytd" })).toEqual([
       ["Uncategorized", 40],
       ["Dining", 25],
       ["Groceries", 12],
     ]);
   });
 
-  it("covers every transaction for all time, adding up to all-time spend in cashFlow", () => {
-    const rows = categorySpend(txns, resolvePeriodBounds({ kind: "all" }, today));
-    expect(rows.map((r) => [r.name, r.spend])).toEqual([
+  it("covers every transaction for all time", () => {
+    expect(totals({ kind: "all" })).toEqual([
       ["Groceries", 1012],
       ["Uncategorized", 40],
       ["Dining", 25],
     ]);
-    const { months } = cashFlow(txns, { currentMonth: "2026-06", months: null, firstMonth: "2025-12" });
-    expect(months.reduce((s, m) => s + m.spend, 0)).toBe(1077);
-  });
-});
-
-const row = (name: string, spend: number, categoryId: string | null = `c-${name}`): CategorySpendRow => ({
-  categoryId,
-  name,
-  color: null,
-  icon: null,
-  spend,
-  share: null,
-});
-
-describe("donutSlices", () => {
-  it("keeps the top 6 categories and folds the rest into Other", () => {
-    const rows = [
-      row("a", 800),
-      row("b", 700),
-      row("Uncategorized", 600, null),
-      row("c", 500),
-      row("d", 400),
-      row("e", 300),
-      row("f", 20),
-      row("g", 10),
-    ];
-    expect(donutSlices(rows).map((s) => [s.name, s.spend])).toEqual([
-      ["a", 800],
-      ["b", 700],
-      ["Uncategorized", 600],
-      ["c", 500],
-      ["d", 400],
-      ["e", 300],
-      ["Other", 30],
-    ]);
-  });
-
-  it("leaves out negative categories, with no Other when nothing is left over", () => {
-    expect(donutSlices([row("a", 100), row("b", 50), row("refunded", -40)])).toEqual([
-      { key: "c-a", name: "a", color: null, spend: 100 },
-      { key: "c-b", name: "b", color: null, spend: 50 },
-    ]);
-  });
-
-  it("gives Uncategorized and Other distinct keys", () => {
-    const rows = ["a", "b", "c", "d", "e", "f"].map((n, i) => row(n, 100 - i));
-    const keys = donutSlices([row("Uncategorized", 200, null), ...rows]).map((s) => s.key);
-    expect(keys).toEqual(["uncategorized", "c-a", "c-b", "c-c", "c-d", "c-e", "other"]);
   });
 });
