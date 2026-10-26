@@ -77,7 +77,7 @@ describe("transactions.setCategory", () => {
     await makeCaller().transactions.setCategory({ id: TXN_ID, categoryId: CAT_ID });
 
     const [update] = transactionUpdates();
-    expect(update!.set).toEqual({ categoryId: CAT_ID, categoryOverridden: true });
+    expect(update!.set).toEqual({ categoryId: CAT_ID, categoryOverridden: true, reviewed: true });
     // Income and transfer rows carry no category (KOI-341).
     expect(update!.where).toEqual([TXN_ID, USER_ID, "income", "transfer"]);
   });
@@ -86,7 +86,7 @@ describe("transactions.setCategory", () => {
     await makeCaller().transactions.setCategory({ id: TXN_ID, categoryId: null });
 
     const [update] = transactionUpdates();
-    expect(update!.set).toEqual({ categoryId: null, categoryOverridden: true });
+    expect(update!.set).toEqual({ categoryId: null, categoryOverridden: true, reviewed: true });
   });
 });
 

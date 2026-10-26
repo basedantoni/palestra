@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronDown, ChevronRight, StickyNote } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, Split, StickyNote } from "lucide-react";
 
 import { buildFeedDays, type FeedEntry, type TransactionPeriod } from "@life-tracker/shared";
 import { flowTakesNoCategory, suggestPattern, validatePattern } from "@life-tracker/api/lib/rules";
+import { splitIneligibility } from "@life-tracker/api/lib/splits";
 import { TRANSACTION_FLOWS, type TransactionFlow } from "@life-tracker/api/lib/transaction-flow";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { CategoryPicker } from "./category-picker";
 import { FLOW_LABELS, RuleForm, type RuleSuggestion } from "./rule-list";
+import { SplitEditor } from "./split-editor";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -33,6 +35,8 @@ export type TransactionFilters = {
   accountIds?: string[];
   /** null = Uncategorized. */
   categoryId?: string | null;
+  /** false = the Unreviewed queue. */
+  reviewed?: boolean;
 };
 
 type Txn = RouterOutputs["transactions"]["list"]["items"][number];
@@ -40,7 +44,8 @@ type Txn = RouterOutputs["transactions"]["list"]["items"][number];
 /**
  * Day-grouped transaction ledger (KOI-277/278/279). Rows expand in place to
  * edit the note, category and budget exclusion; matched transfer legs collapse
- * into one row; "Load more" pages back through history.
+ * into one row; a split transaction lists its Splits, which open its editor
+ * (KOI-343); "Load more" pages back through history.
  */
 export function TransactionFeed(props: {
   pageSize?: number;
@@ -144,6 +149,7 @@ function FeedItem({
   const open = expanded === key;
 
   if (entry.kind === "pair") {
+    const unreviewedLegs = [entry.out, entry.in].filter((leg) => !leg.reviewed);
     return (
       <li className="border-l-2 border-l-blue-500">
         <button
@@ -154,6 +160,7 @@ function FeedItem({
         >
           <span className="flex min-w-0 items-center gap-2">
             {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+            {unreviewedLegs.length > 0 && <UnreviewedDot />}
             <span className="truncate font-medium">{entry.out.accountName}</span>
             <ArrowRight className="size-3.5 shrink-0 text-blue-600" aria-label="to" />
             <span className="truncate font-medium">{entry.in.accountName}</span>
@@ -173,7 +180,10 @@ function FeedItem({
                 </span>
               </li>
             ))}
-            <li className="pt-1 text-[10px]">Matched transfer — not counted as spending.</li>
+            <li className="flex items-center justify-between gap-3 pt-1 text-[10px]">
+              Matched transfer — not counted as spending.
+              {unreviewedLegs.length > 0 && <MarkReviewedButton ids={unreviewedLegs.map((leg) => leg.id)} />}
+            </li>
           </ul>
         )}
       </li>
@@ -181,6 +191,7 @@ function FeedItem({
   }
 
   const t = entry.txn;
+  const isSplit = t.splits.length > 0;
   const edge =
     t.flow === "income" ? "border-l-green-500" : t.flow === "transfer" ? "border-l-blue-500" : "border-l-transparent";
   return (
@@ -193,11 +204,17 @@ function FeedItem({
       >
         <span className="flex min-w-0 flex-col">
           <span className="flex items-center gap-1.5 truncate text-sm font-medium">
+            {!t.reviewed && <UnreviewedDot />}
             {t.merchantName ?? t.name}
             {t.note && <StickyNote className="size-3 shrink-0 text-amber-500" aria-label="Has note" />}
           </span>
           <span className="truncate text-xs text-muted-foreground">
-            {t.flow && flowTakesNoCategory(t.flow) ? FLOW_LABELS[t.flow] : (t.categoryName ?? "Uncategorized")} · {t.accountName}
+            {isSplit
+              ? `Split in ${t.splits.length}`
+              : t.flow && flowTakesNoCategory(t.flow)
+                ? FLOW_LABELS[t.flow]
+                : (t.categoryName ?? "Uncategorized")}{" "}
+            · {t.accountName}
             {t.pending ? " · pending" : ""}
             {t.excluded ? " · excluded" : ""}
           </span>
@@ -207,6 +224,27 @@ function FeedItem({
           {formatAmount(t.amount)}
         </span>
       </button>
+      {isSplit && (
+        // Each Split opens its parent's editor: they're edited together.
+        <ul className="pb-2 pl-8 pr-4">
+          {t.splits.map((s) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => !open && onToggle(key)}
+                className={`flex w-full items-center justify-between gap-3 py-0.5 text-left text-xs text-muted-foreground ${s.excluded ? "opacity-50" : ""}`}
+              >
+                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                  <Split className="size-3 shrink-0" aria-hidden />
+                  {s.categoryName ?? "Uncategorized"}
+                  {s.note && <span className="truncate italic">· “{s.note}”</span>}
+                </span>
+                <span className="shrink-0 tabular-nums">{formatAmount(s.amount)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {open && (
         <div className="border-t border-border bg-muted/30 px-4 py-3">
           <TransactionEditor txn={t} onRecategorized={onRecategorized} />
@@ -216,6 +254,22 @@ function FeedItem({
   );
 }
 
+/** Marks an Unreviewed row in the feed. */
+export function UnreviewedDot() {
+  return <span role="img" aria-label="Unreviewed" title="Unreviewed" className="size-2 shrink-0 rounded-full bg-primary" />;
+}
+
+/** Clear Unreviewed without editing anything: a row, or both legs of a Transfer Pair. */
+function MarkReviewedButton({ ids }: { ids: string[] }) {
+  const markReviewed = useMutation(
+    trpc.transactions.markReviewed.mutationOptions({ onSuccess: useInvalidateFinance() }),
+  );
+  return (
+    <Button size="xs" variant="outline" disabled={markReviewed.isPending} onClick={() => markReviewed.mutate({ ids })}>
+      Mark reviewed
+    </Button>
+  );
+}
 
 /**
  * Correct a transaction's flow, or return it to "Automatic" (Plaid-derived).
@@ -265,46 +319,74 @@ function TransactionEditor({ txn, onRecategorized }: { txn: Txn; onRecategorized
   const resetCategory = useMutation(trpc.transactions.resetCategory.mutationOptions({ onSuccess }));
   const setExcluded = useMutation(trpc.transactions.setExcluded.mutationOptions({ onSuccess }));
   const setNote = useMutation(trpc.transactions.setNote.mutationOptions({ onSuccess }));
+  const unsplit = useMutation(trpc.transactions.unsplit.mutationOptions({ onSuccess }));
+  const [splitting, setSplitting] = useState(false);
+  const isSplit = txn.splits.length > 0;
+  const canSplit = splitIneligibility(txn) === null;
+  const markReviewed = !txn.reviewed && (
+    <span className="ml-auto">
+      <MarkReviewedButton ids={[txn.id]} />
+    </span>
+  );
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
-        <FlowPicker txn={txn} />
-        {!flowTakesNoCategory(txn.flow) && (
-          <CategoryPicker
-            size="xs"
-            aria-label="Category"
-            categories={categories}
-            value={txn.categoryId ?? ""}
-            onChange={(categoryId) => setCategory.mutate({ id: txn.id, categoryId: categoryId || null })}
-            extras={[{ value: "", label: "Uncategorized", uncategorized: true }]}
-          />
-        )}
-        {txn.categoryOverridden && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            Manual ·
-            <button
-              type="button"
-              disabled={resetCategory.isPending}
-              onClick={() => resetCategory.mutate({ id: txn.id })}
-              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
-            >
-              Reset to automatic
-            </button>
-          </span>
-        )}
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={txn.excludedByHand}
-            onChange={(e) => setExcluded.mutate({ id: txn.id, excluded: e.target.checked })}
-          />
-          Exclude from totals
-        </label>
-        {txn.excluded && !txn.excludedByHand && (
-          <span className="text-xs text-muted-foreground">Excluded with its category</span>
-        )}
-      </div>
+      {splitting && <SplitEditor txn={txn} onClose={() => setSplitting(false)} />}
+      {isSplit ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="xs" variant="outline" onClick={() => setSplitting(true)}>
+            Edit split
+          </Button>
+          <Button size="xs" variant="ghost" disabled={unsplit.isPending} onClick={() => unsplit.mutate({ id: txn.id })}>
+            Unsplit
+          </Button>
+          {markReviewed}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <FlowPicker txn={txn} />
+          {!flowTakesNoCategory(txn.flow) && (
+            <CategoryPicker
+              size="xs"
+              aria-label="Category"
+              categories={categories}
+              value={txn.categoryId ?? ""}
+              onChange={(categoryId) => setCategory.mutate({ id: txn.id, categoryId: categoryId || null })}
+              extras={[{ value: "", label: "Uncategorized", uncategorized: true }]}
+            />
+          )}
+          {txn.categoryOverridden && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              Manual ·
+              <button
+                type="button"
+                disabled={resetCategory.isPending}
+                onClick={() => resetCategory.mutate({ id: txn.id })}
+                className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              >
+                Reset to automatic
+              </button>
+            </span>
+          )}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={txn.excludedByHand}
+              onChange={(e) => setExcluded.mutate({ id: txn.id, excluded: e.target.checked })}
+            />
+            Exclude from totals
+          </label>
+          {txn.excluded && !txn.excludedByHand && (
+            <span className="text-xs text-muted-foreground">Excluded with its category</span>
+          )}
+          {canSplit && (
+            <Button size="xs" variant="outline" onClick={() => setSplitting(true)}>
+              <Split /> Split
+            </Button>
+          )}
+          {markReviewed}
+        </div>
+      )}
       <textarea
         aria-label="Note"
         defaultValue={txn.note ?? ""}

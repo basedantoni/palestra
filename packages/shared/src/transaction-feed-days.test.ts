@@ -9,6 +9,7 @@ type Row = {
   flow: "income" | "expense" | "transfer" | null;
   excluded: boolean;
   transferPairId: string | null;
+  splits?: Array<{ amount: number; flow: Row["flow"]; excluded: boolean }>;
 };
 
 const row = (id: string, date: string, amount: number, extra: Partial<Row> = {}): Row => ({
@@ -39,6 +40,21 @@ describe("buildFeedDays", () => {
     ]);
 
     expect(days[0]!.spent).toBe(19.75);
+  });
+
+  it("counts a split transaction's Splits, not the transaction itself", () => {
+    const days = buildFeedDays([
+      // Its Splits count in its place, unless excluded themselves.
+      row("split", "2026-10-01", 42, {
+        splits: [
+          { amount: 30, flow: "expense", excluded: false },
+          { amount: 12, flow: "expense", excluded: true },
+        ],
+      }),
+      row("plain", "2026-10-01", 5),
+    ]);
+
+    expect(days[0]!.spent).toBe(35);
   });
 
   it("collapses both legs of a matched transfer into one pair entry where the first leg appears", () => {

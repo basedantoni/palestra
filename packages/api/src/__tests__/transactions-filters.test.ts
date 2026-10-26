@@ -67,14 +67,23 @@ describe("transactions.list filters", () => {
     ]);
   });
 
-  it("filters to uncategorized transactions when categoryId is null", async () => {
+  it("filters to uncategorized spend when categoryId is null, leaving out income and transfers", async () => {
     userTimezoneIs(null);
 
     await makeCaller().transactions.list({ period: { kind: "all" }, categoryId: null });
 
     const query = new PgDialect().sqlToQuery(mockDb.opsOn(transaction)[0]!.arg("where") as SQL);
-    expect(query.sql).toMatch(/"category_id" is null/);
-    expect(query.params).toEqual([USER_ID]);
+    expect(query.sql).toMatch(/"category_id" is null and \("transaction"."flow" is null or "transaction"."flow" not in \(\$2, \$3\)\)/);
+    expect(query.params).toEqual([USER_ID, "income", "transfer"]);
+  });
+
+  it("filters to unreviewed transactions", async () => {
+    userTimezoneIs(null);
+    const params = selectReturning([]);
+
+    await makeCaller().transactions.list({ period: { kind: "all" }, reviewed: false });
+
+    expect(params()).toEqual([USER_ID, false]);
   });
 
   it("applies no date bounds for all time and no account filter when none chosen", async () => {

@@ -1,5 +1,5 @@
 {
-  "id": "05478522-b8a0-47aa-909b-cb0f1ea0b94d",
+  "id": "66760fec-ef8a-486d-8603-73ba5825bbb6",
   "prevId": "d0b3fc31-4cde-420d-8c1c-e98b64089429",
   "version": "7",
   "dialect": "postgresql",
@@ -2835,12 +2835,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "list_id": {
-          "name": "list_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "pack_id": {
           "name": "pack_id",
           "type": "text",
@@ -2861,38 +2855,23 @@
         }
       },
       "indexes": {
-        "tcg_printing_language_listId_unique_idx": {
-          "name": "tcg_printing_language_listId_unique_idx",
-          "columns": [
-            {
-              "expression": "language",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "list_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tcg_printing_variantId_idx": {
-          "name": "tcg_printing_variantId_idx",
+        "tcg_printing_variantId_language_unique_idx": {
+          "name": "tcg_printing_variantId_language_unique_idx",
           "columns": [
             {
               "expression": "variant_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3631,6 +3610,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "reviewed": {
+          "name": "reviewed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "transfer_pair_id": {
           "name": "transfer_pair_id",
