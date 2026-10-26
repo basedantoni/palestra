@@ -28,7 +28,7 @@ export function calendarMonthOf(date: Date): string {
 }
 
 /** Counts toward budgets: a non-excluded expense with a category. */
-function isBudgetSpend(t: SpendTransaction): t is SpendTransaction & { categoryId: string } {
+export function isBudgetSpend(t: SpendTransaction): t is SpendTransaction & { categoryId: string } {
   return t.flow === "expense" && !t.excluded && t.categoryId !== null;
 }
 

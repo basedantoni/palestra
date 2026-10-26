@@ -9,8 +9,8 @@ import { CurrencyTooltip, signedUsd, usd } from "./currency-tooltip";
 
 export type { Timeframe };
 
-const compactUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact" });
-const tick = { fontSize: 11, fill: "var(--muted-foreground)" };
+export const compactUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact" });
+export const tick = { fontSize: 11, fill: "var(--muted-foreground)" };
 
 export interface BalanceSeries<K extends string> {
   key: K;
