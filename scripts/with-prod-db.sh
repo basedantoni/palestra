@@ -18,6 +18,12 @@ if [[ "$url" != postgres* ]]; then
   exit 1
 fi
 
+# The database machine may be stopped: the proxy can't wake it.
+for id in $(fly machine list -a palestra-db --json | jq -r '.[] | select(.state == "stopped") | .id'); do
+  echo "Starting palestra-db machine $id" >&2
+  fly machine start "$id" -a palestra-db >/dev/null
+done
+
 fly proxy "$PORT:5432" -a palestra-db >/dev/null 2>&1 &
 proxy=$!
 trap 'kill "$proxy" 2>/dev/null' EXIT

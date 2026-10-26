@@ -76,19 +76,22 @@ const sameArtist = (a: string, b: string) => a.localeCompare(b, "en", { sensitiv
  * Bandai's after a reprint (KOI-356). Same art is the same illustrator, so a
  * reprint sharing a scan is credited too. A print that credits nobody is no
  * evidence against the others. When credits disagree the Artwork is flagged and
- * keeps its existing artist. Artworks no print matches are left out (unchanged).
+ * keeps its existing artist. Artworks no print matches are left out (unchanged),
+ * or with `reset` cleared: an artist the backfill wrote by ID before KOI-356, on
+ * an Artwork re-paired since (KOI-332), is stale.
  * Re-running with the same pages gives the same updates.
  */
 export function reconcileArtists(
   artworks: Array<{ variantId: string; artist: string | null }>,
   pages: { ja: LimitlessVariant[]; en: LimitlessVariant[] },
   sameArt: (variantId: string, limitlessId: string) => boolean,
+  { reset = false } = {},
 ): ArtistUpdate[] {
   // English first, so its spelling of an agreed credit wins.
   const prints = [...pages.en, ...pages.ja];
   return artworks.flatMap(({ variantId, artist }): ArtistUpdate[] => {
     const matches = prints.filter((p) => p.limitlessId && sameArt(variantId, p.limitlessId));
-    if (!matches.length) return [];
+    if (!matches.length) return reset ? [{ variantId, artist: null, artistConflict: false, manga: false }] : [];
     const manga = matches.some((p) => p.label === "manga");
     const credits = matches.flatMap((p) => p.artist ?? []);
     if (credits.some((c) => !sameArtist(c, credits[0]!))) {

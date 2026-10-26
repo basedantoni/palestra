@@ -11,8 +11,7 @@ import { db } from "@life-tracker/db";
 import { tcgArtRating, tcgArtworkTheme, user } from "@life-tracker/db/schema/index";
 
 import { upsertCatalog } from "../lib/tcg/catalog-db";
-import { transformCatalog } from "../lib/tcg/catalog-transform";
-import { en, ja, packs } from "../lib/tcg/fixtures";
+import { catalog } from "../lib/tcg/fixtures";
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
 
@@ -24,7 +23,7 @@ const ids = (rows: Array<{ variantId: string }>) => rows.map((r) => r.variantId)
 
 beforeEach(async () => {
   await truncateAll(db);
-  await upsertCatalog(transformCatalog({ ja, en, packs }));
+  await upsertCatalog(catalog);
   await db.insert(user).values(
     ["user-me", "user-other"].map((id) => ({ id, name: id, email: `${id}@test.local`, emailVerified: true })),
   );

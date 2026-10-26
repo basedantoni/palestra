@@ -133,6 +133,23 @@ describe("reconcileArtists", () => {
     ).toEqual([{ variantId: "OP05-069", artist: "Minato Sashima", artistConflict: false, manga: false }]);
   });
 
+  it("with reset, clears a stale artist and flag on Artworks no Limitless print matches (KOI-332)", () => {
+    expect(
+      reconcileArtists(
+        [
+          { variantId: "OP05-069", artist: "Old Name" },
+          { variantId: "OP05-069_p9", artist: "Stale" },
+        ],
+        op05069,
+        sameId,
+        { reset: true },
+      ),
+    ).toEqual([
+      { variantId: "OP05-069", artist: "Minato Sashima", artistConflict: false, manga: false },
+      { variantId: "OP05-069_p9", artist: null, artistConflict: false, manga: false },
+    ]);
+  });
+
   it("credits the Artwork with the same art, not the same variant ID, after a reprint shifts the numbering", () => {
     // Limitless OP05-119 _p3 is the OP-09 wanted poster, Bandai Japanese _p5; Limitless _p4 is
     // the PRB-01 print, Bandai Japanese _p3 (KOI-354).

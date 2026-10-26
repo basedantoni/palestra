@@ -11,8 +11,7 @@ import { db } from "@life-tracker/db";
 import { tcgCopy, tcgPrinting, user } from "@life-tracker/db/schema/index";
 
 import { upsertCatalog } from "../lib/tcg/catalog-db";
-import { transformCatalog } from "../lib/tcg/catalog-transform";
-import { en, ja, packs } from "../lib/tcg/fixtures";
+import { catalog } from "../lib/tcg/fixtures";
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
 
@@ -30,7 +29,7 @@ async function addCopy(userId: string, variantId: string, language: "ja" | "en")
 
 beforeEach(async () => {
   await truncateAll(db);
-  await upsertCatalog(transformCatalog({ ja, en, packs }));
+  await upsertCatalog(catalog);
   await db.insert(user).values([
     { id: ME, name: "Me", email: "me@example.test" },
     { id: OTHER, name: "Other", email: "other@example.test" },
