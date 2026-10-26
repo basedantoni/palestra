@@ -10,19 +10,15 @@ import { CategoryMark, categoryColor } from "@/components/finance/category-icon"
 import { MonthlyBars } from "@/components/finance/monthly-bars";
 import { TransactionFeed } from "@/components/finance/transaction-feed";
 
-const RANGES = { "6M": 6, "1Y": 12 } as const;
-type Range = keyof typeof RANGES;
-const DEFAULT_RANGE: Range = "6M";
-
 // Range and the Subcategory filter live in the URL so reloads and shared links keep the view.
 const categorySearchSchema = z.object({
-  range: z.enum(Object.keys(RANGES) as [Range, ...Range[]]).optional().catch(undefined),
+  range: z.enum(["6M", "1Y"]).default("6M").catch("6M"),
   /** A Subcategory (or the parent itself) to narrow a parent's transactions to; omitted = all of them. */
   only: z.string().uuid().optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/finance/categories/$id")({
-  validateSearch: (search) => categorySearchSchema.parse(search),
+  validateSearch: categorySearchSchema,
   component: CategoryPage,
   beforeLoad: async () => {
     const session = await authClient.getSession();
@@ -41,9 +37,9 @@ function CategoryPage() {
   const { id } = Route.useParams();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const range = search.range ?? DEFAULT_RANGE;
+  const { range } = search;
   const { data: categories, isPending } = useQuery(trpc.categories.list.queryOptions());
-  const monthly = useQuery(trpc.finance.categoryMonthly.queryOptions({ categoryId: id, months: RANGES[range] }));
+  const monthly = useQuery(trpc.budgets.history.queryOptions({ categoryId: id, months: range === "1Y" ? 12 : 6 }));
 
   const current = categories?.find((c) => c.id === id);
   if (isPending) return <Skeleton className="mx-auto mt-6 h-64 max-w-3xl" />;
@@ -86,9 +82,9 @@ function CategoryPage() {
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Spent per month</h2>
-          <Tabs value={range} onValueChange={(next) => update({ range: next === DEFAULT_RANGE ? undefined : (next as Range) })}>
+          <Tabs value={range} onValueChange={(next) => update({ range: next as "6M" | "1Y" })}>
             <TabsList>
-              {Object.keys(RANGES).map((r) => (
+              {["6M", "1Y"].map((r) => (
                 <TabsTrigger key={r} value={r}>
                   {r}
                 </TabsTrigger>

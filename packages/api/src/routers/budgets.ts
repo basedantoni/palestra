@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import { TRPCError } from "@trpc/server";
-import { and, eq, lt, max } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { budget, category, transaction } from "@life-tracker/db/schema/index";
-import { categoryTree, todayInTimeZone } from "@life-tracker/shared";
+import { addMonths, categoryTree, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
-import { rollUpSpend, spendByCategory, totalBudget } from "../lib/budget-spend";
-import { loadCategoryMonthly, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
+import { rollUpSpend, spendByCategory, spendHistory, totalBudget } from "../lib/budget-spend";
+import { categoryTreeIds, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { getUserTimezone } from "../lib/user-timezone";
 
 /**
@@ -100,17 +100,54 @@ export const budgetsRouter = router({
 
   /**
    * One category's spend (a parent's including its Subcategories') and limit
-   * for the `months` months ending at `monthKey`.
+   * for the `months` months ending at `monthKey` (default: the current month).
+   * NOT_FOUND unless the category is the user's.
    */
   history: protectedProcedure
     .input(
       z.object({
         categoryId: z.string().uuid(),
-        monthKey: monthKeySchema,
+        monthKey: monthKeySchema.optional(),
         months: z.number().int().min(1).max(24).default(6),
       }),
     )
-    .query(({ ctx, input }) => loadCategoryMonthly(ctx.session.user.id, input.categoryId, input.monthKey, input.months)),
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const categoryIds = await categoryTreeIds(userId, input.categoryId);
+      if (!categoryIds.includes(input.categoryId)) throw new TRPCError({ code: "NOT_FOUND", message: "Category not found" });
+      const monthKey = input.monthKey ?? todayInTimeZone(new Date(), await getUserTimezone(userId)).slice(0, 7);
+      const monthKeys = Array.from({ length: input.months }, (_, i) => addMonths(monthKey, i - input.months + 1));
+      const first = monthKeys[0]!;
+      const limits = await db
+        .select({ monthKey: budget.monthKey, limitAmount: budget.limitAmount })
+        .from(budget)
+        .where(
+          and(
+            eq(budget.userId, userId),
+            eq(budget.categoryId, input.categoryId),
+            gte(budget.monthKey, first),
+            lte(budget.monthKey, monthKey),
+          ),
+        );
+      const txns = await db
+        .select(spendColumns)
+        .from(transaction)
+        .where(
+          and(
+            eq(transaction.userId, userId),
+            inArray(transaction.categoryId, categoryIds),
+            ...monthRange(first, monthKey),
+          ),
+        );
+
+      const spent = spendHistory(txns, categoryIds, monthKeys);
+      const limitByMonth = new Map(limits.map((l) => [l.monthKey, l.limitAmount]));
+      return monthKeys.map((m, i) => ({
+        monthKey: m,
+        spent: spent[i]!,
+        limit: limitByMonth.get(m) ?? null,
+      }));
+    }),
 
   /**
    * What "Copy limits" would do for a month: the latest earlier month with

@@ -7,7 +7,7 @@ import { addMonths, resolvePeriodBounds, todayInTimeZone } from "@life-tracker/s
 
 import { protectedProcedure, router } from "../index";
 import { calendarMonthOf, totalBudget } from "../lib/budget-spend";
-import { loadCategoryMonthly, monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
+import { monthKeySchema, monthRange, spendColumns } from "../lib/budget-spend-sql";
 import { CASH_FLOW_RANGES, type CashFlowRange, cashFlow } from "../lib/cash-flow";
 import { categorySpendTree } from "../lib/category-spend";
 import { skippedInTotals } from "../lib/counts-in-totals-sql";
@@ -94,19 +94,6 @@ export const financeRouter = router({
         .from(transaction)
         .where(and(eq(transaction.userId, userId), ...dateBoundConditions(bounds)));
       return categorySpendTree(txns, categories, bounds);
-    }),
-
-  /**
-   * A category's Budgeted Spend per month (a parent's including its
-   * Subcategories') with that month's limit (null = none), for the `months`
-   * months ending at the current one (KOI-347).
-   */
-  categoryMonthly: protectedProcedure
-    .input(z.object({ categoryId: z.string().uuid(), months: z.number().int().min(1).max(24) }))
-    .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const currentMonth = todayInTimeZone(new Date(), await getUserTimezone(userId)).slice(0, 7);
-      return loadCategoryMonthly(userId, input.categoryId, currentMonth, input.months);
     }),
 
   /**

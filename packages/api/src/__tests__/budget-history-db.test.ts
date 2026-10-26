@@ -1,9 +1,9 @@
 /**
- * finance.categoryMonthly against a real Postgres (PGlite, KOI-347).
+ * budgets.history against a real Postgres (PGlite, KOI-347).
  *
  * - a Parent Category's months roll up its Subcategories', skipping Excluded
  *   rows and split parents (counting their Splits), with each month's limit
- * - the months end at the current month
+ * - with no monthKey, the months end at the current month
  * - another user's category is not found
  * - the transaction filters can take a parent with its Subcategories
  */
@@ -20,7 +20,7 @@ import { eq } from "drizzle-orm";
 import { appRouter } from "../routers/index";
 import { seedFinanceUser, truncateAll } from "./helpers/pglite";
 
-const USER = "user-pglite-category-monthly";
+const USER = "user-pglite-budget-history";
 
 const makeCaller = (userId = USER) => appRouter.createCaller({ session: { user: { id: userId } } } as any);
 
@@ -62,7 +62,7 @@ async function addSubcategory(name: string) {
   return id;
 }
 
-describe("finance.categoryMonthly", () => {
+describe("budgets.history", () => {
   it("rolls a parent's Subcategories into its months, counting only what counts in totals", async () => {
     const gymFees = await addSubcategory("Gym fees");
     await addTransaction("2026-09-03", 10, { categoryId: gymFees });
@@ -74,7 +74,7 @@ describe("finance.categoryMonthly", () => {
     await addTransaction("2026-10-22", 500, { categoryId: null });
     await db.insert(budget).values({ id: randomUUID(), userId: USER, categoryId: seeded.categoryId, monthKey: "2026-09", limitAmount: 80 });
 
-    const months = await makeCaller().finance.categoryMonthly({ categoryId: seeded.categoryId, months: 3 });
+    const months = await makeCaller().budgets.history({ categoryId: seeded.categoryId, months: 3 });
 
     expect(months).toEqual([
       { monthKey: "2026-08", spent: 0, limit: null },
@@ -82,7 +82,7 @@ describe("finance.categoryMonthly", () => {
       { monthKey: "2026-10", spent: 50, limit: null },
     ]);
 
-    const subcategory = await makeCaller().finance.categoryMonthly({ categoryId: gymFees, months: 2 });
+    const subcategory = await makeCaller().budgets.history({ categoryId: gymFees, months: 2 });
     expect(subcategory.map((m) => m.spent)).toEqual([10, 20]);
   });
 
@@ -90,7 +90,7 @@ describe("finance.categoryMonthly", () => {
     await seedFinanceUser(db, "someone-else");
 
     await expect(
-      makeCaller("someone-else").finance.categoryMonthly({ categoryId: seeded.categoryId, months: 6 }),
+      makeCaller("someone-else").budgets.history({ categoryId: seeded.categoryId, months: 6 }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

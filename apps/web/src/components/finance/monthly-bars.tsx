@@ -6,8 +6,8 @@ import { compactUsd, tick } from "./balance-line";
 import { CurrencyTooltip } from "./currency-tooltip";
 import { monthLabel } from "./month-label";
 
-/** A month's Budgeted Spend and limit (null = none), as `finance.categoryMonthly` and `budgets.history` return them. */
-type MonthlyBar = RouterOutputs["finance"]["categoryMonthly"][number];
+/** A month's Budgeted Spend and limit (null = none), from `budgets.history`. */
+type MonthlyBar = RouterOutputs["budgets"]["history"][number];
 
 const LIMIT = "var(--foreground)";
 
