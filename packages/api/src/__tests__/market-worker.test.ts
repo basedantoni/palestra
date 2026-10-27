@@ -1,7 +1,7 @@
 /**
  * The Market Watch worker booting on a real Postgres (PGlite, KOI-364): pg-boss creates its
- * `pgboss` schema, the market.ecb schedule is registered at 21:17 UTC with retries that end with
- * the capture day, and queued jobs reach their handlers.
+ * `pgboss` schema, the market.ecb schedule is registered at 21:17 UTC with retries that stop at the
+ * end of the capture day, and queued jobs reach their handlers.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -51,13 +51,8 @@ describe("worker boot", () => {
     expect(schedule).toMatchObject({ cron: "17 21 * * *", timezone: "UTC" });
   });
 
-  it("retries market.ecb 3 times with backoff, and drops a waiting retry at UTC midnight", async () => {
-    // A 21:17 job is kept 2 h 43 min (9,780 s) in created or retry state: until 00:00 UTC.
-    expect(await boss.getQueue("market.ecb")).toMatchObject({
-      retryLimit: 3,
-      retryBackoff: true,
-      retentionSeconds: 9_780,
-    });
+  it("retries market.ecb 3 times with backoff", async () => {
+    expect(await boss.getQueue("market.ecb")).toMatchObject({ retryLimit: 3, retryBackoff: true });
   });
 
   it("boots again on a redeploy", async () => {
@@ -76,13 +71,22 @@ describe("worker boot", () => {
 });
 
 describe("market.ecb capture day", () => {
-  it("is the UTC day the scheduled job was created, even when an attempt runs later", async () => {
-    const bucket = memoryStore();
-    const fetch = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
+  const fetch = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
+  // Created 2026-10-26 21:17 UTC (16:17 in Chicago); the scheduled job carries no data.
+  const createdOn = new Date("2026-10-26T21:17:00Z");
 
-    // Created 2026-10-26 21:17 UTC (16:17 in Chicago); the scheduled job carries no data.
-    await runMarketJob("market.ecb", { db, store: bucket, fetch }, null, new Date("2026-10-26T21:17:00Z"));
+  it("is the UTC day the scheduled job was created, even when an attempt runs later that day", async () => {
+    const bucket = memoryStore();
+    await runMarketJob("market.ecb", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-26T23:59:00Z"));
 
     expect([...bucket.objects.keys()]).toEqual(["raw/ecb/2026-10-26/eurofxref-daily.xml.gz"]);
+  });
+
+  it("stops at UTC midnight: an attempt on the next day fails without capturing", async () => {
+    const bucket = memoryStore();
+    const run = runMarketJob("market.ecb", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-27T00:00:00Z"));
+
+    await expect(run).rejects.toThrow(/capture window for 2026-10-26 closed/);
+    expect(bucket.objects.size).toBe(0);
   });
 });

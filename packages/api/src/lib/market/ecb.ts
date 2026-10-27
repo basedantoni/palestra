@@ -36,7 +36,7 @@ export function toUsd(amount: number, currency: string, rates: PerEur): number |
   return (amount / perEur) * usdPerEur;
 }
 
-export type RateRow ={ day: string; currency: string; perEur: number };
+export type RateRow = { day: string; currency: string; perEur: number };
 
 /**
  * Every publish day since 1999 from `eurofxref-hist.zip`: one CSV with a column per currency ever
