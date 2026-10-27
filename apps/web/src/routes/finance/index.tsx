@@ -18,9 +18,14 @@ import { SpendByCategory } from "@/components/finance/spend-by-category";
 import { TransactionFeed, UnreviewedDot } from "@/components/finance/transaction-feed";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
 import { SyncNowButton } from "@/components/finance/sync-now-button";
+import { PrototypeSwitcher } from "@/components/prototype-switcher";
+import { OverviewPrototype, PROTOTYPE_VARIANTS } from "./-overview-prototype";
 
 export const Route = createFileRoute("/finance/")({
-  component: FinanceOverview,
+  component: FinanceOverviewPrototypeSwitch,
+  // PROTOTYPE: ?variant= picks an overview layout (see -overview-prototype.tsx).
+  validateSearch: (search: Record<string, unknown>): { variant?: string } =>
+    typeof search.variant === "string" ? { variant: search.variant } : {},
   beforeLoad: async () => {
     const session = await authClient.getSession();
     if (!session.data) {
@@ -28,6 +33,16 @@ export const Route = createFileRoute("/finance/")({
     }
   },
 });
+
+function FinanceOverviewPrototypeSwitch() {
+  const variant = Route.useSearch().variant ?? "now";
+  return (
+    <>
+      {variant === "now" ? <FinanceOverview /> : <OverviewPrototype variant={variant} />}
+      <PrototypeSwitcher variants={PROTOTYPE_VARIANTS} current={variant} />
+    </>
+  );
+}
 
 function Section({ title, to, children }: { title: string; to?: string; children: React.ReactNode }) {
   return (

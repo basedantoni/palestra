@@ -31,6 +31,7 @@ import { Route as TcgBinderRouteImport } from './routes/tcg/binder'
 import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
 import { Route as ImportTcxRouteImport } from './routes/import/tcx'
 import { Route as FinanceTransactionsRouteImport } from './routes/finance/transactions'
+import { Route as FinanceSpendingRouteImport } from './routes/finance/spending'
 import { Route as FinanceGoalsRouteImport } from './routes/finance/goals'
 import { Route as FinanceBudgetsRouteImport } from './routes/finance/budgets'
 import { Route as FinanceAccountsRouteImport } from './routes/finance/accounts'
@@ -147,6 +148,11 @@ const FinanceTransactionsRoute = FinanceTransactionsRouteImport.update({
   path: '/finance/transactions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceSpendingRoute = FinanceSpendingRouteImport.update({
+  id: '/finance/spending',
+  path: '/finance/spending',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FinanceGoalsRoute = FinanceGoalsRouteImport.update({
   id: '/finance/goals',
   path: '/finance/goals',
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -330,6 +341,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -360,6 +372,7 @@ export interface RootRouteChildren {
   FinanceAccountsRoute: typeof FinanceAccountsRoute
   FinanceBudgetsRoute: typeof FinanceBudgetsRoute
   FinanceGoalsRoute: typeof FinanceGoalsRoute
+  FinanceSpendingRoute: typeof FinanceSpendingRoute
   FinanceTransactionsRoute: typeof FinanceTransactionsRoute
   ImportTcxRoute: typeof ImportTcxRoute
   ImportWhoopRoute: typeof ImportWhoopRoute
@@ -533,6 +546,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceTransactionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance/spending': {
+      id: '/finance/spending'
+      path: '/finance/spending'
+      fullPath: '/finance/spending'
+      preLoaderRoute: typeof FinanceSpendingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/finance/goals': {
       id: '/finance/goals'
       path: '/finance/goals'
@@ -594,6 +614,7 @@ const rootRouteChildren: RootRouteChildren = {
   FinanceAccountsRoute: FinanceAccountsRoute,
   FinanceBudgetsRoute: FinanceBudgetsRoute,
   FinanceGoalsRoute: FinanceGoalsRoute,
+  FinanceSpendingRoute: FinanceSpendingRoute,
   FinanceTransactionsRoute: FinanceTransactionsRoute,
   ImportTcxRoute: ImportTcxRoute,
   ImportWhoopRoute: ImportWhoopRoute,
