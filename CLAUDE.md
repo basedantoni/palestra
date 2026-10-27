@@ -17,7 +17,7 @@ Turborepo monorepo, pnpm workspaces (`apps/*`, `packages/*`). Package name prefi
 - `packages/api` — tRPC routers (`src/routers/`) + pure business logic (`src/lib/`).
 - `packages/auth` — Better-Auth configuration.
 - `packages/db` — Drizzle schema (`src/schema/`), migrations (`src/migrations/`), seed (`src/seed.ts`), `docker-compose.yml` for local Postgres.
-- `packages/env` — zod-validated env (`src/server.ts`). Single source of truth for required vars.
+- `packages/env` — zod-validated env: `src/server.ts` for the web server, `src/worker.ts` for the Market Watch worker. Single source of truth for required vars.
 - `packages/shared` — types/helpers shared across packages.
 - `packages/config` — shared tsconfig / tooling config.
 
@@ -32,6 +32,7 @@ Run from repo root (Turborepo fans out to packages).
 - `pnpm turbo "//#lint"` — oxlint (root task, not per-package). `pnpm lint:fix` to autofix.
 - `pnpm db:start` — local Postgres via Docker. `db:stop` / `db:down` to halt/remove.
 - `pnpm db:push` — push schema to DB (dev). `db:generate` + `db:migrate` for versioned migrations. `db:seed` seeds reference data. `db:seed:finance` seeds the dev login and finance fixtures (dev only, idempotent). `db:studio` opens Drizzle Studio.
+- `pnpm market:job <job> [--date] [--enqueue]` — run a Market Watch job here, or enqueue it for the worker. `pnpm market:dashboard` opens `@pg-boss/dashboard`. Against prod, prefix both with `scripts/with-prod-db.sh`.
 
 ## Verifying UI changes
 
@@ -43,7 +44,7 @@ Before you write QA steps for the user, run the app and check the change yoursel
 - **Pure lib**: keep business logic in `packages/api/src/lib/` as pure functions (no HTTP/DB coupling where possible) so it is unit-testable. Tests sit next to the code as `*.test.ts`.
 - **Drizzle schema**: one table group per file in `packages/db/src/schema/`, re-exported from `schema/index.ts`. Enums in `schema/enums.ts`.
 - **Migrations**: schema changes go through `db:generate` (writes SQL to `src/migrations/`); never hand-edit applied migrations.
-- **Env**: add new vars to `packages/env/src/server.ts` AND document them in `apps/server/.env.example`.
+- **Env**: add new vars to `packages/env/src/server.ts` (worker-only vars: `src/worker.ts`) AND document them in `apps/server/.env.example`.
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`), often with a `(scope)` and trailing Linear id, e.g. `fix(volume): ... (KOI-82)`.
 
 ## Critical paths
@@ -59,11 +60,15 @@ Vitest. Co-located `*.test.ts` in `packages/api/src/lib/` (and `src/__tests__/` 
 
 Mock the database with `packages/api/src/__tests__/helpers/mock-db.ts`: queue results per table (`mockDb.onSelect(rule, rows)`) and assert writes per table (`mockDb.inserted(table)`, `updated`, `deleted`). Don't hand-roll a `makeChain` or queue `db.select` results by call order; an added query then breaks unrelated tests. Order still matters within one table (successive selects from it take its queue in turn), and an unqueued table answers `[]`.
 
+Web component tests (`apps/web`, `*.test.tsx`) run in jsdom with Testing Library. Render with `renderWithData` from `apps/web/src/test/render.tsx`: pass router-output fixtures as props, or seed a query with `client.setQueryData(trpc.x.queryKey(input), fixture)`. There is no live tRPC; fetch rejects.
+
 When a test needs real Postgres behaviour (constraints, indexes, cascades, SQL that a mock can only assume), use the PGlite harness in `packages/api/src/__tests__/helpers/pglite.ts`: an in-process database per test file with every migration applied, no Docker. See `rules-db.test.ts`.
 
 ## Deploy
 
 Server deploys to Fly.io (`fly.toml`, app `palestra`, region `dfw`, internal port 3000) from the root `Dockerfile`. Release runs `scripts/fly-release.sh` (DB migration step). `NODE_ENV=production` and `PORT=3000` set in `fly.toml`.
+
+The Market Watch worker is a second app, `palestra-worker` (`fly.worker.toml`, 512 MB, no HTTP), from the same image started as `node dist/worker.mjs`. It runs pg-boss jobs (`packages/api/src/lib/market/`, ADR 0008) and CI deploys it after `palestra`. pg-boss owns the `pgboss` schema; migrations stay on `palestra`'s release.
 
 Prod data scripts (TCG catalog import, artist backfill, any one-off): run them locally with `scripts/with-prod-db.sh <command>`, which proxies to the `palestra-db` Fly app. The app VM has 256 MB and serves traffic; a script run there starves the web server.
 
