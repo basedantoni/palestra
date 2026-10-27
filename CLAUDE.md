@@ -59,6 +59,8 @@ Vitest. Co-located `*.test.ts` in `packages/api/src/lib/` (and `src/__tests__/` 
 
 Mock the database with `packages/api/src/__tests__/helpers/mock-db.ts`: queue results per table (`mockDb.onSelect(rule, rows)`) and assert writes per table (`mockDb.inserted(table)`, `updated`, `deleted`). Don't hand-roll a `makeChain` or queue `db.select` results by call order; an added query then breaks unrelated tests. Order still matters within one table (successive selects from it take its queue in turn), and an unqueued table answers `[]`.
 
+Web component tests (`apps/web`, `*.test.tsx`) run in jsdom with Testing Library. Render with `renderWithData` from `apps/web/src/test/render.tsx`: pass router-output fixtures as props, or seed a query with `client.setQueryData(trpc.x.queryKey(input), fixture)`. There is no live tRPC; fetch rejects.
+
 When a test needs real Postgres behaviour (constraints, indexes, cascades, SQL that a mock can only assume), use the PGlite harness in `packages/api/src/__tests__/helpers/pglite.ts`: an in-process database per test file with every migration applied, no Docker. See `rules-db.test.ts`.
 
 ## Deploy
