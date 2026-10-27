@@ -37,4 +37,21 @@ if ! nc -z localhost "$PORT" 2>/dev/null; then
   exit 1
 fi
 
-DATABASE_URL=$(printf '%s' "$url" | sed -E "s#@[^/]+/#@localhost:$PORT/#") "$@"
+local_url=$(printf '%s' "$url" | sed -E "s#@[^/]+/#@localhost:$PORT/#")
+
+# A machine just started accepts the connection before Postgres is up ("the
+# database system is starting up"): wait until it takes queries.
+if command -v pg_isready >/dev/null; then
+  for _ in $(seq 120); do
+    pg_isready -q -d "$local_url" && break
+    sleep 0.5
+  done
+  if ! pg_isready -q -d "$local_url"; then
+    echo "Postgres on palestra-db did not accept connections within 60 s" >&2
+    exit 1
+  fi
+else
+  echo "pg_isready not found (brew install libpq): not waiting for Postgres to start" >&2
+fi
+
+DATABASE_URL="$local_url" "$@"
