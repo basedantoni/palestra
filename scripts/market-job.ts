@@ -9,14 +9,14 @@
  *   scripts/with-prod-db.sh pnpm market:job market.ecb --enqueue        # palestra-worker runs it
  *   scripts/with-prod-db.sh pnpm market:dashboard                       # @pg-boss/dashboard
  *
- * Without --enqueue the job runs in this process, so it needs the worker-only Tigris vars in
- * apps/server/.env. --date is the capture day (default: today, UTC); --source is market.derive's.
+ * --enqueue needs only DATABASE_URL. Without it the job runs in this process, so it also needs the
+ * worker-only Tigris vars in apps/server/.env. --date is the capture day (default: today, UTC);
+ * --source is market.derive's.
  */
+import "dotenv/config";
 import { parseArgs } from "node:util";
 
-import { marketDeps } from "../packages/api/src/lib/market/deps";
 import { MARKET_JOBS, type MarketJob, createBoss, runMarketJob } from "../packages/api/src/lib/market/worker";
-import { env } from "../packages/env/src/worker";
 
 const {
   positionals: [name],
@@ -39,12 +39,20 @@ const job = name as MarketJob;
 const data = { ...(values.date && { day: values.date }), ...(values.source && { source: values.source }) };
 
 if (values.enqueue) {
+  // The worker env (and its Tigris vars) loads only on the run path below: enqueueing needs the
+  // database alone, and the worker uses its own secrets.
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.error("DATABASE_URL is not set (apps/server/.env, or scripts/with-prod-db.sh for prod)");
+    process.exit(1);
+  }
   // A client only: the worker owns scheduling, maintenance and the schema.
-  const boss = createBoss(env.DATABASE_URL, { supervise: false, schedule: false, migrate: false });
+  const boss = createBoss(url, { supervise: false, schedule: false, migrate: false });
   await boss.start();
   console.log(`Enqueued ${job}:`, await boss.send(job, data));
   await boss.stop();
 } else {
+  const { marketDeps } = await import("../packages/api/src/lib/market/deps");
   console.log(`${job}:`, await runMarketJob(job, marketDeps(), data));
 }
 process.exit(0);
