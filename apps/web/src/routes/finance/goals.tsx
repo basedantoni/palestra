@@ -1,17 +1,10 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { authClient } from "@/lib/auth-client";
 import { GoalsList } from "@/components/finance/goals-list";
 import { GoalCreateForm } from "@/components/finance/goal-create-form";
 
 export const Route = createFileRoute("/finance/goals")({
   component: GoalsPage,
-  beforeLoad: async () => {
-    const session = await authClient.getSession();
-    if (!session.data) {
-      redirect({ to: "/login", throw: true });
-    }
-  },
 });
 
 function GoalsPage() {

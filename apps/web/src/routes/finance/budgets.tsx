@@ -1,7 +1,6 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { BudgetCards } from "@/components/finance/budget-cards";
 import { BudgetMonthStepper } from "@/components/finance/budget-month-stepper";
@@ -19,12 +18,6 @@ const budgetsSearchSchema = z.object({
 export const Route = createFileRoute("/finance/budgets")({
   validateSearch: (search) => budgetsSearchSchema.parse(search),
   component: BudgetsPage,
-  beforeLoad: async () => {
-    const session = await authClient.getSession();
-    if (!session.data) {
-      redirect({ to: "/login", throw: true });
-    }
-  },
 });
 
 function BudgetsPage() {

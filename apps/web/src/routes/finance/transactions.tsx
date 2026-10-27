@@ -1,9 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { periodToSearch, searchToPeriod, transactionPeriodSearchSchema } from "@life-tracker/shared";
-import { authClient } from "@/lib/auth-client";
 import { useFinanceToday } from "@/hooks/use-finance-today";
 import { useInvalidateFinance } from "@/hooks/use-invalidate-finance";
 import { trpc } from "@/utils/trpc";
@@ -28,12 +27,6 @@ type TransactionsSearch = z.infer<typeof transactionsSearchSchema>;
 export const Route = createFileRoute("/finance/transactions")({
   validateSearch: (search) => transactionsSearchSchema.parse(search),
   component: TransactionsPage,
-  beforeLoad: async () => {
-    const session = await authClient.getSession();
-    if (!session.data) {
-      redirect({ to: "/login", throw: true });
-    }
-  },
 });
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });

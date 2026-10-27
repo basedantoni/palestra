@@ -1,18 +1,12 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { authClient } from "@/lib/auth-client";
 import { AccountsList } from "@/components/finance/accounts-list";
+import { NetWorthChart } from "@/components/finance/net-worth";
 import { PlaidLinkButton } from "@/components/finance/plaid-link-button";
 import { SyncNowButton } from "@/components/finance/sync-now-button";
 
 export const Route = createFileRoute("/finance/accounts")({
   component: AccountsPage,
-  beforeLoad: async () => {
-    const session = await authClient.getSession();
-    if (!session.data) {
-      redirect({ to: "/login", throw: true });
-    }
-  },
 });
 
 function AccountsPage() {
@@ -25,6 +19,10 @@ function AccountsPage() {
           <PlaidLinkButton />
         </div>
       </div>
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Net worth</h2>
+        <NetWorthChart />
+      </section>
       <AccountsList />
     </div>
   );

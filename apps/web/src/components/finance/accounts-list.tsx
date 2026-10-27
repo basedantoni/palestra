@@ -47,7 +47,7 @@ type BankItem = Pick<
 >;
 
 /** A Plaid item is healthy only while active; anything else needs the user's attention. */
-function isBroken(item: BankItem): boolean {
+export function isBroken(item: BankItem): boolean {
   return !item.foreignEnv && item.status !== "active";
 }
 
