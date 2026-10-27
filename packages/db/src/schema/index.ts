@@ -3,6 +3,7 @@ export * from "./auth";
 export * from "./budget";
 export * from "./category";
 export * from "./enums";
+export * from "./exchange-rate";
 export * from "./plaid-item";
 export * from "./savings-goal";
 export * from "./exercise";

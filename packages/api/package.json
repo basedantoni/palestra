@@ -22,10 +22,13 @@
     "@life-tracker/shared": "workspace:*",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
+    "aws4fetch": "^1.0.20",
     "date-fns": "^4.1.0",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
+    "fflate": "^0.8.2",
     "jose": "^6.2.3",
+    "pg-boss": "^12.38.0",
     "plaid": "^42.2.0",
     "snaptrade-typescript-sdk": "12.2.22",
     "zod": "catalog:"

@@ -6,7 +6,8 @@
   "exports": {
     "./server": "./src/server.ts",
     "./web": "./src/web.ts",
-    "./native": "./src/native.ts"
+    "./native": "./src/native.ts",
+    "./worker": "./src/worker.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.1",

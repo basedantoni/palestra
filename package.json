@@ -29,7 +29,9 @@
     "db:watch": "turbo -F @life-tracker/db db:watch",
     "db:stop": "turbo -F @life-tracker/db db:stop",
     "db:down": "turbo -F @life-tracker/db db:down",
-    "test": "turbo test"
+    "test": "turbo test",
+    "market:job": "cd apps/server && tsx ../../scripts/market-job.ts",
+    "market:dashboard": "pnpm dlx @pg-boss/dashboard@1.12.1"
   },
   "dependencies": {
     "@life-tracker/db": "workspace:*",

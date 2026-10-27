@@ -1,0 +1,22 @@
+# Market Watch ingestion worker (KOI-364, ADR 0008): the same image as `palestra` (root
+# Dockerfile), started on the worker entry point. Always on, with no HTTP service; it reaches
+# palestra-db over the org's private network. Migrations run on `palestra`'s release command,
+# so this app has none. Secrets: DATABASE_URL, plus the Tigris vars from `fly storage create`.
+
+app = 'palestra-worker'
+primary_region = 'dfw'
+
+[build]
+
+[env]
+  NODE_ENV = 'production'
+
+[processes]
+  worker = 'node dist/worker.mjs'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpus = 1
+  memory_mb = 512
+  processes = ['worker']
