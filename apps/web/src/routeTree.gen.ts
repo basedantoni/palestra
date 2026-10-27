@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as FinanceRouteRouteImport } from './routes/finance/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkoutsIndexRouteImport } from './routes/workouts/index'
 import { Route as TemplatesIndexRouteImport } from './routes/templates/index'
@@ -31,6 +32,7 @@ import { Route as TcgBinderRouteImport } from './routes/tcg/binder'
 import { Route as ImportWhoopRouteImport } from './routes/import/whoop'
 import { Route as ImportTcxRouteImport } from './routes/import/tcx'
 import { Route as FinanceTransactionsRouteImport } from './routes/finance/transactions'
+import { Route as FinanceSpendingRouteImport } from './routes/finance/spending'
 import { Route as FinanceGoalsRouteImport } from './routes/finance/goals'
 import { Route as FinanceBudgetsRouteImport } from './routes/finance/budgets'
 import { Route as FinanceAccountsRouteImport } from './routes/finance/accounts'
@@ -67,6 +69,11 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FinanceRouteRoute = FinanceRouteRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -93,9 +100,9 @@ const ImportIndexRoute = ImportIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const FinanceIndexRoute = FinanceIndexRouteImport.update({
-  id: '/finance/',
-  path: '/finance/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
@@ -143,24 +150,29 @@ const ImportTcxRoute = ImportTcxRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const FinanceTransactionsRoute = FinanceTransactionsRouteImport.update({
-  id: '/finance/transactions',
-  path: '/finance/transactions',
-  getParentRoute: () => rootRouteImport,
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => FinanceRouteRoute,
+} as any)
+const FinanceSpendingRoute = FinanceSpendingRouteImport.update({
+  id: '/spending',
+  path: '/spending',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 const FinanceGoalsRoute = FinanceGoalsRouteImport.update({
-  id: '/finance/goals',
-  path: '/finance/goals',
-  getParentRoute: () => rootRouteImport,
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 const FinanceBudgetsRoute = FinanceBudgetsRouteImport.update({
-  id: '/finance/budgets',
-  path: '/finance/budgets',
-  getParentRoute: () => rootRouteImport,
+  id: '/budgets',
+  path: '/budgets',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 const FinanceAccountsRoute = FinanceAccountsRouteImport.update({
-  id: '/finance/accounts',
-  path: '/finance/accounts',
-  getParentRoute: () => rootRouteImport,
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   id: '/exercises/',
@@ -168,13 +180,14 @@ const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   getParentRoute: () => AdminRoute,
 } as any)
 const FinanceCategoriesIdRoute = FinanceCategoriesIdRouteImport.update({
-  id: '/finance/categories/$id',
-  path: '/finance/categories/$id',
-  getParentRoute: () => rootRouteImport,
+  id: '/categories/$id',
+  path: '/categories/$id',
+  getParentRoute: () => FinanceRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/finance': typeof FinanceRouteRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
@@ -184,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -212,6 +226,7 @@ export interface FileRoutesByTo {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -233,6 +248,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/finance': typeof FinanceRouteRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
@@ -242,6 +258,7 @@ export interface FileRoutesById {
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
+  '/finance/spending': typeof FinanceSpendingRoute
   '/finance/transactions': typeof FinanceTransactionsRoute
   '/import/tcx': typeof ImportTcxRoute
   '/import/whoop': typeof ImportWhoopRoute
@@ -264,6 +281,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/finance'
     | '/admin'
     | '/analytics'
     | '/dashboard'
@@ -273,6 +291,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -301,6 +320,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -321,6 +341,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/finance'
     | '/admin'
     | '/analytics'
     | '/dashboard'
@@ -330,6 +351,7 @@ export interface FileRouteTypes {
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
+    | '/finance/spending'
     | '/finance/transactions'
     | '/import/tcx'
     | '/import/whoop'
@@ -351,16 +373,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FinanceRouteRoute: typeof FinanceRouteRouteWithChildren
   AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
-  FinanceAccountsRoute: typeof FinanceAccountsRoute
-  FinanceBudgetsRoute: typeof FinanceBudgetsRoute
-  FinanceGoalsRoute: typeof FinanceGoalsRoute
-  FinanceTransactionsRoute: typeof FinanceTransactionsRoute
   ImportTcxRoute: typeof ImportTcxRoute
   ImportWhoopRoute: typeof ImportWhoopRoute
   TcgBinderRoute: typeof TcgBinderRoute
@@ -369,12 +388,10 @@ export interface RootRouteChildren {
   TemplatesTemplateIdRoute: typeof TemplatesTemplateIdRoute
   WorkoutsWorkoutIdRoute: typeof WorkoutsWorkoutIdRoute
   WorkoutsNewRoute: typeof WorkoutsNewRoute
-  FinanceIndexRoute: typeof FinanceIndexRoute
   ImportIndexRoute: typeof ImportIndexRoute
   TcgIndexRoute: typeof TcgIndexRoute
   TemplatesIndexRoute: typeof TemplatesIndexRoute
   WorkoutsIndexRoute: typeof WorkoutsIndexRoute
-  FinanceCategoriesIdRoute: typeof FinanceCategoriesIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -421,6 +438,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -458,10 +482,10 @@ declare module '@tanstack/react-router' {
     }
     '/finance/': {
       id: '/finance/'
-      path: '/finance'
+      path: '/'
       fullPath: '/finance/'
       preLoaderRoute: typeof FinanceIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
     '/admin/': {
       id: '/admin/'
@@ -528,31 +552,38 @@ declare module '@tanstack/react-router' {
     }
     '/finance/transactions': {
       id: '/finance/transactions'
-      path: '/finance/transactions'
+      path: '/transactions'
       fullPath: '/finance/transactions'
       preLoaderRoute: typeof FinanceTransactionsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
+    }
+    '/finance/spending': {
+      id: '/finance/spending'
+      path: '/spending'
+      fullPath: '/finance/spending'
+      preLoaderRoute: typeof FinanceSpendingRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
     '/finance/goals': {
       id: '/finance/goals'
-      path: '/finance/goals'
+      path: '/goals'
       fullPath: '/finance/goals'
       preLoaderRoute: typeof FinanceGoalsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
     '/finance/budgets': {
       id: '/finance/budgets'
-      path: '/finance/budgets'
+      path: '/budgets'
       fullPath: '/finance/budgets'
       preLoaderRoute: typeof FinanceBudgetsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
     '/finance/accounts': {
       id: '/finance/accounts'
-      path: '/finance/accounts'
+      path: '/accounts'
       fullPath: '/finance/accounts'
       preLoaderRoute: typeof FinanceAccountsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
     '/admin/exercises/': {
       id: '/admin/exercises/'
@@ -563,13 +594,37 @@ declare module '@tanstack/react-router' {
     }
     '/finance/categories/$id': {
       id: '/finance/categories/$id'
-      path: '/finance/categories/$id'
+      path: '/categories/$id'
       fullPath: '/finance/categories/$id'
       preLoaderRoute: typeof FinanceCategoriesIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof FinanceRouteRoute
     }
   }
 }
+
+interface FinanceRouteRouteChildren {
+  FinanceAccountsRoute: typeof FinanceAccountsRoute
+  FinanceBudgetsRoute: typeof FinanceBudgetsRoute
+  FinanceGoalsRoute: typeof FinanceGoalsRoute
+  FinanceSpendingRoute: typeof FinanceSpendingRoute
+  FinanceTransactionsRoute: typeof FinanceTransactionsRoute
+  FinanceIndexRoute: typeof FinanceIndexRoute
+  FinanceCategoriesIdRoute: typeof FinanceCategoriesIdRoute
+}
+
+const FinanceRouteRouteChildren: FinanceRouteRouteChildren = {
+  FinanceAccountsRoute: FinanceAccountsRoute,
+  FinanceBudgetsRoute: FinanceBudgetsRoute,
+  FinanceGoalsRoute: FinanceGoalsRoute,
+  FinanceSpendingRoute: FinanceSpendingRoute,
+  FinanceTransactionsRoute: FinanceTransactionsRoute,
+  FinanceIndexRoute: FinanceIndexRoute,
+  FinanceCategoriesIdRoute: FinanceCategoriesIdRoute,
+}
+
+const FinanceRouteRouteWithChildren = FinanceRouteRoute._addFileChildren(
+  FinanceRouteRouteChildren,
+)
 
 interface AdminRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
@@ -585,16 +640,13 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FinanceRouteRoute: FinanceRouteRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
-  FinanceAccountsRoute: FinanceAccountsRoute,
-  FinanceBudgetsRoute: FinanceBudgetsRoute,
-  FinanceGoalsRoute: FinanceGoalsRoute,
-  FinanceTransactionsRoute: FinanceTransactionsRoute,
   ImportTcxRoute: ImportTcxRoute,
   ImportWhoopRoute: ImportWhoopRoute,
   TcgBinderRoute: TcgBinderRoute,
@@ -603,12 +655,10 @@ const rootRouteChildren: RootRouteChildren = {
   TemplatesTemplateIdRoute: TemplatesTemplateIdRoute,
   WorkoutsWorkoutIdRoute: WorkoutsWorkoutIdRoute,
   WorkoutsNewRoute: WorkoutsNewRoute,
-  FinanceIndexRoute: FinanceIndexRoute,
   ImportIndexRoute: ImportIndexRoute,
   TcgIndexRoute: TcgIndexRoute,
   TemplatesIndexRoute: TemplatesIndexRoute,
   WorkoutsIndexRoute: WorkoutsIndexRoute,
-  FinanceCategoriesIdRoute: FinanceCategoriesIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
