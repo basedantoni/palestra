@@ -25,27 +25,32 @@ export function copyValues(
 ): Array<CopyValue | null> {
   // Worst first, so the Copy's own Condition wins a tie.
   const conditions = tcgConditionEnum.enumValues.slice(0, tcgConditionEnum.enumValues.indexOf(condition) + 1).toReversed();
-  const lines = conditions.map((c) => prices.filter((p) => p.condition === c));
-  const cursors = lines.map(() => -1);
+  const pricesByCondition = conditions.map((c) => prices.filter((p) => p.condition === c));
+  // Index of each Condition's latest price on or before the day being valued; days only move forward.
+  const latest = conditions.map(() => -1);
   return days.map((day, i) => {
-    let best: (CopyValue & { price: number }) | null = null;
-    lines.forEach((line, c) => {
-      while (cursors[c]! + 1 < line.length && line[cursors[c]! + 1]!.day <= day) cursors[c]!++;
-      const current = currentMarketPrice(line[cursors[c]!] ?? null, day);
+    let best: { price: number; pricedAt: Condition; day: string; asOf: boolean } | null = null;
+    for (const [c, line] of pricesByCondition.entries()) {
+      while (latest[c]! + 1 < line.length && line[latest[c]! + 1]!.day <= day) latest[c]!++;
+      const current = currentMarketPrice(line[latest[c]!] ?? null, day);
       if (current && (!best || current.price < best.price)) {
-        best = { usd: 0, price: current.price, pricedAt: conditions[c]!, day: current.day, asOf: current.asOf };
+        best = { price: current.price, pricedAt: conditions[c]!, day: current.day, asOf: current.asOf };
       }
-    });
+    }
     const rate = usdPerUnit[i];
     if (!best || rate == null) return null;
-    const { price, pricedAt, day: priceDay, asOf } = best;
-    return { usd: price * rate, pricedAt, day: priceDay, asOf };
+    const { price, ...rest } = best;
+    return { usd: price * rate, ...rest };
   });
 }
 
+/** A Copy's Gain: its Value minus the price paid; none without both (a gift, a pack pull, unpriced). */
+export const copyGain = (usd: number | null, pricePaid: number | null) =>
+  usd === null || pricePaid === null ? null : usd - pricePaid;
+
 /** Gain summed over Copies with both a value and a price paid, in USD and percent of what they cost. */
 export function totalGain(copies: Array<{ usd: number | null; pricePaid: number | null }>) {
-  const counted = copies.filter((c) => c.usd !== null && c.pricePaid !== null);
+  const counted = copies.filter((c) => copyGain(c.usd, c.pricePaid) !== null);
   if (counted.length === 0) return null;
   const paid = counted.reduce((sum, c) => sum + c.pricePaid!, 0);
   const usd = counted.reduce((sum, c) => sum + c.usd!, 0) - paid;

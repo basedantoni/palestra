@@ -4,7 +4,8 @@ import { and, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { Condition } from "../tcg-condition";
 import { copyMarketplace, copyValues } from "./copy-value";
 import type { MarketDb } from "./exchange-rate-db";
-import { CURRENT_PRICE_MAX_AGE_DAYS, daysBefore } from "./market-price";
+import { toUsd } from "./ecb";
+import { CURRENT_PRICE_MAX_AGE_DAYS, MARKETPLACE_CURRENCY, daysBefore } from "./market-price";
 
 type Copy = { printingId: string; language: string; condition: Condition };
 
@@ -69,19 +70,22 @@ export async function copyValueHistory(db: MarketDb, copies: Copy[], start: stri
           )
           .orderBy(exchangeRate.day);
   let r = -1;
-  const usdPerEur = days.map((day) => {
+  const ratesByDay = days.map((day) => {
     while (r + 1 < rates.length && rates[r + 1]!.day <= day) r++;
-    return rates[r]?.perEur ?? null;
+    const rate = rates[r];
+    return new Map(rate ? [["USD", rate.perEur]] : []);
   });
-
-  const byPrinting = Map.groupBy(prices, (p) => p.printingId);
-  const values = copies.map((c) =>
-    copyValues(
-      c.condition,
-      byPrinting.get(c.printingId) ?? [],
-      days,
-      copyMarketplace(c.language) === "tcgplayer" ? days.map(() => 1) : usdPerEur,
-    ),
+  // USD per unit of each Marketplace's currency, by day.
+  const usdPerUnit = Object.fromEntries(
+    Object.entries(MARKETPLACE_CURRENCY).map(([marketplace, currency]) => [
+      marketplace,
+      ratesByDay.map((dayRates) => toUsd(1, currency, dayRates)),
+    ]),
   );
-  return { days, values };
+
+  const pricesByPrinting = Map.groupBy(prices, (p) => p.printingId);
+  const valuesByCopy = copies.map((c) =>
+    copyValues(c.condition, pricesByPrinting.get(c.printingId) ?? [], days, usdPerUnit[copyMarketplace(c.language)]!),
+  );
+  return { days, values: valuesByCopy };
 }

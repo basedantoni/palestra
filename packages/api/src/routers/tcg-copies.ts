@@ -7,8 +7,9 @@ import { tcgArtwork, tcgCard, tcgConditionEnum, tcgCopy, tcgPrinting, tcgWant } 
 import { todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { copyGain } from "../lib/market/copy-value";
 import { copyValueHistory } from "../lib/market/copy-value-db";
-import { daysBefore, shapeSeries } from "../lib/market/market-price";
+import { CURRENT_PRICE_MAX_AGE_DAYS, daysBefore, shapeSeries } from "../lib/market/market-price";
 import { isBelowCondition } from "../lib/tcg-condition";
 
 async function assertPrintingExists(printingId: string) {
@@ -74,7 +75,7 @@ export const tcgCopiesRouter = router({
    * The caller's Copies with their Printing and character, newest first.
    * `belowMinimum`: received through a Want in a Condition worse than its minimum.
    * `value`: today's Copy Value (KOI-374), null when unpriced; `gain`: it minus the price paid;
-   * `sparkline`: the Copy Value over the last 30 days, real values only.
+   * `sparkline`: its Copy Value on each of the last 30 days it was priced.
    */
   list: protectedProcedure.query(async ({ ctx }) => {
     const rows = await db
@@ -100,14 +101,14 @@ export const tcgCopiesRouter = router({
       .where(eq(tcgCopy.userId, ctx.session.user.id))
       .orderBy(desc(tcgCopy.acquiredOn), desc(tcgCopy.createdAt));
     const today = todayInTimeZone(new Date(), "UTC");
-    const { days, values } = await copyValueHistory(db, rows, daysBefore(today, 30), today);
+    const { days, values } = await copyValueHistory(db, rows, daysBefore(today, CURRENT_PRICE_MAX_AGE_DAYS), today);
     return rows.map(({ minCondition, ...copy }, i) => {
       const value = values[i]!.at(-1) ?? null;
       return {
         ...copy,
         belowMinimum: !!minCondition && isBelowCondition(copy.condition, minCondition),
         value,
-        gain: value && copy.pricePaid !== null ? value.usd - copy.pricePaid : null,
+        gain: copyGain(value?.usd ?? null, copy.pricePaid),
         sparkline: shapeSeries(values[i]!.flatMap((v, d) => (v ? [{ day: days[d]!, price: v.usd }] : []))).segments,
       };
     });

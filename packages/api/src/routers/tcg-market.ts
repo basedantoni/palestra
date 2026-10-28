@@ -207,7 +207,8 @@ export const tcgMarketRouter = router({
    * Collection Value (KOI-374): today's value over the Copies the user holds today with how many are
    * priced, the total Gain, and its history over `range`, which revalues today's Copies at each past
    * day's prices and rates, so buying a card is never a change and an exchange-rate swing is. A day
-   * with no Copy priced has no point. Shared by My Copies, the Binder and the pulse strip.
+   * with no Copy priced has no point, and each point says how many were. Serves My Copies' chart;
+   * the Binder (KOI-375) and the pulse strip (KOI-376) are to reuse it.
    */
   collectionHistory: protectedProcedure
     .input(z.object({ range: z.enum(Object.keys(PRICE_RANGES) as [PriceRange, ...PriceRange[]]) }))

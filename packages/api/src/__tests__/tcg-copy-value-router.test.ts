@@ -120,6 +120,22 @@ describe("tcg.copies.list Copy Value", () => {
     expect(copy).toMatchObject({ value: null, gain: null, sparkline: [] });
   });
 
+  it("keeps the Copy's own Condition on a tie, and leaves a CardTrader price unpriced with no dollar rate", async () => {
+    await addCopy(printings.en, "LP", null);
+    await addCopy(printings.ja, "NM", null);
+    await price(printings.en, TODAY, 30, "NM");
+    await price(printings.en, TODAY, 30, "LP");
+    await price(printings.ja, TODAY, 40, "NM");
+
+    const copies = await caller.tcg.copies.list();
+    expect(copies.map((c) => [c.language, c.value?.pricedAt ?? null])).toEqual(
+      expect.arrayContaining([
+        ["en", "LP"],
+        ["ja", null],
+      ]),
+    );
+  });
+
   it("flags a price over 7 days old 'as of' and leaves one over 30 days unpriced", async () => {
     await addCopy(printings.en, "NM", null);
     await addCopy(printings.ja, "NM", null);
@@ -158,9 +174,8 @@ describe("tcg.market.collectionHistory", () => {
     });
   });
 
-  it("revalues today's Copies at each past day's prices and rates, so adding a Copy moves every day", async () => {
+  it("revalues today's Copies at each past day's prices, so adding a Copy changes every past day equally", async () => {
     await usdPerEur("2026-10-20", 1);
-    await usdPerEur("2026-10-26", 2);
     await price(printings.en, "2026-10-25", 30);
     await price(printings.en, TODAY, 35);
     await price(printings.ja, "2026-10-25", 10);
@@ -175,14 +190,26 @@ describe("tcg.market.collectionHistory", () => {
 
     await addCopy(printings.ja, "NM", 5);
     const after = await caller.tcg.market.collectionHistory({ range: "1M" });
-    // The flat EUR price counts double once the euro doubles.
     expect(after.points).toEqual([
       { day: "2026-10-25", usd: 40, priced: 2 },
-      { day: "2026-10-26", usd: 50, priced: 2 },
-      { day: TODAY, usd: 55, priced: 2 },
+      { day: "2026-10-26", usd: 40, priced: 2 },
+      { day: TODAY, usd: 45, priced: 2 },
     ]);
     // All starts at the first Market Price.
     expect((await caller.tcg.market.collectionHistory({ range: "All" })).points).toEqual(after.points);
+  });
+
+  it("counts an exchange-rate swing: a flat EUR price is worth double once the euro doubles", async () => {
+    await usdPerEur("2026-10-20", 1);
+    await usdPerEur("2026-10-26", 2);
+    await price(printings.ja, "2026-10-25", 10);
+    await addCopy(printings.ja, "NM", 5);
+
+    expect((await caller.tcg.market.collectionHistory({ range: "1M" })).points).toEqual([
+      { day: "2026-10-25", usd: 10, priced: 1 },
+      { day: "2026-10-26", usd: 20, priced: 1 },
+      { day: TODAY, usd: 20, priced: 1 },
+    ]);
   });
 
   it("has no value or Gain with nothing priced", async () => {
