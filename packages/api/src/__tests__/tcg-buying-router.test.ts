@@ -84,7 +84,8 @@ describe("received below the minimum Condition", () => {
       { id: "c-direct", condition: "DMG", minCondition: null },
     ]);
 
-    await expect(caller().tcg.copies.list()).resolves.toEqual([
+    // Matched, not equal: each Copy also carries its Copy Value (tcg-copy-value-router.test.ts).
+    await expect(caller().tcg.copies.list()).resolves.toMatchObject([
       { id: "c-below", condition: "HP", belowMinimum: true },
       { id: "c-ok", condition: "NM", belowMinimum: false },
       { id: "c-direct", condition: "DMG", belowMinimum: false },

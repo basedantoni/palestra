@@ -5,12 +5,11 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-import { trpc, type RouterOutputs } from "@/utils/trpc";
+import { trpc } from "@/utils/trpc";
 
 import { CopyDialog } from "./-components/copy-dialog";
+import { CollectionTile, CopyValue, type CopyRow } from "./-components/copy-value";
 import { invalidateBrowse } from "./-components/invalidate-browse";
-
-type CopyRow = RouterOutputs["tcg"]["copies"]["list"][number];
 
 export const Route = createFileRoute("/tcg/copies")({
   component: CopiesPage,
@@ -30,6 +29,7 @@ function CopiesPage() {
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: trpc.tcg.copies.list.pathKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.tcg.market.collectionHistory.pathKey() }),
       invalidateBrowse(queryClient),
     ]);
   const update = useMutation(
@@ -51,6 +51,8 @@ function CopiesPage() {
         </Link>
       </div>
 
+      <CollectionTile />
+
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !copies?.length ? (
@@ -69,6 +71,7 @@ function CopiesPage() {
               {c.belowMinimum && <Badge variant="destructive">Below Want minimum</Badge>}
               <span className="text-xs">{c.pricePaid == null ? "No price" : c.pricePaid.toLocaleString("en-US", { style: "currency", currency: "USD" })}</span>
               <span className="text-xs text-muted-foreground">{c.acquiredOn}</span>
+              <CopyValue copy={c} />
               <span className="ml-auto flex gap-1">
                 <Button size="xs" variant="outline" onClick={() => setEditing(c)}>
                   Edit

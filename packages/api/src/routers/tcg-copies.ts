@@ -4,8 +4,11 @@ import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCard, tcgConditionEnum, tcgCopy, tcgPrinting, tcgWant } from "@life-tracker/db/schema/index";
+import { todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { copyValueHistory } from "../lib/market/copy-value-db";
+import { daysBefore, shapeSeries } from "../lib/market/market-price";
 import { isBelowCondition } from "../lib/tcg-condition";
 
 async function assertPrintingExists(printingId: string) {
@@ -70,6 +73,8 @@ export const tcgCopiesRouter = router({
   /**
    * The caller's Copies with their Printing and character, newest first.
    * `belowMinimum`: received through a Want in a Condition worse than its minimum.
+   * `value`: today's Copy Value (KOI-374), null when unpriced; `gain`: it minus the price paid;
+   * `sparkline`: the Copy Value over the last 30 days, real values only.
    */
   list: protectedProcedure.query(async ({ ctx }) => {
     const rows = await db
@@ -94,9 +99,17 @@ export const tcgCopiesRouter = router({
       .leftJoin(tcgWant, eq(tcgWant.id, tcgCopy.wantId))
       .where(eq(tcgCopy.userId, ctx.session.user.id))
       .orderBy(desc(tcgCopy.acquiredOn), desc(tcgCopy.createdAt));
-    return rows.map(({ minCondition, ...copy }) => ({
-      ...copy,
-      belowMinimum: !!minCondition && isBelowCondition(copy.condition, minCondition),
-    }));
+    const today = todayInTimeZone(new Date(), "UTC");
+    const { days, values } = await copyValueHistory(db, rows, daysBefore(today, 30), today);
+    return rows.map(({ minCondition, ...copy }, i) => {
+      const value = values[i]!.at(-1) ?? null;
+      return {
+        ...copy,
+        belowMinimum: !!minCondition && isBelowCondition(copy.condition, minCondition),
+        value,
+        gain: value && copy.pricePaid !== null ? value.usd - copy.pricePaid : null,
+        sparkline: shapeSeries(values[i]!.flatMap((v, d) => (v ? [{ day: days[d]!, price: v.usd }] : []))).segments,
+      };
+    });
   }),
 });

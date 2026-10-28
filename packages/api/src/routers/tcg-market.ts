@@ -15,6 +15,8 @@ import {
 import { TCG_ARTWORKS_MAX_LIMIT, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { totalGain } from "../lib/market/copy-value";
+import { copyValueHistory } from "../lib/market/copy-value-db";
 import { toUsd } from "../lib/market/ecb";
 import { ratesOn } from "../lib/market/exchange-rate-db";
 import type { Condition } from "../lib/tcg-condition";
@@ -199,5 +201,40 @@ export const tcgMarketRouter = router({
         );
 
       return { today, series, ranges, grid, offers, pricesPaid: paid.map((c) => c.pricePaid!) };
+    }),
+
+  /**
+   * Collection Value (KOI-374): today's value over the Copies the user holds today with how many are
+   * priced, the total Gain, and its history over `range`, which revalues today's Copies at each past
+   * day's prices and rates, so buying a card is never a change and an exchange-rate swing is. A day
+   * with no Copy priced has no point. Shared by My Copies, the Binder and the pulse strip.
+   */
+  collectionHistory: protectedProcedure
+    .input(z.object({ range: z.enum(Object.keys(PRICE_RANGES) as [PriceRange, ...PriceRange[]]) }))
+    .query(async ({ ctx, input }) => {
+      const today = todayInTimeZone(new Date(), "UTC");
+      const copies = await db
+        .select({
+          printingId: tcgCopy.printingId,
+          language: tcgPrinting.language,
+          condition: tcgCopy.condition,
+          pricePaid: tcgCopy.pricePaid,
+        })
+        .from(tcgCopy)
+        .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgCopy.printingId))
+        .where(eq(tcgCopy.userId, ctx.session.user.id));
+      const { days, values } = await copyValueHistory(db, copies, rangeStart(input.range, today), today);
+      const points = days.flatMap((day, d) => {
+        const priced = values.flatMap((v) => (v[d] ? [v[d].usd] : []));
+        return priced.length ? [{ day, usd: priced.reduce((a, b) => a + b, 0), priced: priced.length }] : [];
+      });
+      const last = points.at(-1);
+      return {
+        today,
+        copies: copies.length,
+        value: last?.day === today ? last : null,
+        gain: totalGain(copies.map((c, i) => ({ usd: values[i]!.at(-1)?.usd ?? null, pricePaid: c.pricePaid }))),
+        points,
+      };
     }),
 });
