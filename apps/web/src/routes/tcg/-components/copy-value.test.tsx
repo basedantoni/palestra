@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -5,7 +6,7 @@ import { renderWithData } from "@/test/render";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { useArtworkCards } from "./artwork-card";
-import { CollectionTile, CopyValue, type CopyRow } from "./copy-value";
+import { CollectionTile, CollectionValue, CopySticker, CopyValue, type CopyRow } from "./copy-value";
 import type { TilePrices } from "./tile-price";
 
 const JA = "00000000-0000-4000-8000-0000000000a1";
@@ -71,24 +72,59 @@ describe("CopyValue", () => {
   });
 });
 
+describe("CopySticker", () => {
+  it("prices the held Copy, dated once stale, with no Gain", () => {
+    renderWithData(<CopySticker copy={copy({ value: { usd: 32, pricedAt: "NM", day: "2026-10-19", asOf: true } })} />);
+
+    expect(screen.getByText("$32.00")).toBeInTheDocument();
+    expect(screen.getByText("as of Oct 19")).toBeInTheDocument();
+    expect(screen.queryByText("+$12.00")).not.toBeInTheDocument();
+  });
+
+  it("shows — for an unpriced Copy", () => {
+    renderWithData(<CopySticker copy={copy({ value: null, gain: null })} />);
+
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+
+  it("opens the drawer for the Copy's Printing", () => {
+    renderWithData(<CopySticker copy={copy()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /\$32\.00/ }));
+    expect(screen.getByRole("dialog", { name: "OP05-119_p1 · EN" })).toBeInTheDocument();
+  });
+});
+
+const seedCollection = (client: QueryClient) =>
+  client.setQueryData(trpc.tcg.market.collectionHistory.queryKey({ range: "1M" }), {
+    today: "2026-10-27",
+    copies: 52,
+    value: { day: "2026-10-27", usd: 1240, priced: 38 },
+    gain: { usd: 312, percent: 18.2, copies: 30 },
+    points: [
+      { day: "2026-10-26", usd: 1200, priced: 38 },
+      { day: "2026-10-27", usd: 1240, priced: 38 },
+    ],
+  });
+
 describe("CollectionTile", () => {
   it("shows the Collection Value, its coverage and the total Gain vs paid", () => {
-    renderWithData(<CollectionTile />, (client) => {
-      client.setQueryData(trpc.tcg.market.collectionHistory.queryKey({ range: "1M" }), {
-        today: "2026-10-27",
-        copies: 52,
-        value: { day: "2026-10-27", usd: 1240, priced: 38 },
-        gain: { usd: 312, percent: 18.2, copies: 30 },
-        points: [
-          { day: "2026-10-26", usd: 1200, priced: 38 },
-          { day: "2026-10-27", usd: 1240, priced: 38 },
-        ],
-      });
-    });
+    renderWithData(<CollectionTile />, seedCollection);
 
     expect(screen.getByText("$1,240.00")).toBeInTheDocument();
     expect(screen.getByText("38 of 52 Copies priced")).toBeInTheDocument();
     expect(screen.getByText("+$312.00 (+18%)")).toBeInTheDocument();
+  });
+});
+
+describe("CollectionValue", () => {
+  it("shows the same value and coverage as My Copies, with no Gain", () => {
+    renderWithData(<CollectionValue />, seedCollection);
+
+    expect(screen.getByText("$1,240.00")).toBeInTheDocument();
+    expect(screen.getByText("38 of 52 Copies priced")).toBeInTheDocument();
+    expect(screen.queryByText(/vs paid/)).not.toBeInTheDocument();
   });
 });
 

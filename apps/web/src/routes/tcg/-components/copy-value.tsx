@@ -53,6 +53,30 @@ export function CopyValue({ copy, sparkline = true }: { copy: CopyRow; sparkline
 }
 
 /**
+ * A Binder pocket's price sticker (KOI-375): the held Copy's Value, dated once stale, "—" when
+ * unpriced. No Gain. Clicking it opens the Printing drawer.
+ */
+export function CopySticker({ copy }: { copy: CopyRow }) {
+  const [open, setOpen] = useState(false);
+  const { value } = copy;
+  if (!value) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <>
+      <button
+        type="button"
+        className="flex flex-wrap items-baseline justify-center gap-1 rounded-sm text-xs underline-offset-2 hover:underline"
+        title={`Copy Value, ${copy.language.toUpperCase()} ${copy.condition}${value.pricedAt === copy.condition ? "" : `, priced at ${value.pricedAt}`}`}
+        onClick={() => setOpen(true)}
+      >
+        <span className="font-medium tabular-nums">{usd.format(value.usd)}</span>
+        {value.asOf && <span className="text-muted-foreground">as of {shortDay(value.day)}</span>}
+      </button>
+      <PrintingDrawer printing={open ? copy : null} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+/**
  * Collection Value (KOI-374): today's total over priced Copies with coverage, the total Gain vs
  * paid, and its history over a range.
  */
@@ -66,10 +90,7 @@ export function CollectionTile() {
   return (
     <section className="space-y-2 border border-border p-3" aria-label="Collection Value">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-xl font-semibold tabular-nums">{data.value ? usd.format(data.value.usd) : "—"}</span>
-        <span className="text-xs text-muted-foreground">
-          {data.value?.priced ?? 0} of {data.copies} Copies priced
-        </span>
+        <ValueAndCoverage data={data} />
         {data.gain && (
           <span className="text-xs" title={`Over ${data.gain.copies} Copies with a value and a price paid`}>
             <span className={gainClass(data.gain.usd)}>
@@ -97,6 +118,33 @@ export function CollectionTile() {
         />
       )}
     </section>
+  );
+}
+
+type CollectionHistory = RouterOutputs["tcg"]["market"]["collectionHistory"];
+
+function ValueAndCoverage({ data }: { data: CollectionHistory }) {
+  return (
+    <>
+      <span className="text-xl font-semibold tabular-nums">{data.value ? usd.format(data.value.usd) : "—"}</span>
+      <span className="text-xs text-muted-foreground">
+        {data.value?.priced ?? 0} of {data.copies} Copies priced
+      </span>
+    </>
+  );
+}
+
+/**
+ * Collection Value with coverage for the Binder header (KOI-375): My Copies' default query, so the
+ * two always agree. No Gain, which stays on My Copies.
+ */
+export function CollectionValue() {
+  const { data } = useQuery(trpc.tcg.market.collectionHistory.queryOptions({ range: "1M" }));
+  if (!data || data.copies === 0) return null;
+  return (
+    <div role="group" className="flex items-baseline gap-2" aria-label="Collection Value">
+      <ValueAndCoverage data={data} />
+    </div>
   );
 }
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
-import { PrintingDrawer } from "./printing-drawer";
+import { PriceHistory, PrintingDrawer } from "./printing-drawer";
 
 type Drawer = RouterOutputs["tcg"]["market"]["printing"];
 
@@ -108,5 +108,18 @@ describe("PrintingDrawer", () => {
     open();
 
     expect(screen.getByRole("link", { name: /European Central Bank/ })).toBeInTheDocument();
+  });
+});
+
+describe("PriceHistory", () => {
+  it("draws a Printing's Price History on its own, with the drawer's range rules and no grid", () => {
+    renderWithData(<PriceHistory printingId={printing.printingId} />, (client) => {
+      client.setQueryData(trpc.tcg.market.printing.queryKey({ printingId: printing.printingId, range: "1M" }), drawer);
+    });
+
+    expect(screen.getByRole("img", { name: "Price History" })).toBeInTheDocument();
+    expect(range("1M")).not.toHaveAttribute("aria-disabled", "true");
+    expect(range("3M")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });
