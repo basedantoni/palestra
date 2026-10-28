@@ -211,6 +211,33 @@ describe("tcg.market.tilePrices", () => {
     ]);
   });
 
+  it("prices the Simplified Chinese and Korean Printings at their CardTrader NM price, and no English one from CardTrader", async () => {
+    const en = await artwork("OP05-119_p1");
+    const [zh, ko] = await db
+      .insert(tcgPrinting)
+      .values(
+        (["zh", "ko"] as const).map((language) => ({
+          variantId: "OP05-119_p1",
+          language,
+          listId: "OP05-119_p1",
+          packId: "569105",
+          setName: `OP-05, ${language}`,
+          imageUrl: "https://img.test/ja/OP05-119_p1.png",
+        })),
+      )
+      .returning({ id: tcgPrinting.id });
+    await price(zh!.id, TODAY, 8, { marketplace: "cardtrader", listingCount: 1 });
+    await price(ko!.id, TODAY, 4, { marketplace: "cardtrader", listingCount: 1 });
+    await price(en, TODAY, 99, { marketplace: "cardtrader", listingCount: 1 });
+    await db.insert(exchangeRate).values({ day: TODAY, currency: "USD", perEur: 1.25 });
+
+    const tiles = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
+    expect(tiles.map((t) => [t.language, t.printingId, t.price])).toEqual([
+      ["ko", ko!.id, 5],
+      ["zh", zh!.id, 10],
+    ]);
+  });
+
   it("has no Japanese tile price without a dollar rate", async () => {
     await artwork("OP05-119_p1");
     const [ja] = await db.select({ id: tcgPrinting.id }).from(tcgPrinting).where(eq(tcgPrinting.language, "ja"));

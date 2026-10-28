@@ -94,7 +94,7 @@ export const tcgWant = pgTable(
     variantId: text("variant_id")
       .notNull()
       .references(() => tcgArtwork.variantId),
-    /** Accepted languages: one or both. */
+    /** Accepted languages: one or more. */
     languages: tcgLanguageEnum("languages").array().notNull(),
     /** Maximum delivered price, USD dollars. */
     maxPrice: real("max_price").notNull(),

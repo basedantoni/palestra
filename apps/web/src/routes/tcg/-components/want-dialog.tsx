@@ -67,7 +67,7 @@ export function WantDialog({
         >
           <fieldset className="space-y-1 text-sm">
             <legend className="text-xs text-muted-foreground">Accepted languages</legend>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
               {LANGUAGES.map(([lang, name]) => (
                 <label key={lang} className="flex items-center gap-1">
                   <input

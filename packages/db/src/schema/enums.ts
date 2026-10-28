@@ -153,7 +153,8 @@ export const transactionFlowEnum = pgEnum("transaction_flow", [
 /** Plaid environment that issued an item's access token; tokens only work there (KOI-288). */
 export const plaidEnvEnum = pgEnum("plaid_env", ["sandbox", "production"]);
 
-export const tcgLanguageEnum = pgEnum("tcg_language", ["ja", "en"]);
+/** `zh` (Simplified Chinese) and `ko` Printings are created from CardTrader Listings (KOI-372). */
+export const tcgLanguageEnum = pgEnum("tcg_language", ["ja", "en", "zh", "ko"]);
 export const tcgVariantKindEnum = pgEnum("tcg_variant_kind", ["base", "parallel", "manga", "reprint"]);
 /** Condition, best first: NM > LP > MP > HP > DMG. "At least LP" compares positions in this order. Shared by Wants and Copies. */
 export const tcgConditionEnum = pgEnum("tcg_condition", ["NM", "LP", "MP", "HP", "DMG"]);

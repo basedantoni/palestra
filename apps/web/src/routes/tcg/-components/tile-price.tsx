@@ -26,6 +26,8 @@ const percent = new Intl.NumberFormat("en-US", {
 export const TILE_PRICE_TITLES = {
   en: "TCGplayer Market Price, NM",
   ja: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
+  zh: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
+  ko: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
 } as const;
 
 /**

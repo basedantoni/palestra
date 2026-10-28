@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 
 import { trpc } from "@/utils/trpc";
 
+import { DeletePrinting } from "./-components/delete-printing";
 import { UnmatchedProducts } from "./-components/unmatched-products";
 
 export const Route = createFileRoute("/admin/market")({
@@ -21,6 +23,17 @@ function AdminMarketPage() {
       },
       onError: (err) => {
         toast.error(err.message || "Failed to save the match");
+      },
+    }),
+  );
+  const deletePrinting = useMutation(
+    trpc.admin.market.deletePrinting.mutationOptions({
+      onSuccess: (_, { variantId, language }) => {
+        toast.success(`Deleted the ${TCG_LANGUAGE_NAME[language]} Printing of ${variantId}`);
+        void queryClient.invalidateQueries({ queryKey: trpc.tcg.pathKey() });
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to delete the Printing");
       },
     }),
   );
@@ -43,6 +56,18 @@ function AdminMarketPage() {
           onMatch={(id, variantId) => match.mutate({ id, variantId })}
         />
       )}
+      <div className="mt-8 mb-4">
+        <h2 className="text-xl font-semibold">Delete a phantom Printing</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A Simplified Chinese or Korean Printing that CardTrader Listings created on the wrong Artwork. Fix the
+          blueprint's match first, or the next capture creates it again. Refused while a Copy or Offer is of it; its
+          Market Prices go with it.
+        </p>
+      </div>
+      <DeletePrinting
+        pending={deletePrinting.isPending}
+        onDelete={(variantId, language) => deletePrinting.mutate({ variantId, language })}
+      />
     </div>
   );
 }

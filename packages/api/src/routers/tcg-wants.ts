@@ -21,7 +21,7 @@ import type { Conn } from "../lib/rules-db";
 import { isBelowCondition } from "../lib/tcg-condition";
 
 const terms = z.object({
-  /** Accepted languages: Japanese, English, or both. */
+  /** Accepted languages: one or more. */
   languages: z
     .array(z.enum(tcgLanguageEnum.enumValues))
     .min(1, "Pick at least one language")

@@ -2,7 +2,8 @@
  * The admin's unmatched Marketplace Products and manual matches (KOI-368), on a real Postgres
  * (PGlite): the list is the products with no Artwork whose method is not `manual`; a manual match
  * (or "not an Artwork") is never overwritten by a capture and applies to a past day when it is
- * replayed through the `market.derive` job from the raw copy.
+ * replayed through the `market.derive` job from the raw copy. The admin's delete of a phantom
+ * Simplified Chinese or Korean Printing (KOI-372) is refused while a Copy or an Offer is of it.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting, user } from "@life-tracker/db/schema/index";
 import { and, eq } from "drizzle-orm";
 
 import { parseAdminEmails } from "../lib/admins";
@@ -169,12 +170,76 @@ describe("replaying a past day after a manual match", () => {
   });
 });
 
+/** A Printing of Shanks OP01-120 in `language` with an NM Market Price; returns its id. */
+async function pricedPrinting(language: "ja" | "zh" | "ko") {
+  const [printing] = await db
+    .insert(tcgPrinting)
+    .values({ variantId: "OP01-120", language, listId: `OP01-120-${language}`, packId: "569101", setName: "OP-01", imageUrl: "https://img.test/x.png" })
+    .returning({ id: tcgPrinting.id });
+  const blueprint = await product("300001", { marketplace: "cardtrader", variantId: "OP01-120" });
+  await db.insert(tcgMarketPrice).values({ printingId: printing!.id, marketplace: "cardtrader", condition: "NM", day: PAST_DAY, price: 4, listingCount: 1, marketplaceProductId: blueprint.id });
+  return printing!.id;
+}
+
+const printingsOf = (language: "ja" | "en" | "zh" | "ko") =>
+  db.select({ id: tcgPrinting.id }).from(tcgPrinting).where(and(eq(tcgPrinting.variantId, "OP01-120"), eq(tcgPrinting.language, language)));
+
+describe("admin.market.deletePrinting", () => {
+  beforeEach(async () => {
+    await db.insert(user).values(["admin", "member"].map((id) => ({ id, name: id, email: `${id}@test.internal` })));
+  });
+
+  it.each(["zh", "ko"] as const)("deletes an unreferenced %s Printing, its Market Prices with it", async (language) => {
+    const id = await pricedPrinting(language);
+
+    await admin.admin.market.deletePrinting({ variantId: "OP01-120", language });
+
+    expect(await printingsOf(language)).toEqual([]);
+    expect(await db.select().from(tcgMarketPrice).where(eq(tcgMarketPrice.printingId, id))).toEqual([]);
+    expect(await printingsOf("en")).toHaveLength(1);
+  });
+
+  it("refuses while a Copy is of it", async () => {
+    const id = await pricedPrinting("ko");
+    await admin.tcg.copies.create({ printingId: id, condition: "NM", pricePaid: 5, acquiredOn: PAST_DAY });
+
+    await expect(admin.admin.market.deletePrinting({ variantId: "OP01-120", language: "ko" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await printingsOf("ko")).toHaveLength(1);
+  });
+
+  it("refuses while an Offer is for it", async () => {
+    const id = await pricedPrinting("zh");
+    const { id: wantId } = await admin.tcg.wants.create({ variantId: "OP01-120", languages: ["zh"], maxPrice: 20, minCondition: "LP" });
+    await admin.tcg.offers.create({ wantId, printingId: id, seller: "Xianyu", price: 9, seenOn: PAST_DAY });
+
+    await expect(admin.admin.market.deletePrinting({ variantId: "OP01-120", language: "zh" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await printingsOf("zh")).toHaveLength(1);
+  });
+
+  it("refuses a Japanese or English Printing", async () => {
+    await pricedPrinting("ja");
+
+    for (const language of ["ja", "en"]) {
+      await expect(admin.admin.market.deletePrinting({ variantId: "OP01-120", language } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect(await printingsOf("ja")).toHaveLength(1);
+    expect(await printingsOf("en")).toHaveLength(1);
+  });
+
+  it("refuses an Artwork with no Printing in that language", async () => {
+    await expect(admin.admin.market.deletePrinting({ variantId: "OP01-120", language: "zh" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
 describe("access", () => {
   it("refuses a non-admin on every procedure", async () => {
     const shanks = await product("454665");
+    await pricedPrinting("ko");
 
     await expect(member.admin.market.unmatchedProducts()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(member.admin.market.setManualMatch({ id: shanks.id, variantId: null })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(member.admin.market.deletePrinting({ variantId: "OP01-120", language: "ko" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await stored("454665")).toMatchObject({ method: "rule" });
+    expect(await printingsOf("ko")).toHaveLength(1);
   });
 });

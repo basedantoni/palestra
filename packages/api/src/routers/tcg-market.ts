@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, lte, min, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte, min, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -34,8 +34,9 @@ import {
 /** Market Watch reads (KOI-366). Market Prices are global; "today" is the UTC day, as capture days are. */
 export const tcgMarketRouter = router({
   /**
-   * The NM Current Market Price of each shown Artwork's English (TCGplayer) and Japanese
-   * (CardTrader) Printings in USD, with its 7d Price Move and 30-day sparkline (KOI-367, KOI-369).
+   * The NM Current Market Price of each shown Artwork's English (TCGplayer) and Japanese,
+   * Simplified Chinese and Korean (CardTrader) Printings in USD, with its 7d Price Move and 30-day
+   * sparkline (KOI-367, KOI-369, KOI-372).
    * A CardTrader price converts at today's rate; its Price Move stays in EUR. A Printing with no
    * Current Market Price, or none convertible today, is absent.
    */
@@ -62,7 +63,7 @@ export const tcgMarketRouter = router({
             inArray(tcgPrinting.variantId, input.variantIds),
             or(
               and(eq(tcgPrinting.language, "en"), eq(tcgMarketPrice.marketplace, "tcgplayer")),
-              and(eq(tcgPrinting.language, "ja"), eq(tcgMarketPrice.marketplace, "cardtrader")),
+              and(ne(tcgPrinting.language, "en"), eq(tcgMarketPrice.marketplace, "cardtrader")),
             ),
             eq(tcgMarketPrice.condition, "NM"),
             lte(tcgMarketPrice.day, today),

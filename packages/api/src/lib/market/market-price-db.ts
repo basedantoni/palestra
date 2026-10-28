@@ -1,7 +1,8 @@
 import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
+import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import type { CardtraderBlueprint } from "./cardtrader";
+import { CARDTRADER_LANGUAGES, type CardtraderBlueprint, printingToCreate } from "./cardtrader";
 import type { MarketDb } from "./exchange-rate-db";
 import { type Candidate, type TcgcsvProduct, matchRule, setKey } from "./tcgcsv";
 
@@ -59,11 +60,12 @@ export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[
 }
 
 /**
- * Derive CardTrader's Market Prices for `day` from that day's blueprints and their lowest Japanese
- * Listings, in one transaction: the blueprints go through the mapping store (`tcgplayer_id` tier,
- * then the rule tier), then the day is replaced with one price per Japanese Printing of a matched
- * Artwork per Condition: the lowest Listing across its blueprints, their Listing counts summed,
- * and the blueprint that supplied the lowest.
+ * Derive CardTrader's Market Prices for `day` from that day's blueprints and their lowest Listings
+ * per language, in one transaction: the blueprints go through the mapping store (`tcgplayer_id`
+ * tier, then the rule tier), then the day is replaced with one price per Printing of a matched
+ * Artwork per Condition, in the Listings' language: the lowest Listing across its blueprints, their
+ * Listing counts summed, and the blueprint that supplied the lowest. A matched Artwork's first
+ * Simplified Chinese or Korean Listing creates its Printing in that language (KOI-372).
  */
 export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderBlueprint[], day: string) {
   return db.transaction(async (tx) => {
@@ -78,33 +80,41 @@ export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderB
     });
 
     const lowest = new Map(blueprints.map((b) => [b.externalId, b.lowest]));
-    const best = new Map<string, Map<PriceRow["condition"], { price: number; count: number; productId: number }>>();
-    for (const m of mapped) {
-      if (m.variantId === null) continue;
-      const byCondition = best.get(m.variantId) ?? new Map();
-      for (const [condition, listing] of Object.entries(lowest.get(m.externalId) ?? {}) as Array<
-        [PriceRow["condition"], { price: number; count: number }]
-      >) {
-        const current = byCondition.get(condition);
-        byCondition.set(condition, {
-          price: Math.min(listing.price, current?.price ?? Infinity),
-          count: listing.count + (current?.count ?? 0),
-          productId: !current || listing.price < current.price ? m.id : current.productId,
-        });
+    const prices: PriceRow[] = [];
+    for (const language of Object.values(CARDTRADER_LANGUAGES)) {
+      const best = new Map<string, Map<PriceRow["condition"], { price: number; count: number; productId: number }>>();
+      for (const m of mapped) {
+        const listings = Object.entries(lowest.get(m.externalId)?.[language] ?? {}) as Array<
+          [PriceRow["condition"], { price: number; count: number }]
+        >;
+        if (m.variantId === null || listings.length === 0) continue;
+        const byCondition = best.get(m.variantId) ?? new Map();
+        for (const [condition, listing] of listings) {
+          const current = byCondition.get(condition);
+          byCondition.set(condition, {
+            price: Math.min(listing.price, current?.price ?? Infinity),
+            count: listing.count + (current?.count ?? 0),
+            productId: !current || listing.price < current.price ? m.id : current.productId,
+          });
+        }
+        best.set(m.variantId, byCondition);
       }
-      best.set(m.variantId, byCondition);
+      const variantIds = [...best.keys()];
+      if (language !== "ja") await createPrintings(tx, language, variantIds);
+      for (const printing of await printingsOf(tx, language, variantIds)) {
+        for (const [condition, { price, count, productId }] of best.get(printing.variantId)!) {
+          prices.push({
+            printingId: printing.id,
+            marketplace: "cardtrader",
+            condition,
+            day,
+            price,
+            listingCount: count,
+            marketplaceProductId: productId,
+          });
+        }
+      }
     }
-    const prices = (await printingsOf(tx, "ja", [...best.keys()])).flatMap((printing) =>
-      [...best.get(printing.variantId)!].map(([condition, { price, count, productId }]) => ({
-        printingId: printing.id,
-        marketplace: "cardtrader" as const,
-        condition,
-        day,
-        price,
-        listingCount: count,
-        marketplaceProductId: productId,
-      })),
-    );
     await replaceDay(tx, "cardtrader", day, prices);
     return { products: blueprints.length, unmatched, prices: prices.length };
   });
@@ -188,6 +198,31 @@ async function replaceDay(tx: MarketDb, marketplace: Marketplace, day: string, p
   for (const chunk of chunks(prices)) await tx.insert(tcgMarketPrice).values(chunk);
 }
 
+/**
+ * Create the `language` Printing of each Artwork in `variantIds` that has none yet, from its
+ * Japanese or English one (`printingToCreate`). Nothing here deletes one: when its Listings go, its
+ * Price History has a gap.
+ */
+async function createPrintings(tx: MarketDb, language: "zh" | "ko", variantIds: string[]) {
+  if (variantIds.length === 0) return;
+  const existing = Map.groupBy(
+    await tx
+      .select({
+        variantId: tcgPrinting.variantId,
+        language: tcgPrinting.language,
+        packId: tcgPrinting.packId,
+        setName: tcgPrinting.setName,
+        imageUrl: tcgPrinting.imageUrl,
+      })
+      .from(tcgPrinting)
+      .where(inArray(tcgPrinting.variantId, variantIds)),
+    (p) => p.variantId,
+  );
+  const rows = variantIds.flatMap((v) => printingToCreate(v, language, existing.get(v) ?? []) ?? []);
+  // A list ID taken already (another Artwork's Printing) skips the row rather than failing the day.
+  for (const chunk of chunks(rows)) await tx.insert(tcgPrinting).values(chunk).onConflictDoNothing();
+}
+
 // ponytail: one Printing per Artwork per language is the pairing's job (KOI-332); a second would get the same price.
 const printingsOf = (tx: MarketDb, language: Language, variantIds: string[]) =>
   variantIds.length
@@ -229,8 +264,6 @@ async function tcgplayerTier(tx: MarketDb, blueprints: CardtraderBlueprint[]) {
   return matches;
 }
 
-const LANGUAGE_NAMES: Record<Language, string> = { en: "English", ja: "Japanese" };
-
 /** The rule tier over `products`, with candidates from `language` Printings. */
 async function ruleTier(tx: MarketDb, products: Product[], language: Language) {
   const { candidates, cardNames } = await ruleCandidates(
@@ -243,7 +276,7 @@ async function ruleTier(tx: MarketDb, products: Product[], language: Language) {
       p,
       candidates.get(`${p.number}|${setKey(p.set)}`) ?? [],
       cardNames.get(p.number) ?? null,
-      LANGUAGE_NAMES[language],
+      TCG_LANGUAGE_NAME[language],
     );
     return "variantId" in match ? { ...match, method: "rule" } : match;
   };

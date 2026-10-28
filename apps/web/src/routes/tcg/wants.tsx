@@ -42,7 +42,7 @@ export const Route = createFileRoute("/tcg/wants")({
   },
 });
 
-const LANGUAGE_LABEL = { ja: "JP", en: "EN" } as const;
+const LANGUAGE_LABEL = { ja: "JP", en: "EN", zh: "ZH", ko: "KO" } as const;
 const price = (n: number) => `$${n.toFixed(2)}`;
 
 /** How long ago an Offer was seen, so stale prices get re-checked. */

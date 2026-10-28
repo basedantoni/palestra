@@ -1,9 +1,10 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgMarketplaceProduct } from "@life-tracker/db/schema/index";
+import { tcgArtwork, tcgCopy, tcgMarketplaceProduct, tcgOffer, tcgPrinting } from "@life-tracker/db/schema/index";
+import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
 
 import { adminProcedure, router } from "../index";
 
@@ -11,7 +12,8 @@ const p = tcgMarketplaceProduct;
 
 /**
  * The admin's fixes to the Marketplace Product → Artwork matcher (KOI-368). A manual row is never
- * touched by the matcher; it takes effect for past days on the next `market.derive` replay.
+ * touched by the matcher; it takes effect for past days on the next `market.derive` replay. Also
+ * the cleanup of phantom Printings the CardTrader capture created (KOI-372).
  */
 export const marketAdminRouter = router({
   /** The Marketplace Products the matcher couldn't place: no Artwork, and not set by hand. */
@@ -38,5 +40,33 @@ export const marketAdminRouter = router({
         .returning({ id: p.id, variantId: p.variantId, method: p.method });
       if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Marketplace Product not found" });
       return updated;
+    }),
+
+  /**
+   * Delete a phantom Simplified Chinese or Korean Printing that CardTrader Listings created
+   * (KOI-372), with its Market Prices. Refused while a Copy or an Offer is of it; Japanese and
+   * English Printings come from the catalog import and are never deleted here.
+   */
+  deletePrinting: adminProcedure
+    .input(z.object({ variantId: z.string().trim().min(1).max(40), language: z.enum(["zh", "ko"]) }))
+    .mutation(async ({ input: { variantId, language } }) => {
+      const ids = (
+        await db
+          .select({ id: tcgPrinting.id })
+          .from(tcgPrinting)
+          .where(and(eq(tcgPrinting.variantId, variantId), eq(tcgPrinting.language, language)))
+      ).map((r) => r.id);
+      const name = `${TCG_LANGUAGE_NAME[language]} Printing of ${variantId}`;
+      if (ids.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: `No ${name}` });
+      const [[copy], [offer]] = await Promise.all([
+        db.select({ id: tcgCopy.id }).from(tcgCopy).where(inArray(tcgCopy.printingId, ids)).limit(1),
+        db.select({ id: tcgOffer.id }).from(tcgOffer).where(inArray(tcgOffer.printingId, ids)).limit(1),
+      ]);
+      if (copy || offer) {
+        throw new TRPCError({ code: "CONFLICT", message: `The ${name} has ${copy ? "a Copy" : "an Offer"}` });
+      }
+      // A Copy or Offer added since the check still blocks it: their foreign keys don't cascade.
+      await db.delete(tcgPrinting).where(inArray(tcgPrinting.id, ids));
+      return { deleted: ids.length };
     }),
 });

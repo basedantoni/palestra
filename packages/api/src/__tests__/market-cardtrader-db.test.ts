@@ -1,14 +1,15 @@
 /**
- * CardTrader capture against a real Postgres (PGlite, KOI-369): the job with scenario CardTrader
- * responses (OP01 and OP05, `jp`) for fetch, a fake clock, and an in-memory bucket for Tigris.
- * The scenarios are hand-built to cover every rule, in the shape of the real responses recorded on
- * 2026-10-28 (lib/market/fixtures/cardtrader/recorded, see cardtrader.test.ts).
+ * CardTrader capture against a real Postgres (PGlite, KOI-369, KOI-372): the job with scenario
+ * CardTrader responses (OP01 and OP05, `jp`, `zh-CN`, `kr`) for fetch, a fake clock, and an
+ * in-memory bucket for Tigris. The scenarios are hand-built to cover every rule, in the shape of the
+ * real responses recorded on 2026-10-28 (lib/market/fixtures/cardtrader/recorded, see cardtrader.test.ts).
  *
- * - at most 1 request per second, with the token, and Listings only through the `jp` filter
+ * - at most 1 request per second, with the token, and Listings only through the `jp`, `zh-CN` and `kr` filters
  * - a capture lands the raw responses at raw/cardtrader/<day>/ before deriving
- * - the lowest EUR Listing per Japanese Printing per Condition with its Listing count
+ * - the lowest EUR Listing per Printing per Condition with its Listing count
  * - the tcgplayer_id tier (manual matches included), then the rule tier, else unmatched
  * - several blueprints on one Artwork: the lowest Listing, the summed count
+ * - a matched Artwork's first `zh-CN` or `kr` Listing creates its Printing in that language, kept for good
  * - re-running a day replaces CardTrader's day only
  */
 import { readFileSync } from "node:fs";
@@ -40,8 +41,11 @@ function fakeClock() {
   return { now: () => t, sleep: async (ms: number) => void (t += Math.max(0, ms)) };
 }
 
-/** fetch answering CardTrader URLs from the fixtures, noting when each call came by the clock. */
-function recordedCardtrader(clock = fakeClock()) {
+/**
+ * fetch answering CardTrader URLs from the fixtures, noting when each call came by the clock.
+ * `responses` replaces fixture files by name.
+ */
+function recordedCardtrader({ clock = fakeClock(), responses = {} as Record<string, unknown> } = {}) {
   const calls: Array<{ url: string; at: number }> = [];
   const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), at: clock.now() });
@@ -56,7 +60,7 @@ function recordedCardtrader(clock = fakeClock()) {
         : u.pathname === "/api/v2/blueprints/export"
           ? `blueprints-${id}.json`
           : `products-${u.searchParams.get("language")}-${id}.json`;
-    return new Response(readFileSync(join(FIXTURES, file)));
+    return new Response(file in responses ? JSON.stringify(responses[file]) : readFileSync(join(FIXTURES, file)));
   }) as typeof globalThis.fetch;
   return { deps: { fetch, clock, cardtraderToken: TOKEN }, calls };
 }
@@ -150,18 +154,22 @@ beforeEach(async () => {
 });
 
 describe("market.cardtrader capture", () => {
-  it("asks at most once a second, with the token, and for Listings only in jp", async () => {
+  it("asks at most once a second, with the token, and for Listings only in jp, zh-CN and kr", async () => {
     const { deps, calls } = recordedCardtrader();
     await captureCardtrader({ db, store: memoryStore(), ...deps }, DAY);
 
-    expect(calls).toHaveLength(5); // expansions, then blueprints and jp Listings for OP01 and OP05
+    expect(calls).toHaveLength(9); // expansions, then blueprints and jp, zh-CN and kr Listings for OP01 and OP05
     for (const [i, call] of calls.entries()) {
       if (i > 0) expect(call.at - calls[i - 1]!.at).toBeGreaterThanOrEqual(1000);
     }
     const listingCalls = calls.map((c) => new URL(c.url)).filter((u) => u.pathname === "/api/v2/marketplace/products");
     expect(listingCalls.map((u) => [u.searchParams.get("expansion_id"), u.searchParams.get("language")])).toEqual([
       ["2961", "jp"],
+      ["2961", "zh-CN"],
+      ["2961", "kr"],
       ["3062", "jp"],
+      ["3062", "zh-CN"],
+      ["3062", "kr"],
     ]);
   });
 
@@ -177,7 +185,7 @@ describe("market.cardtrader capture", () => {
   it("derives the lowest EUR Listing per Japanese Printing per Condition, with its Listing count", async () => {
     const result = await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
 
-    expect(await pricesOn(DAY)).toEqual([
+    expect((await pricesOn(DAY)).filter(([, language]) => language === "ja")).toEqual([
       // Two blueprints: €7.50 ×2 (tcgplayer_id) and €7 ×1 (rule). The lowest, the summed count.
       ["OP01-120", "ja", "NM", 7, 3, "200003"],
       ["OP01-120", "ja", "LP", 5, 1, "200003"],
@@ -193,7 +201,8 @@ describe("market.cardtrader capture", () => {
       ["OP05-119", "ja", "DMG", 9, 1, "300001"],
       ["OP05-119_p2", "ja", "NM", 1200, 1, "300002"], // its TCGplayer product's manual match
     ]);
-    expect(result).toMatchObject({ prices: 12, unmatched: 1, skipped: { conditions: ["Excellent", "(none)"], currencies: [] } });
+    // 12 Japanese, 3 Simplified Chinese and 1 Korean.
+    expect(result).toMatchObject({ prices: 16, unmatched: 1,skipped: { conditions: ["Excellent", "(none)"], currencies: [] } });
   });
 
   it("records each blueprint with how it was matched, and why the unmatched one has no Artwork", async () => {
@@ -222,7 +231,7 @@ describe("market.cardtrader capture", () => {
       variantId: null,
       reason: "TCGplayer product 454664 is marked not an Artwork",
     });
-    expect((await pricesOn(DAY)).filter(([v, , c]) => v === "OP01-120" && c === "NM")).toEqual([
+    expect((await pricesOn(DAY)).filter(([v, l, c]) => v === "OP01-120" && l === "ja" && c === "NM")).toEqual([
       ["OP01-120", "ja", "NM", 7, 1, "200003"],
     ]);
   });
@@ -234,6 +243,87 @@ describe("market.cardtrader capture", () => {
       /CARDTRADER_TOKEN/,
     );
     expect(store.objects.size).toBe(0);
+  });
+});
+
+/** The Printings in `language`, as stored. */
+const printingsIn = (language: "zh" | "ko") =>
+  db
+    .select({
+      variantId: tcgPrinting.variantId,
+      listId: tcgPrinting.listId,
+      packId: tcgPrinting.packId,
+      setName: tcgPrinting.setName,
+      imageUrl: tcgPrinting.imageUrl,
+    })
+    .from(tcgPrinting)
+    .where(eq(tcgPrinting.language, language))
+    .orderBy(asc(tcgPrinting.variantId));
+
+describe("Simplified Chinese and Korean Printings", () => {
+  it("creates one Printing per matched Artwork's first zh-CN or kr Listing, copying its Japanese pack, set and image", async () => {
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+
+    expect(await printingsIn("zh")).toEqual([
+      { variantId: "OP05-100", listId: "OP05-100", packId: "550000", setName: "OP-05, Simplified Chinese", imageUrl: "https://img.test/ja/OP05-100.png" },
+      { variantId: "OP05-119", listId: "OP05-119", packId: "550000", setName: "OP-05, Simplified Chinese", imageUrl: "https://img.test/ja/OP05-119.png" },
+    ]);
+    expect(await printingsIn("ko")).toEqual([
+      { variantId: "OP01-120", listId: "OP01-120", packId: "550000", setName: "OP-01, Korean", imageUrl: "https://img.test/ja/OP01-120.png" },
+    ]);
+  });
+
+  it("writes their Market Prices per Condition, with Listing counts", async () => {
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+
+    expect((await pricesOn(DAY)).filter(([, language]) => language !== "ja")).toEqual([
+      ["OP01-120", "ko", "NM", 4, 1, "200003"],
+      ["OP05-100", "zh", "NM", 2, 1, "300003"],
+      ["OP05-119", "zh", "NM", 20, 2, "300001"], // €20 and €22; the signed €10 doesn't count
+      ["OP05-119", "zh", "LP", 15, 1, "300001"],
+    ]);
+  });
+
+  it("reuses the Printing on a later day", async () => {
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, "2026-10-28");
+
+    expect(await printingsIn("zh")).toHaveLength(2);
+    expect(await printingsIn("ko")).toHaveLength(1);
+    expect((await pricesOn("2026-10-28")).filter(([, language]) => language !== "ja")).toHaveLength(4);
+  });
+
+  it("copies the English Printing when the Artwork has no Japanese one", async () => {
+    // OP05-119's blueprint matches through its TCGplayer product, so it needs no Japanese Printing.
+    await db.delete(tcgPrinting).where(and(eq(tcgPrinting.variantId, "OP05-119"), eq(tcgPrinting.language, "ja")));
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+
+    expect((await printingsIn("zh")).find((p) => p.variantId === "OP05-119")).toEqual({
+      variantId: "OP05-119",
+      listId: "OP05-119",
+      packId: "569000",
+      setName: "OP-05, Simplified Chinese",
+      imageUrl: "https://img.test/en/OP05-119.png",
+    });
+  });
+
+  it("keeps the Printing when its Listings disappear: its Price History just has a gap", async () => {
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+    const gone = { "products-zh-CN-3062.json": {}, "products-kr-2961.json": {} };
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader({ responses: gone }).deps }, "2026-10-28");
+
+    expect(await printingsIn("zh")).toHaveLength(2);
+    expect(await printingsIn("ko")).toHaveLength(1);
+    expect((await pricesOn("2026-10-28")).filter(([, language]) => language !== "ja")).toEqual([]);
+    expect((await pricesOn(DAY)).filter(([, language]) => language !== "ja")).toHaveLength(4);
+  });
+
+  it("creates no Printing for an unmatched blueprint's Listings", async () => {
+    const shanksParallel = { "200001": JSON.parse(readFileSync(join(FIXTURES, "products-kr-2961.json"), "utf8"))["200003"] };
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader({ responses: { "products-kr-2961.json": shanksParallel } }).deps }, DAY);
+
+    expect(await blueprint("200001")).toMatchObject({ variantId: null });
+    expect(await printingsIn("ko")).toEqual([]);
   });
 });
 
@@ -261,7 +351,7 @@ describe("re-running and replaying a CardTrader day", () => {
     await captureCardtrader({ db, store, ...recordedCardtrader().deps }, DAY);
     await deriveMarketDay({ db, store }, { source: "cardtrader", day: DAY });
 
-    expect(await pricesOn(DAY)).toHaveLength(12);
+    expect(await pricesOn(DAY)).toHaveLength(16);
     expect(await pricesOn(DAY, "tcgplayer")).toEqual([["OP05-119", "en", "NM", expect.closeTo(20.9, 4), null, "527024"]]);
   });
 
@@ -276,7 +366,7 @@ describe("re-running and replaying a CardTrader day", () => {
     await deriveMarketDay({ db, store }, { source: "cardtrader", day: DAY });
 
     expect(await blueprint("300001")).toMatchObject({ method: "tcgplayer_id", variantId: "OP05-119_p1" });
-    const luffy = (await pricesOn(DAY)).filter(([v]) => String(v).startsWith("OP05-119"));
+    const luffy = (await pricesOn(DAY)).filter(([v, l]) => String(v).startsWith("OP05-119") && l === "ja");
     expect(luffy.map(([v, , c]) => [v, c])).toEqual([
       ["OP05-119_p1", "NM"],
       ["OP05-119_p1", "LP"],
