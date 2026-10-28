@@ -2,11 +2,9 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
-import type { RouterOutputs } from "@/utils/trpc";
+import { TilePrice, type TilePrices } from "./tile-price";
 
-import { TilePrice } from "./tile-price";
-
-const price = (day: string, asOf: boolean): RouterOutputs["tcg"]["market"]["tilePrices"][number] => ({
+const price = (day: string, asOf: boolean, extra: Partial<TilePrices[number]> = {}): TilePrices[number] => ({
   printingId: "00000000-0000-4000-8000-000000000001",
   variantId: "OP05-119_p1",
   language: "en",
@@ -14,7 +12,18 @@ const price = (day: string, asOf: boolean): RouterOutputs["tcg"]["market"]["tile
   price: 35.9,
   day,
   asOf,
+  move7d: null,
+  sparkline: [],
+  ...extra,
 });
+
+const twoWeeks = [
+  [
+    { day: "2026-10-13", price: 30 },
+    { day: "2026-10-20", price: 32 },
+  ],
+  [{ day: "2026-10-28", price: 35.9 }],
+];
 
 describe("TilePrice", () => {
   it("shows the English Printing's NM Market Price in USD", () => {
@@ -37,5 +46,23 @@ describe("TilePrice", () => {
 
     expect(screen.getByText("—")).toBeInTheDocument();
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+
+  it("shows the 7d Price Move with its sign and a sparkline", () => {
+    const { unmount } = renderWithData(<TilePrice price={price("2026-10-27", false, { move7d: 12.34, sparkline: twoWeeks })} />);
+
+    expect(screen.getByText("+12.3%")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "30-day Market Price" })).toBeInTheDocument();
+    unmount();
+
+    renderWithData(<TilePrice price={price("2026-10-27", false, { move7d: -25 })} />);
+    expect(screen.getByText("-25%")).toBeInTheDocument();
+  });
+
+  it("shows neither when the data doesn't support them", () => {
+    renderWithData(<TilePrice price={price("2026-10-27", false, { sparkline: [[{ day: "2026-10-27", price: 35.9 }]] })} />);
+
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 });

@@ -26,3 +26,37 @@ export function currentMarketPrice<T extends { day: string }>(latest: T | null, 
   if (age > CURRENT_PRICE_MAX_AGE_DAYS) return null;
   return { ...latest, asOf: age > AS_OF_AFTER_DAYS };
 }
+
+/** A Price Move's start price is at most this many days older than its window start. */
+const MOVE_START_MAX_AGE_DAYS = 7;
+
+/**
+ * The Price Move over the `days` ending `today`, in percent, from one Printing's Market Prices on
+ * one Marketplace (ascending by day, native currency, so exchange rates never count). The end price
+ * is the latest inside the window (after its start); the start price is the latest on or before the
+ * window start, at most 7 days older. Missing either, there is no move.
+ */
+export function priceMove(prices: Array<{ day: string; price: number }>, today: string, days: number) {
+  const windowStart = daysBefore(today, days);
+  const end = prices.findLast((p) => p.day > windowStart && p.day <= today);
+  const start = prices.findLast((p) => p.day <= windowStart);
+  if (!end || !start || start.day < daysBefore(windowStart, MOVE_START_MAX_AGE_DAYS) || start.price <= 0) return null;
+  return (end.price / start.price - 1) * 100;
+}
+
+/** A Price History line joins real points at most this many days apart and breaks longer gaps. */
+const SERIES_MAX_GAP_DAYS = 7;
+
+/**
+ * Shapes Market Prices (ascending by day) for a sparkline or chart: real points only, nothing
+ * carried forward, split into line segments at gaps over 7 days. `earliest` is the first real day.
+ */
+export function shapeSeries<T extends { day: string }>(points: T[]) {
+  const segments: T[][] = [];
+  for (const [i, point] of points.entries()) {
+    const prev = points[i - 1];
+    if (prev && Date.parse(point.day) - Date.parse(prev.day) <= SERIES_MAX_GAP_DAYS * DAY_MS) segments.at(-1)!.push(point);
+    else segments.push([point]);
+  }
+  return { segments, earliest: points[0]?.day ?? null };
+}
