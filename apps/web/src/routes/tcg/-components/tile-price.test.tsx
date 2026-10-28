@@ -2,13 +2,9 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
-import type { RouterOutputs } from "@/utils/trpc";
+import { TilePrice, type TilePrices } from "./tile-price";
 
-import { TilePrice } from "./tile-price";
-
-type TilePrice = RouterOutputs["tcg"]["market"]["tilePrices"][number];
-
-const price = (day: string, asOf: boolean, extra: Partial<TilePrice> = {}): TilePrice => ({
+const price = (day: string, asOf: boolean, extra: Partial<TilePrices[number]> = {}): TilePrices[number] => ({
   printingId: "00000000-0000-4000-8000-000000000001",
   variantId: "OP05-119_p1",
   language: "en",

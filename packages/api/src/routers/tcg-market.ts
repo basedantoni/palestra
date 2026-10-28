@@ -50,11 +50,11 @@ export const tcgMarketRouter = router({
         )
         .orderBy(tcgMarketPrice.printingId, tcgMarketPrice.day);
       return [...Map.groupBy(rows, (r) => r.printingId).values()]
-        .flatMap((history) => {
-          const { printingId, variantId, language, price, day } = history.at(-1)!;
+        .flatMap((prices) => {
+          const { printingId, variantId, language, price, day } = prices.at(-1)!;
           const current = currentMarketPrice({ price, day }, today);
           if (!current) return [];
-          const points = history.map((r) => ({ day: r.day, price: r.price }));
+          const points = prices.map((r) => ({ day: r.day, price: r.price }));
           return [
             {
               printingId,

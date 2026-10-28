@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { cn } from "@/lib/utils";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 export type TilePrices = RouterOutputs["tcg"]["market"]["tilePrices"];
@@ -35,7 +36,11 @@ export function TilePrice({ price }: { price: TilePrices[number] | undefined }) 
           {price.asOf && <span className="text-muted-foreground">as of {shortDay(price.day)}</span>}
           {price.move7d !== null && (
             <span
-              className={`tabular-nums ${price.move7d > 0 ? "text-green-600" : price.move7d < 0 ? "text-destructive" : "text-muted-foreground"}`}
+              className={cn(
+                "tabular-nums text-muted-foreground",
+                price.move7d > 0 && "text-green-600 dark:text-green-400",
+                price.move7d < 0 && "text-destructive",
+              )}
               title="7d Price Move"
             >
               {percent.format(price.move7d / 100)}
@@ -50,16 +55,24 @@ export function TilePrice({ price }: { price: TilePrices[number] | undefined }) 
   );
 }
 
-/** Real points only: one line per segment (gaps over 7 days break it), a dot for a lone point. */
+const SPARKLINE_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+/**
+ * Real points only, across the last 30 days ending today (UTC, the capture day): one line per
+ * segment (gaps over 7 days break it), a dot for a lone point.
+ */
 function Sparkline({ segments }: { segments: TilePrices[number]["sparkline"] }) {
   const points = segments.flat();
   if (points.length < 2) return null;
-  const first = Date.parse(points[0]!.day);
-  const span = Date.parse(points.at(-1)!.day) - first;
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
   const prices = points.map((p) => p.price);
   const [lo, hi] = [Math.min(...prices), Math.max(...prices)];
-  const xy = (p: (typeof points)[number]) =>
-    `${((Date.parse(p.day) - first) / span) * 100},${hi === lo ? 10 : 20 - ((p.price - lo) / (hi - lo)) * 20}`;
+  const toSvgPoint = (p: (typeof points)[number]) => {
+    const x = 100 - ((today - Date.parse(p.day)) / (SPARKLINE_DAYS * DAY_MS)) * 100;
+    const y = hi === lo ? 10 : 20 - ((p.price - lo) / (hi - lo)) * 20;
+    return `${x},${y}`;
+  };
   return (
     <svg
       role="img"
@@ -68,10 +81,10 @@ function Sparkline({ segments }: { segments: TilePrices[number]["sparkline"] }) 
       preserveAspectRatio="none"
       className="h-4 w-16 self-center text-muted-foreground"
     >
-      {segments.map((s) => (
+      {segments.map((segment) => (
         <polyline
-          key={s[0]!.day}
-          points={(s.length > 1 ? s : [s[0]!, s[0]!]).map(xy).join(" ")}
+          key={segment[0]!.day}
+          points={(segment.length > 1 ? segment : [segment[0]!, segment[0]!]).map(toSvgPoint).join(" ")}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
