@@ -38,9 +38,7 @@ describe("judgeChoice", () => {
 
   it("gates on the repo's tuned value by default", () => {
     expect(judgeChoice({ choice: "OP05-119_p1", confidence: TYPESAFE_GATE - 0.01 }, candidates)).toHaveProperty("reason");
-    expect(TYPESAFE_GATE).toBeGreaterThan(0.5);
-    expect(TYPESAFE_GATE).toBeLessThanOrEqual(1);
-    expect(judgeChoice({ choice: "OP05-119_p1", confidence: 1 }, candidates)).toMatchObject({ variantId: "OP05-119_p1" });
+    expect(judgeChoice({ choice: "OP05-119_p1", confidence: TYPESAFE_GATE }, candidates)).toMatchObject({ variantId: "OP05-119_p1" });
   });
 });
 

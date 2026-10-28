@@ -5,6 +5,8 @@
  */
 import { z } from "zod";
 
+import type { VariantKind } from "../tcg/catalog-transform";
+
 /** The Choice's no-match option. */
 export const NONE = "none";
 
@@ -32,7 +34,7 @@ export type ChoiceProduct = {
 
 export type ChoiceCandidate = {
   variantId: string;
-  variantKind: "base" | "parallel" | "manga" | "reprint";
+  variantKind: VariantKind;
   /** The sets of its Printings in the Marketplace's language. */
   sets: string[];
   rarity: string | null;

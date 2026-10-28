@@ -311,7 +311,7 @@ describe("the TypeSafe tier (KOI-371)", () => {
     await captureWith(chooser);
 
     expect(await product("527043")).toMatchObject({
-      method: "rule",
+      method: "typesafe",
       variantId: null,
       confidence: null,
       reason: `2 candidate Artworks in OP05: OP05-100_p1, OP05-100_p2; TypeSafe tier: OP05-100_p2 at confidence 0.40, below the ${TYPESAFE_GATE} gate`,
@@ -323,33 +323,47 @@ describe("the TypeSafe tier (KOI-371)", () => {
     await captureWith(chooser);
 
     expect(await product("530887")).toMatchObject({
+      method: "typesafe",
       variantId: null,
       reason: "No Artwork of OP05-003 has an English Printing in OP05 ANN; TypeSafe tier: none of the 1 candidate Artworks fits",
     });
   });
 
-  it("does not ask again for a product it matched, but asks again for one it left unmatched", async () => {
+  it("asks once per product: a re-run or replay keeps its match or its rejection", async () => {
     const store = memoryStore();
-    const { chooser, asked } = fakeChooser({ "Enel (100) (SP)": { choice: "OP05-100_p2", confidence: 0.97 } });
+    const { chooser, asked } = fakeChooser({
+      "Enel (100) (SP)": { choice: "OP05-100_p2", confidence: 0.97 },
+      Inazuma: { choice: "OP05-003", confidence: 0.3 },
+    });
     await captureWith(chooser, store);
     await captureWith(chooser, store);
     await deriveMarketDay({ db, store, chooser }, { source: "tcgcsv", day: DAY });
 
     const names = asked.map((a) => a.product.name);
     expect(names.filter((n) => n === "Enel (100) (SP)")).toHaveLength(1);
-    expect(names.filter((n) => n === "Inazuma")).toHaveLength(3);
+    expect(names.filter((n) => n === "Inazuma")).toHaveLength(1);
     expect(await product("527043")).toMatchObject({ method: "typesafe", variantId: "OP05-100_p2" });
+    expect(await product("530887")).toMatchObject({
+      method: "typesafe",
+      variantId: null,
+      reason: expect.stringContaining("TypeSafe tier: OP05-003 at confidence 0.30"),
+    });
   });
 
-  it("leaves a product unmatched when TypeSafe fails, and still derives the day", async () => {
-    const { chooser } = fakeChooser({ "Enel (100) (SP)": new Error("TypeSafe answered 503") });
-    await captureWith(chooser);
+  it("leaves a product unmatched when TypeSafe fails, still derives the day, and asks again next time", async () => {
+    const store = memoryStore();
+    const { chooser, asked } = fakeChooser({ "Enel (100) (SP)": new Error("TypeSafe answered 503") });
+    await captureWith(chooser, store);
 
     expect(await product("527043")).toMatchObject({
+      method: "rule",
       variantId: null,
       reason: "2 candidate Artworks in OP05: OP05-100_p1, OP05-100_p2; TypeSafe tier failed: TypeSafe answered 503",
     });
     expect(await pricesOn(DAY)).toHaveLength(9);
+
+    await captureWith(chooser, store);
+    expect(asked.filter((a) => a.product.name === "Enel (100) (SP)")).toHaveLength(2);
   });
 });
 
