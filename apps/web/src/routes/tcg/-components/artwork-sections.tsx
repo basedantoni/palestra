@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import { Button } from "@/components/ui/button";
 import { trpc, type RouterInputs, type RouterOutputs } from "@/utils/trpc";
 
+import { type TilePrices, useTilePrices } from "./tile-price";
+
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
 type Filters = RouterInputs["tcg"]["artworkSections"];
 
@@ -84,7 +86,7 @@ function Section({
   sectionKey: string;
   count: number;
   filters: Filters;
-  renderCard: (a: ArtworkRow) => ReactNode;
+  renderCard: (a: ArtworkRow, prices?: TilePrices) => ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
   const seen = useSeen(ref);
@@ -99,6 +101,7 @@ function Section({
     enabled: seen,
     placeholderData: keepPreviousData,
   });
+  const prices = useTilePrices(artworks);
 
   return (
     <section ref={ref} id={anchor(sectionKey)} className="scroll-mt-4 space-y-3">
@@ -110,7 +113,7 @@ function Section({
       </h2>
       <ul className={GRID}>
         {artworks
-          ? artworks.map(renderCard)
+          ? artworks.map((a) => renderCard(a, prices))
           : // Placeholders hold roughly the loaded height, so jumping to a section lands on it.
             Array.from({ length: Math.min(count, PREVIEW) }, (_, i) => (
               <li key={i} className="space-y-2">

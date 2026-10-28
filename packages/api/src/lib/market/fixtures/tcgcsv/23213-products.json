@@ -1,0 +1,243 @@
+{
+ "totalItems": 9,
+ "success": true,
+ "errors": [],
+ "results": [
+  {
+   "productId": 498734,
+   "name": "Awakening of the New Era - Booster Box",
+   "cleanName": "Awakening of the New Era Booster Box",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/498734_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/498734/one-piece-card-game-awakening-of-the-new-era-awakening-of-the-new-era-booster-box",
+   "modifiedOn": "2023-12-15T14:52:44.88",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": []
+  },
+  {
+   "productId": 527007,
+   "name": "Sabo (001) (Alternate Art)",
+   "cleanName": "Sabo 001 Alternate Art",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/527007_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/527007/one-piece-card-game-awakening-of-the-new-era-sabo-001-alternate-art",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "L"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-001"
+    }
+   ]
+  },
+  {
+   "productId": 527022,
+   "name": "Enel (100)",
+   "cleanName": "Enel 100",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/527022_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/527022/one-piece-card-game-awakening-of-the-new-era-enel-100",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-100"
+    }
+   ]
+  },
+  {
+   "productId": 527024,
+   "name": "Monkey.D.Luffy (119)",
+   "cleanName": "MonkeyDLuffy 119",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/527024_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/527024/one-piece-card-game-awakening-of-the-new-era-monkeydluffy-119",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SEC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-119"
+    }
+   ]
+  },
+  {
+   "productId": 527026,
+   "name": "Monkey.D.Luffy (119) (Alternate Art) (Manga)",
+   "cleanName": "MonkeyDLuffy 119 Alternate Art Manga",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/527026_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/527026/one-piece-card-game-awakening-of-the-new-era-monkeydluffy-119-alternate-art-manga",
+   "modifiedOn": "2025-09-30T20:24:36.967",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SEC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-119"
+    }
+   ]
+  },
+  {
+   "productId": 527043,
+   "name": "Enel (100) (SP)",
+   "cleanName": "Enel 100 SP",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/527043_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/527043/one-piece-card-game-awakening-of-the-new-era-enel-100-sp",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-100"
+    }
+   ]
+  },
+  {
+   "productId": 528529,
+   "name": "Sabo (001)",
+   "cleanName": "Sabo 001",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/528529_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/528529/one-piece-card-game-awakening-of-the-new-era-sabo-001",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "L"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-001"
+    }
+   ]
+  },
+  {
+   "productId": 528532,
+   "name": "Inazuma",
+   "cleanName": "Inazuma",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/528532_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/528532/one-piece-card-game-awakening-of-the-new-era-inazuma",
+   "modifiedOn": "2023-12-08T05:03:11.723",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2023-12-08T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "UC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP05-003"
+    }
+   ]
+  },
+  {
+   "productId": 529792,
+   "name": "DON!! Card (Alternate Art)",
+   "cleanName": "DON Card Alternate Art",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/529792_200w.jpg",
+   "categoryId": 68,
+   "groupId": 23213,
+   "url": "https://www.tcgplayer.com/product/529792/one-piece-card-game-awakening-of-the-new-era-don-card-alternate-art",
+   "modifiedOn": "2023-12-13T17:07:25.033",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "DON!!"
+    }
+   ]
+  }
+ ]
+}

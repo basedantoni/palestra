@@ -6,7 +6,7 @@ import { todayInTimeZone } from "@life-tracker/shared";
 import { type ConstructorOptions, PgBoss, type Queue } from "pg-boss";
 import { z } from "zod";
 
-import { MARKET_SOURCES, type MarketDeps, captureEcb, deriveMarketDay, loadEcbHistory } from "./capture";
+import { MARKET_SOURCES, type MarketDeps, captureEcb, captureTcgcsv, deriveMarketDay, loadEcbHistory } from "./capture";
 
 const CAPTURE_HOUR = 21;
 const CAPTURE_MINUTE = 17;
@@ -32,22 +32,26 @@ const isoDay = z.iso.date();
 const captureDay = (data: unknown, createdOn: Date) =>
   z.object({ day: isoDay.optional() }).nullish().parse(data)?.day ?? todayInTimeZone(createdOn, "UTC");
 
+/** A daily capture of a source's live response. */
+const liveCapture = (name: string, capture: (deps: MarketDeps, day: string) => Promise<unknown>) => ({
+  queue: CAPTURE_QUEUE,
+  scheduled: true,
+  run: async (deps: MarketDeps, data: unknown, createdOn: Date, now: Date) => {
+    // The live response is today's: once the capture day has ended in UTC, an attempt (a late
+    // retry, a stale enqueue) fails instead of landing it under the wrong day, and further retries
+    // fail the same way, so the job ends failed rather than silently expiring.
+    const day = captureDay(data, createdOn);
+    if (todayInTimeZone(now, "UTC") > day) {
+      throw new Error(`${name}: capture window for ${day} closed at 00:00 UTC; replay with market.derive`);
+    }
+    return capture(deps, day);
+  },
+});
+
 /** Job name → queue options, whether it is scheduled, and its handler. */
 const JOBS = {
-  "market.ecb": {
-    queue: CAPTURE_QUEUE,
-    scheduled: true,
-    run: async (deps: MarketDeps, data: unknown, createdOn: Date, now: Date) => {
-      // The live response is today's: once the capture day has ended in UTC, an attempt (a late
-      // retry, a stale enqueue) fails instead of landing it under the wrong day, and further retries
-      // fail the same way, so the job ends failed rather than silently expiring.
-      const day = captureDay(data, createdOn);
-      if (todayInTimeZone(now, "UTC") > day) {
-        throw new Error(`market.ecb: capture window for ${day} closed at 00:00 UTC; replay with market.derive`);
-      }
-      return captureEcb(deps, day);
-    },
-  },
+  "market.ecb": liveCapture("market.ecb", captureEcb),
+  "market.tcgcsv": liveCapture("market.tcgcsv", captureTcgcsv),
   "market.derive": {
     queue: MANUAL_QUEUE,
     scheduled: false,
