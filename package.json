@@ -31,6 +31,7 @@
     "db:down": "turbo -F @life-tracker/db db:down",
     "test": "turbo test",
     "market:job": "cd apps/server && tsx ../../scripts/market-job.ts",
+    "market:tune-gate": "cd apps/server && tsx ../../scripts/tune-typesafe-gate.ts",
     "market:dashboard": "pnpm dlx @pg-boss/dashboard@1.12.1"
   },
   "dependencies": {

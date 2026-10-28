@@ -16,6 +16,11 @@ describe("transformCatalog", () => {
     expect(artwork("OP13-118_p3")?.variantKind).toBe("parallel");
   });
 
+  it("keeps each Artwork's rarity from its first record, Japanese first", () => {
+    expect(artwork("OP05-119_p1")?.rarity).toBe("SecretRare");
+    expect(artwork("OP05-119_p5")?.rarity).toBe("Special"); // the OP-09 SP
+  });
+
   it("puts both languages' Printings of one Artwork under its Japanese variant ID", () => {
     expect(catalog.artworks.filter((a) => a.variantId === "OP05-119_p1")).toHaveLength(1);
     expect(printings("OP05-119_p1")).toEqual([
@@ -51,7 +56,12 @@ describe("transformCatalog", () => {
   });
 
   it("makes an English-only print its own Artwork, marked as English", () => {
-    expect(artwork("EN-EB01-015_p2")).toEqual({ variantId: "EN-EB01-015_p2", cardNumber: "EB01-015", variantKind: "parallel" });
+    expect(artwork("EN-EB01-015_p2")).toEqual({
+      variantId: "EN-EB01-015_p2",
+      cardNumber: "EB01-015",
+      variantKind: "parallel",
+      rarity: "Rare",
+    });
     expect(printings("EN-EB01-015_p2").map((p) => [p.language, p.listId])).toEqual([["en", "EB01-015_p2"]]);
   });
 

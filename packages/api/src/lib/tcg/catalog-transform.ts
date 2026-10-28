@@ -23,7 +23,7 @@ export type Language = "ja" | "en";
 export type VariantKind = "base" | "parallel" | "manga" | "reprint";
 
 export type CardRow = { number: string; nameEn: string | null; nameJa: string | null };
-export type ArtworkRow = { variantId: string; cardNumber: string; variantKind: VariantKind };
+export type ArtworkRow = { variantId: string; cardNumber: string; variantKind: VariantKind; rarity: string };
 export type PrintingRow = {
   variantId: string;
   listId: string;
@@ -61,6 +61,7 @@ export function transformCatalog(input: {
           variantId,
           cardNumber,
           variantKind: variantKind(r, basePack.get(cardNumber)),
+          rarity: r.rarity,
         });
       }
       // A variant listed in two packs (e.g. a promo also in a product) is one Printing: first pack wins.

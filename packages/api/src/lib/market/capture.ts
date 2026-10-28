@@ -24,6 +24,7 @@ import { type MarketDb, ratesOn, replaceRates } from "./exchange-rate-db";
 import { replaceCardtraderDay, replaceTcgplayerDay } from "./market-price-db";
 import type { ObjectStore } from "./object-store";
 import { TCGCSV_GROUPS_URL, type TcgcsvBundle, parseTcgcsv, parseTcgcsvGroups, tcgcsvGroupUrl } from "./tcgcsv";
+import type { ArtworkChooser } from "./typesafe-tier";
 
 export type { MarketDb } from "./exchange-rate-db";
 
@@ -35,6 +36,8 @@ export type MarketDeps = {
   cardtraderToken?: string;
   /** The CardTrader throttle's clock: the system's unless a test injects one. */
   clock?: Clock;
+  /** The matcher's TypeSafe tier (KOI-371). Without it (no `TYPESAFE_API_KEY`) the tier is skipped. */
+  chooser?: ArtworkChooser;
 };
 type Fetch = MarketDeps["fetch"];
 
@@ -93,7 +96,7 @@ const utf8 = (raw: Uint8Array) => Buffer.from(raw).toString("utf8");
 type Source = {
   download: (deps: MarketDeps) => Promise<Uint8Array>;
   file: string;
-  derive: (db: MarketDb, raw: Uint8Array, day: string) => Promise<unknown>;
+  derive: (db: MarketDb, raw: Uint8Array, day: string, chooser?: ArtworkChooser) => Promise<unknown>;
 };
 
 const SOURCES = {
@@ -115,7 +118,8 @@ const SOURCES = {
   tcgcsv: {
     download: downloadTcgcsv,
     file: "tcgcsv.json",
-    derive: (db, raw, day) => replaceTcgplayerDay(db, parseTcgcsv(JSON.parse(utf8(raw)) as TcgcsvBundle), day),
+    derive: (db, raw, day, chooser) =>
+      replaceTcgplayerDay(db, parseTcgcsv(JSON.parse(utf8(raw)) as TcgcsvBundle), day, chooser),
   },
   /**
    * CardTrader's Japanese, Simplified Chinese and Korean Market Prices; a non-EUR Listing converts
@@ -124,13 +128,13 @@ const SOURCES = {
   cardtrader: {
     download: downloadCardtrader,
     file: "cardtrader.json",
-    derive: async (db, raw, day) => {
+    derive: async (db, raw, day, chooser) => {
       const bundle = JSON.parse(utf8(raw)) as CardtraderBundle;
       const { blueprints, skipped } = parseCardtrader(bundle, await ratesOn(db, day));
       if (skipped.conditions.length || skipped.currencies.length) {
         console.warn(`[market.cardtrader] ${day}: skipped Listings with unmapped`, skipped);
       }
-      return { ...(await replaceCardtraderDay(db, blueprints, day)), skipped };
+      return { ...(await replaceCardtraderDay(db, blueprints, day, chooser)), skipped };
     },
   },
 } satisfies Record<string, Source>;
@@ -162,10 +166,10 @@ export const captureCardtrader = (deps: MarketDeps, day: string) => capture(deps
 
 /** `market.derive`: rebuild a landed day's rows from its raw copy. */
 export async function deriveMarketDay(
-  { db, store }: Pick<MarketDeps, "db" | "store">,
+  { db, store, chooser }: Pick<MarketDeps, "db" | "store" | "chooser">,
   { source, day }: { source: MarketSource; day: string },
 ) {
   const raw = await store.get(rawKey(source, day));
   if (!raw) throw new Error(`No raw ${source} copy landed for ${day}`);
-  return SOURCES[source].derive(db, gunzipSync(raw), day);
+  return SOURCES[source].derive(db, gunzipSync(raw), day, chooser);
 }

@@ -41,6 +41,8 @@ export const tcgArtwork = pgTable(
       .notNull()
       .references(() => tcgCard.number, { onDelete: "cascade" }),
     variantKind: tcgVariantKindEnum("variant_kind").notNull(),
+    /** punk-records rarity (`SecretRare`, `Special`), for the matcher's TypeSafe tier. Null until the next import. */
+    rarity: text("rarity"),
     /** Null = uncredited / not yet backfilled (KOI-306). The import never writes it. */
     artist: text("artist"),
     /** Japanese and English sources disagree on the artist (KOI-306). */

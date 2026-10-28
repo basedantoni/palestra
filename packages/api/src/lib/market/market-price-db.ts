@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { CARDTRADER_LANGUAGES, type CardtraderBlueprint, printingToCreate } from "./cardtrader";
 import type { MarketDb } from "./exchange-rate-db";
 import { type Candidate, type TcgcsvProduct, matchRule, setKey } from "./tcgcsv";
+import { type ArtworkChooser, type ChoiceCandidate, baseNumber, judgeChoice } from "./typesafe-tier";
 
 /** Rows per statement: 11k params at 11 a row, well under Postgres' 65,535 bind limit. */
 const CHUNK = 1_000;
@@ -18,19 +19,29 @@ const excluded = (column: { name: string }) => sql.raw(`excluded."${column.name}
 type Marketplace = (typeof tcgMarketplaceProduct.$inferSelect)["marketplace"];
 type Language = (typeof tcgPrinting.$inferSelect)["language"];
 type PriceRow = typeof tcgMarketPrice.$inferInsert;
-type Product = { externalId: string; name: string; number: string; set: string; tags: string[] };
-type Match = { variantId: string; method: "rule" | "tcgplayer_id" } | { reason: string };
+type StoredMatch = Pick<typeof tcgMarketplaceProduct.$inferSelect, "variantId" | "method" | "reason">;
+type Product = { externalId: string; name: string; number: string; set: string; rarity: string | null; tags: string[] };
+type Match =
+  | { variantId: string; method: "rule" | "tcgplayer_id" }
+  | { variantId: string; method: "typesafe"; confidence: number }
+  /** Unmatched; `method: "typesafe"` once TypeSafe has rejected it, so it is not asked again. */
+  | { reason: string; method?: "typesafe" };
 
 /**
  * Derive TCGplayer's Market Prices for `day` from that day's TCGCSV products, in one transaction:
- * the products go through the mapping store (`upsertProducts`, rule tier), then the day is
+ * the products go through the mapping store (`upsertProducts`, rule then TypeSafe tier), then the day is
  * replaced with one NM price per English Printing of a matched Artwork, the lowest `marketPrice`
  * among its products. A null price is no row.
  */
-export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[], day: string) {
+export async function replaceTcgplayerDay(
+  db: MarketDb,
+  products: TcgcsvProduct[],
+  day: string,
+  chooser?: ArtworkChooser,
+) {
   return db.transaction(async (tx) => {
-    const { mapped, unmatched } = await upsertProducts(tx, "tcgplayer", products, day, (unsettled) =>
-      ruleTier(tx, unsettled, "en"),
+    const { mapped, unmatched } = await upsertProducts(tx, "tcgplayer", products, day, async (unsettled, before) =>
+      typesafeTier(tx, "tcgplayer", unsettled, await ruleTier(tx, unsettled, "en"), "en", chooser, before),
     );
 
     // Lowest marketPrice per Artwork, and the product it came from.
@@ -62,21 +73,24 @@ export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[
 /**
  * Derive CardTrader's Market Prices for `day` from that day's blueprints and their lowest Listings
  * per language, in one transaction: the blueprints go through the mapping store (`tcgplayer_id`
- * tier, then the rule tier), then the day is replaced with one price per Printing of a matched
- * Artwork per Condition, in the Listings' language: the lowest Listing across its blueprints, their
- * Listing counts summed, and the blueprint that supplied the lowest. A matched Artwork's first
- * Simplified Chinese or Korean Listing creates its Printing in that language (KOI-372).
+ * tier, then the rule tier, then the TypeSafe tier), then the day is replaced with one price per
+ * Printing of a matched Artwork per Condition, in the Listings' language: the lowest Listing across
+ * its blueprints, their Listing counts summed, and the blueprint that supplied the lowest. A matched
+ * Artwork's first Simplified Chinese or Korean Listing creates its Printing in that language (KOI-372).
  */
-export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderBlueprint[], day: string) {
+export async function replaceCardtraderDay(
+  db: MarketDb,
+  blueprints: CardtraderBlueprint[],
+  day: string,
+  chooser?: ArtworkChooser,
+) {
   return db.transaction(async (tx) => {
-    const { mapped, unmatched } = await upsertProducts(tx, "cardtrader", blueprints, day, async (unsettled) => {
+    const { mapped, unmatched } = await upsertProducts(tx, "cardtrader", blueprints, day, async (unsettled, before) => {
       const tcgplayer = await tcgplayerTier(tx, unsettled);
-      const rule = await ruleTier(
-        tx,
-        unsettled.filter((b) => !tcgplayer.has(b.externalId)),
-        "ja",
-      );
-      return (b) => tcgplayer.get(b.externalId) ?? rule(b);
+      // A blueprint whose TCGplayer product is marked "not an Artwork" stays so: it never reaches TypeSafe.
+      const rest = unsettled.filter((b) => !tcgplayer.has(b.externalId));
+      const typesafe = await typesafeTier(tx, "cardtrader", rest, await ruleTier(tx, rest, "ja"), "ja", chooser, before);
+      return (b) => tcgplayer.get(b.externalId) ?? typesafe(b);
     });
 
     const lowest = new Map(blueprints.map((b) => [b.externalId, b.lowest]));
@@ -123,7 +137,8 @@ export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderB
 /**
  * Upsert every product into the mapping store, refreshing its name, number, set and last seen day.
  * New and unmatched products go through `match` (built once for all of them); matched products
- * keep their Artwork, and a manual row's match (or "not an Artwork") is never changed. A
+ * keep their Artwork (a TypeSafe match included, so TypeSafe is asked once per product), and a
+ * manual row's match (or "not an Artwork") is never changed. A
  * `tcgplayer_id` match is a free lookup, so it is redone every time: a later manual fix to the
  * TCGplayer product reaches the blueprint on the next capture or replay.
  */
@@ -132,7 +147,7 @@ async function upsertProducts<P extends Product>(
   marketplace: Marketplace,
   products: P[],
   day: string,
-  matcher: (unsettled: P[]) => Promise<(p: P) => Match>,
+  matcher: (unsettled: P[], before: (p: P) => StoredMatch | undefined) => Promise<(p: P) => Match>,
 ) {
   const existing = new Map(
     (
@@ -148,7 +163,10 @@ async function upsertProducts<P extends Product>(
     const row = existing.get(p.externalId);
     return row && (row.method === "manual" || (row.variantId !== null && row.method !== "tcgplayer_id")) ? row : null;
   };
-  const match = await matcher(products.filter((p) => !settled(p)));
+  const match = await matcher(
+    products.filter((p) => !settled(p)),
+    (p) => existing.get(p.externalId),
+  );
 
   const matchedAt = new Date();
   const rows = products.map((p) => {
@@ -160,8 +178,8 @@ async function upsertProducts<P extends Product>(
     }
     const m = match(p);
     return "variantId" in m
-      ? { ...base, variantId: m.variantId, method: m.method, confidence: null, reason: null, matchedAt }
-      : { ...base, variantId: null, method: "rule" as const, confidence: null, reason: m.reason, matchedAt: null };
+      ? { ...base, variantId: m.variantId, method: m.method, confidence: "confidence" in m ? m.confidence : null, reason: null, matchedAt }
+      : { ...base, variantId: null, method: m.method ?? ("rule" as const), confidence: null, reason: m.reason, matchedAt: null };
   });
 
   const mapped: Array<{ id: number; externalId: string; variantId: string | null }> = [];
@@ -311,4 +329,89 @@ async function ruleCandidates(db: MarketDb, numbers: string[], language: Languag
     cardNames.set(cardNumber, cardName);
   }
   return { candidates, cardNames };
+}
+
+/** TypeSafe requests in flight at once. */
+const TYPESAFE_CONCURRENCY = 8;
+
+/**
+ * The TypeSafe tier over `products`, after `earlier` (the tiers before it): each product `earlier`
+ * leaves unmatched goes to one Choice among its card's Artworks with a `language` Printing, in any
+ * set (CardTrader's `OP05-119a` is card `OP05-119`). A choice that clears the gate is a match; a
+ * rejection or "none" keeps the earlier reason with the tier's appended and is stored with method
+ * `typesafe`, so it is not asked again while the earlier tiers still leave it unmatched; a failed
+ * request is asked again next derive. A card with no such Artwork is not asked. Without a chooser
+ * the tier is skipped.
+ *
+ * ponytail: the requests run inside the derive's transaction, so a manual match saved meanwhile
+ * waits for them (one per unmatched product, 8 at a time). Move them before the transaction if the
+ * unmatched list grows to thousands. A rejection is never revisited, even after the catalog gains
+ * an Artwork that would fit: reset the row's method to `rule` to have it asked again.
+ */
+async function typesafeTier<P extends Product>(
+  tx: MarketDb,
+  marketplace: Marketplace,
+  products: P[],
+  earlier: (p: P) => Match,
+  language: Language,
+  chooser: ArtworkChooser | undefined,
+  before: (p: P) => StoredMatch | undefined,
+) {
+  const matches = new Map(products.map((p) => [p.externalId, earlier(p)]));
+  const lookup = (p: P) => matches.get(p.externalId)!;
+  const unmatched = products.filter((p) => {
+    if (!("reason" in lookup(p))) return false;
+    // Rejected before and still unmatched by the earlier tiers: keep that verdict, don't pay again.
+    const stored = before(p);
+    if (stored?.method !== "typesafe" || stored.variantId !== null || !stored.reason) return true;
+    matches.set(p.externalId, { reason: stored.reason, method: "typesafe" });
+    return false;
+  });
+  if (!chooser || unmatched.length === 0) return lookup;
+
+  const candidates = await typesafeCandidates(
+    tx,
+    unmatched.map((p) => baseNumber(p.number)),
+    language,
+  );
+  const ask = async ({ externalId, name, number, set, rarity, tags }: P) => {
+    const list = candidates.get(baseNumber(number));
+    if (!list) return;
+    const verdict = await chooser({ marketplace, name, number, set, rarity, tags }, list).then(
+      (answer) => ({ ...judgeChoice(answer, list), method: "typesafe" as const }),
+      // Not a verdict: the product stays a rule-tier row, so the next derive asks again.
+      (err: Error) => ({ reason: `TypeSafe tier failed: ${err.message}` }),
+    );
+    const { reason } = matches.get(externalId) as { reason: string };
+    matches.set(externalId, "variantId" in verdict ? { ...verdict, method: "typesafe" } : { ...verdict, reason: `${reason}; ${verdict.reason}` });
+  };
+  for (let i = 0; i < unmatched.length; i += TYPESAFE_CONCURRENCY) {
+    await Promise.all(unmatched.slice(i, i + TYPESAFE_CONCURRENCY).map(ask));
+  }
+  return lookup;
+}
+
+/** TypeSafe-tier candidates by card number: every Artwork of it with a `language` Printing, and those Printings' sets. */
+async function typesafeCandidates(db: MarketDb, numbers: string[], language: Language) {
+  const rows = await db
+    .selectDistinct({
+      cardNumber: tcgArtwork.cardNumber,
+      variantId: tcgArtwork.variantId,
+      variantKind: tcgArtwork.variantKind,
+      rarity: tcgArtwork.rarity,
+      artist: tcgArtwork.artist,
+      setName: tcgPrinting.setName,
+    })
+    .from(tcgArtwork)
+    .innerJoin(tcgPrinting, eq(tcgPrinting.variantId, tcgArtwork.variantId))
+    .where(and(eq(tcgPrinting.language, language), inArray(tcgArtwork.cardNumber, [...new Set(numbers)])))
+    .orderBy(tcgArtwork.variantId, tcgPrinting.setName);
+  const candidates = new Map<string, ChoiceCandidate[]>();
+  for (const { cardNumber, setName, ...artwork } of rows) {
+    const list = candidates.get(cardNumber) ?? [];
+    const known = list.find((c) => c.variantId === artwork.variantId);
+    if (known) known.sets.push(setName);
+    else candidates.set(cardNumber, [...list, { ...artwork, sets: [setName] }]);
+  }
+  return candidates;
 }
