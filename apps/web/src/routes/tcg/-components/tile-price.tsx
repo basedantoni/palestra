@@ -21,10 +21,10 @@ const percent = new Intl.NumberFormat("en-US", {
   signDisplay: "exceptZero",
 });
 
-/** The tile languages, in display order, and where each one's price comes from. */
-export const TILE_PRICE_SOURCES = {
+/** The tile languages, in display order, each with where its price comes from. */
+export const TILE_PRICE_TITLES = {
   en: "TCGplayer Market Price, NM",
-  ja: "CardTrader lowest ask, NM, in USD at today's ECB rate",
+  ja: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
 } as const;
 
 /**
@@ -36,11 +36,11 @@ export function TilePrice({
   language,
   price,
 }: {
-  language: keyof typeof TILE_PRICE_SOURCES;
+  language: keyof typeof TILE_PRICE_TITLES;
   price: TilePrices[number] | undefined;
 }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-1 text-xs" title={TILE_PRICE_SOURCES[language]}>
+    <div className="flex flex-wrap items-baseline gap-1 text-xs" title={TILE_PRICE_TITLES[language]}>
       <span className="text-muted-foreground">{language.toUpperCase()}</span>
       {price ? (
         <>

@@ -12,7 +12,7 @@ const fixture = (name: string) =>
 const bundle: CardtraderBundle = {
   expansions: fixture("expansions.json"),
   blueprints: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`blueprints-${id}.json`)])),
-  products: { jp: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`products-jp-${id}.json`)])) },
+  listings: { jp: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`products-jp-${id}.json`)])) },
 };
 const rates = new Map([["USD", 1.1]]);
 
@@ -43,11 +43,11 @@ describe("parseCardtrader", () => {
     expect(byId.get("300003")).toMatchObject({ tags: [], tcgPlayerId: null });
   });
 
-  it("gives the lowest EUR ask per Condition with its Listing count, ignoring graded, signed and altered Listings", () => {
-    const asks = byId.get("300001")!.asks;
+  it("gives the lowest EUR Listing per Condition with its Listing count, ignoring graded, signed and altered Listings", () => {
+    const lowest = byId.get("300001")!.lowest;
     // NM: €39 Mint, $41.80 (= €38 at 1.10) and €42; the €30 signed, €31 altered and €35 graded don't count.
-    expect(asks.NM).toEqual({ price: expect.closeTo(38, 6), count: 3 });
-    expect(asks).toMatchObject({
+    expect(lowest.NM).toEqual({ price: expect.closeTo(38, 6), count: 3 });
+    expect(lowest).toMatchObject({
       LP: { price: 25, count: 1 },
       MP: { price: 20, count: 1 },
       HP: { price: 14, count: 2 }, // Played €15, Heavily Played €14
@@ -60,12 +60,12 @@ describe("parseCardtrader", () => {
   });
 
   it("drops a Listing in another language", () => {
-    expect(byId.get("200002")!.asks.NM).toEqual({ price: 7.5, count: 2 });
+    expect(byId.get("200002")!.lowest.NM).toEqual({ price: 7.5, count: 2 });
   });
 
   it("skips and reports a Listing in a currency with no rate", () => {
     const { blueprints: noUsd, skipped: noRate } = parseCardtrader(bundle, "jp", new Map());
-    expect(noUsd.find((b) => b.externalId === "300001")!.asks.NM).toEqual({ price: 39, count: 2 });
+    expect(noUsd.find((b) => b.externalId === "300001")!.lowest.NM).toEqual({ price: 39, count: 2 });
     expect(noRate.currencies).toEqual(["USD"]);
   });
 });

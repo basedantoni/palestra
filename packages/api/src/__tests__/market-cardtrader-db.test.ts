@@ -4,9 +4,9 @@
  *
  * - at most 1 request per second, with the token, and Listings only through the `jp` filter
  * - a capture lands the raw responses at raw/cardtrader/<day>/ before deriving
- * - the lowest EUR ask per Japanese Printing per Condition with its Listing count
+ * - the lowest EUR Listing per Japanese Printing per Condition with its Listing count
  * - the tcgplayer_id tier (manual matches included), then the rule tier, else unmatched
- * - several blueprints on one Artwork: the lowest ask, the summed count
+ * - several blueprints on one Artwork: the lowest Listing, the summed count
  * - re-running a day replaces CardTrader's day only
  */
 import { readFileSync } from "node:fs";
@@ -169,10 +169,10 @@ describe("market.cardtrader capture", () => {
 
     const landed = JSON.parse(gunzipSync(store.objects.get(`raw/cardtrader/${DAY}/cardtrader.json.gz`)!).toString("utf8"));
     expect(Object.keys(landed.blueprints)).toEqual(["2961", "3062"]);
-    expect(landed.products.jp["3062"]).toEqual(JSON.parse(readFileSync(join(FIXTURES, "products-jp-3062.json"), "utf8")));
+    expect(landed.listings.jp["3062"]).toEqual(JSON.parse(readFileSync(join(FIXTURES, "products-jp-3062.json"), "utf8")));
   });
 
-  it("derives the lowest EUR ask per Japanese Printing per Condition, with its Listing count", async () => {
+  it("derives the lowest EUR Listing per Japanese Printing per Condition, with its Listing count", async () => {
     const result = await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
 
     expect(await pricesOn(DAY)).toEqual([
@@ -207,6 +207,22 @@ describe("market.cardtrader capture", () => {
     });
     expect(await blueprint("300004")).toBeUndefined(); // DON!!
     expect(await blueprint("300007")).toBeUndefined(); // sealed
+  });
+
+  it("leaves a blueprint unmatched when its TCGplayer product is marked 'not an Artwork'", async () => {
+    await db
+      .update(tcgMarketplaceProduct)
+      .set({ method: "manual", variantId: null })
+      .where(and(eq(tcgMarketplaceProduct.marketplace, "tcgplayer"), eq(tcgMarketplaceProduct.externalId, "454664")));
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps }, DAY);
+
+    expect(await blueprint("200002")).toMatchObject({
+      variantId: null,
+      reason: "TCGplayer product 454664 is marked not an Artwork",
+    });
+    expect((await pricesOn(DAY)).filter(([v, , c]) => v === "OP01-120" && c === "NM")).toEqual([
+      ["OP01-120", "ja", "NM", 7, 1, "200003"],
+    ]);
   });
 
   it("fails without a token and lands nothing", async () => {
@@ -245,6 +261,28 @@ describe("re-running and replaying a CardTrader day", () => {
 
     expect(await pricesOn(DAY)).toHaveLength(12);
     expect(await pricesOn(DAY, "tcgplayer")).toEqual([["OP05-119", "en", "NM", expect.closeTo(20.9, 4), null, "527024"]]);
+  });
+
+  it("follows its TCGplayer product to a later manual match on replay", async () => {
+    const store = memoryStore();
+    await captureCardtrader({ db, store, ...recordedCardtrader().deps }, DAY);
+
+    await db
+      .update(tcgMarketplaceProduct)
+      .set({ method: "manual", variantId: "OP05-119_p1" })
+      .where(and(eq(tcgMarketplaceProduct.marketplace, "tcgplayer"), eq(tcgMarketplaceProduct.externalId, "527024")));
+    await deriveMarketDay({ db, store }, { source: "cardtrader", day: DAY });
+
+    expect(await blueprint("300001")).toMatchObject({ method: "tcgplayer_id", variantId: "OP05-119_p1" });
+    const luffy = (await pricesOn(DAY)).filter(([v]) => String(v).startsWith("OP05-119"));
+    expect(luffy.map(([v, , c]) => [v, c])).toEqual([
+      ["OP05-119_p1", "NM"],
+      ["OP05-119_p1", "LP"],
+      ["OP05-119_p1", "MP"],
+      ["OP05-119_p1", "HP"],
+      ["OP05-119_p1", "DMG"],
+      ["OP05-119_p2", "NM"],
+    ]);
   });
 
   it("moves a blueprint's prices to its manual match on replay", async () => {

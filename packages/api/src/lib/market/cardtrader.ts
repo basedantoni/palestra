@@ -33,7 +33,7 @@ export type CardtraderLanguage = (typeof CARDTRADER_LANGUAGES)[number];
 export type CardtraderBundle = {
   expansions: unknown;
   blueprints: Record<string, unknown>;
-  products: Partial<Record<CardtraderLanguage, Record<string, unknown>>>;
+  listings: Partial<Record<CardtraderLanguage, Record<string, unknown>>>;
 };
 
 const expansionsResponse = z.array(z.object({ id: z.number(), game_id: z.number(), code: z.string().nullish(), name: z.string() }));
@@ -103,14 +103,14 @@ export type CardtraderBlueprint = {
   tags: string[];
   /** The TCGplayer product it is, when CardTrader knows it. */
   tcgPlayerId: string | null;
-  /** The lowest ask in EUR per Condition, and how many Listings it was drawn from. */
-  asks: Partial<Record<Condition, { price: number; count: number }>>;
+  /** The lowest Listing in EUR per Condition, and how many Listings it was drawn from. */
+  lowest: Partial<Record<Condition, { price: number; count: number }>>;
 };
 
 /**
  * Every card blueprint in the bundle with its `language` Listings. Blueprints with no collector
  * number (sealed product) or of rarity DON!! are dropped. Graded, signed and altered Listings, and
- * any in another language, count toward neither the ask nor the count. A non-EUR Listing is
+ * any in another language, count toward neither the lowest price nor the count. A non-EUR Listing is
  * converted at `rates` before the lowest is taken; one with no rate, or with a Condition that has
  * no mapping, is skipped and reported.
  */
@@ -119,12 +119,12 @@ export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLa
   const blueprints: CardtraderBlueprint[] = [];
   const sets = new Map(expansionsResponse.parse(bundle.expansions).map((e) => [e.id, e.code || e.name]));
   for (const [expansionId, raw] of Object.entries(bundle.blueprints)) {
-    const listingsRaw = bundle.products[language]?.[expansionId];
+    const listingsRaw = bundle.listings[language]?.[expansionId];
     const listings = listingsRaw ? listingsResponse.parse(listingsRaw) : {};
     for (const b of blueprintsResponse.parse(raw)) {
       const number = b.fixed_properties?.collector_number;
       if (!number || b.fixed_properties?.onepiece_rarity === "DON!!") continue;
-      const asks: CardtraderBlueprint["asks"] = {};
+      const lowest: CardtraderBlueprint["lowest"] = {};
       for (const l of listings[b.id] ?? []) {
         const p = l.properties_hash;
         if (l.graded || p.signed || p.altered || p.onepiece_language !== language) continue;
@@ -140,8 +140,8 @@ export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLa
           continue;
         }
         const price = cents / minorUnits(currency) / perEur;
-        const ask = asks[condition];
-        asks[condition] = { price: Math.min(price, ask?.price ?? Infinity), count: (ask?.count ?? 0) + 1 };
+        const current = lowest[condition];
+        lowest[condition] = { price: Math.min(price, current?.price ?? Infinity), count: (current?.count ?? 0) + 1 };
       }
       blueprints.push({
         externalId: String(b.id),
@@ -150,7 +150,7 @@ export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLa
         set: sets.get(b.expansion_id) ?? expansionId,
         tags: b.version ? [b.version] : [],
         tcgPlayerId: b.tcg_player_id ? String(b.tcg_player_id) : null,
-        asks,
+        lowest,
       });
     }
   }

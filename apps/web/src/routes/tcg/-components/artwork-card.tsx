@@ -10,7 +10,7 @@ import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
 import { artworkImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
 import { invalidateBrowse } from "./invalidate-browse";
-import { TILE_PRICE_SOURCES, TilePrice, type TilePrices } from "./tile-price";
+import { TILE_PRICE_TITLES, TilePrice, type TilePrices } from "./tile-price";
 import { WantDialog } from "./want-dialog";
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -125,7 +125,7 @@ function ArtworkCard({
         {a.owned && <Badge>Owned</Badge>}
       </div>
       {prices &&
-        (Object.keys(TILE_PRICE_SOURCES) as Array<keyof typeof TILE_PRICE_SOURCES>).map((language) => {
+        (Object.keys(TILE_PRICE_TITLES) as Array<keyof typeof TILE_PRICE_TITLES>).map((language) => {
           const printing = a.printings.find((p) => p.language === language);
           return (
             printing && (

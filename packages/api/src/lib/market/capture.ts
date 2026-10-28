@@ -77,11 +77,11 @@ async function downloadCardtrader({ fetch, clock, cardtraderToken }: MarketDeps)
     return res.json();
   };
   const expansions = await json(CARDTRADER_EXPANSIONS_URL);
-  const bundle: CardtraderBundle = { expansions, blueprints: {}, products: {} };
+  const bundle: CardtraderBundle = { expansions, blueprints: {}, listings: {} };
   for (const id of parseCardtraderExpansions(expansions)) {
     bundle.blueprints[id] = await json(cardtraderBlueprintsUrl(id));
     for (const language of CARDTRADER_LANGUAGES) {
-      (bundle.products[language] ??= {})[id] = await json(cardtraderListingsUrl(id, language));
+      (bundle.listings[language] ??= {})[id] = await json(cardtraderListingsUrl(id, language));
     }
   }
   return new TextEncoder().encode(JSON.stringify(bundle));
@@ -123,6 +123,9 @@ const SOURCES = {
     derive: async (db, raw, day) => {
       const bundle = JSON.parse(utf8(raw)) as CardtraderBundle;
       const { blueprints, skipped } = parseCardtrader(bundle, "jp", await ratesOn(db, day));
+      if (skipped.conditions.length || skipped.currencies.length) {
+        console.warn(`[market.cardtrader] ${day}: skipped Listings with unmapped`, skipped);
+      }
       return { ...(await replaceCardtraderDay(db, blueprints, day)), skipped };
     },
   },

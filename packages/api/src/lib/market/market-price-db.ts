@@ -28,10 +28,9 @@ type Match = { variantId: string; method: "rule" | "tcgplayer_id" } | { reason: 
  */
 export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[], day: string) {
   return db.transaction(async (tx) => {
-    const { mapped, unmatched } = await upsertProducts(tx, "tcgplayer", products, day, async (unsettled) => {
-      const rule = await ruleTier(tx, unsettled, "en");
-      return (p) => rule(p);
-    });
+    const { mapped, unmatched } = await upsertProducts(tx, "tcgplayer", products, day, (unsettled) =>
+      ruleTier(tx, unsettled, "en"),
+    );
 
     // Lowest marketPrice per Artwork, and the product it came from.
     const marketPrice = new Map(products.map((p) => [p.externalId, p.marketPrice]));
@@ -60,11 +59,11 @@ export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[
 }
 
 /**
- * Derive CardTrader's Market Prices for `day` from that day's blueprints and their Japanese asks,
- * in one transaction: the blueprints go through the mapping store (`tcgplayer_id` tier, then the
- * rule tier), then the day is replaced with one price per Japanese Printing of a matched Artwork
- * per Condition: the lowest ask across its blueprints, their Listing counts summed, and the
- * blueprint that supplied the ask.
+ * Derive CardTrader's Market Prices for `day` from that day's blueprints and their lowest Japanese
+ * Listings, in one transaction: the blueprints go through the mapping store (`tcgplayer_id` tier,
+ * then the rule tier), then the day is replaced with one price per Japanese Printing of a matched
+ * Artwork per Condition: the lowest Listing across its blueprints, their Listing counts summed,
+ * and the blueprint that supplied the lowest.
  */
 export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderBlueprint[], day: string) {
   return db.transaction(async (tx) => {
@@ -78,17 +77,19 @@ export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderB
       return (b) => tcgplayer.get(b.externalId) ?? rule(b);
     });
 
-    const asks = new Map(blueprints.map((b) => [b.externalId, b.asks]));
-    const best = new Map<string, Map<string, { price: number; count: number; productId: number }>>();
+    const lowest = new Map(blueprints.map((b) => [b.externalId, b.lowest]));
+    const best = new Map<string, Map<PriceRow["condition"], { price: number; count: number; productId: number }>>();
     for (const m of mapped) {
       if (m.variantId === null) continue;
       const byCondition = best.get(m.variantId) ?? new Map();
-      for (const [condition, ask] of Object.entries(asks.get(m.externalId) ?? {})) {
+      for (const [condition, listing] of Object.entries(lowest.get(m.externalId) ?? {}) as Array<
+        [PriceRow["condition"], { price: number; count: number }]
+      >) {
         const current = byCondition.get(condition);
         byCondition.set(condition, {
-          price: Math.min(ask.price, current?.price ?? Infinity),
-          count: ask.count + (current?.count ?? 0),
-          productId: !current || ask.price < current.price ? m.id : current.productId,
+          price: Math.min(listing.price, current?.price ?? Infinity),
+          count: listing.count + (current?.count ?? 0),
+          productId: !current || listing.price < current.price ? m.id : current.productId,
         });
       }
       best.set(m.variantId, byCondition);
@@ -97,7 +98,7 @@ export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderB
       [...best.get(printing.variantId)!].map(([condition, { price, count, productId }]) => ({
         printingId: printing.id,
         marketplace: "cardtrader" as const,
-        condition: condition as PriceRow["condition"],
+        condition,
         day,
         price,
         listingCount: count,
@@ -112,7 +113,9 @@ export async function replaceCardtraderDay(db: MarketDb, blueprints: CardtraderB
 /**
  * Upsert every product into the mapping store, refreshing its name, number, set and last seen day.
  * New and unmatched products go through `match` (built once for all of them); matched products
- * keep their Artwork, and a manual row's match (or "not an Artwork") is never changed.
+ * keep their Artwork, and a manual row's match (or "not an Artwork") is never changed. A
+ * `tcgplayer_id` match is a free lookup, so it is redone every time: a later manual fix to the
+ * TCGplayer product reaches the blueprint on the next capture or replay.
  */
 async function upsertProducts<P extends Product>(
   tx: MarketDb,
@@ -128,7 +131,7 @@ async function upsertProducts<P extends Product>(
   );
   const settled = (p: P) => {
     const row = existing.get(p.externalId);
-    return row && (row.variantId !== null || row.method === "manual") ? row : null;
+    return row && (row.method === "manual" || (row.variantId !== null && row.method !== "tcgplayer_id")) ? row : null;
   };
   const match = await matcher(products.filter((p) => !settled(p)));
 
@@ -191,24 +194,32 @@ const printingsOf = (tx: MarketDb, language: Language, variantIds: string[]) =>
 
 /**
  * The `tcgplayer_id` tier: a blueprint naming a TCGplayer product takes that product's Artwork,
- * a manual match included. One whose product is unknown or has no Artwork falls through.
+ * a manual match included, and is unmatched when the admin marked that product "not an Artwork".
+ * One whose product is unknown or unmatched falls through to the rule tier.
  */
 async function tcgplayerTier(tx: MarketDb, blueprints: CardtraderBlueprint[]) {
   const ids = [...new Set(blueprints.flatMap((b) => (b.tcgPlayerId ? [b.tcgPlayerId] : [])))];
-  const artworks = new Map(
+  const products = new Map(
     ids.length
       ? (
           await tx
-            .select({ externalId: tcgMarketplaceProduct.externalId, variantId: tcgMarketplaceProduct.variantId })
+            .select({
+              externalId: tcgMarketplaceProduct.externalId,
+              variantId: tcgMarketplaceProduct.variantId,
+              method: tcgMarketplaceProduct.method,
+            })
             .from(tcgMarketplaceProduct)
             .where(and(eq(tcgMarketplaceProduct.marketplace, "tcgplayer"), inArray(tcgMarketplaceProduct.externalId, ids)))
-        ).flatMap((r) => (r.variantId ? [[r.externalId, r.variantId] as const] : []))
+        ).map((r) => [r.externalId, r])
       : [],
   );
   const matches = new Map<string, Match>();
   for (const b of blueprints) {
-    const variantId = b.tcgPlayerId && artworks.get(b.tcgPlayerId);
-    if (variantId) matches.set(b.externalId, { variantId, method: "tcgplayer_id" });
+    const product = b.tcgPlayerId ? products.get(b.tcgPlayerId) : undefined;
+    if (product?.variantId) matches.set(b.externalId, { variantId: product.variantId, method: "tcgplayer_id" });
+    else if (product?.method === "manual") {
+      matches.set(b.externalId, { reason: `TCGplayer product ${product.externalId} is marked not an Artwork` });
+    }
   }
   return matches;
 }
