@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCopy, tcgMarketplaceProduct, tcgOffer, tcgPrinting } from "@life-tracker/db/schema/index";
-import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, TCG_LISTED_LANGUAGES } from "@life-tracker/shared";
 
 import { adminProcedure, router } from "../index";
 
@@ -48,7 +48,7 @@ export const marketAdminRouter = router({
    * English Printings come from the catalog import and are never deleted here.
    */
   deletePrinting: adminProcedure
-    .input(z.object({ variantId: z.string().trim().min(1).max(40), language: z.enum(["zh", "ko"]) }))
+    .input(z.object({ variantId: z.string().trim().min(1).max(40), language: z.enum(TCG_LISTED_LANGUAGES) }))
     .mutation(async ({ input: { variantId, language } }) => {
       const ids = (
         await db

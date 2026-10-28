@@ -1,5 +1,5 @@
 import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
-import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, type TcgListedLanguage } from "@life-tracker/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { CARDTRADER_LANGUAGES, type CardtraderBlueprint, printingToCreate } from "./cardtrader";
@@ -203,7 +203,7 @@ async function replaceDay(tx: MarketDb, marketplace: Marketplace, day: string, p
  * Japanese or English one (`printingToCreate`). Nothing here deletes one: when its Listings go, its
  * Price History has a gap.
  */
-async function createPrintings(tx: MarketDb, language: "zh" | "ko", variantIds: string[]) {
+async function createPrintings(tx: MarketDb, language: TcgListedLanguage, variantIds: string[]) {
   if (variantIds.length === 0) return;
   const existing = Map.groupBy(
     await tx

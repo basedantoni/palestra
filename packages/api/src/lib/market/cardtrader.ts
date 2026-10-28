@@ -5,7 +5,7 @@
  * CardTrader publishes Listings, not an aggregate: per One Piece expansion, its blueprints (one
  * per Artwork, across languages) and, per language, the cheapest Listings of each blueprint.
  */
-import { TCG_LANGUAGE_NAME, type TCG_CONDITIONS } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, type TCG_CONDITIONS, type TcgListedLanguage } from "@life-tracker/shared";
 import { z } from "zod";
 
 import type { PerEur } from "./ecb";
@@ -177,7 +177,7 @@ type PrintingSource = { language: keyof typeof TCG_LANGUAGE_NAME; packId: string
  * its set labelled with the language (`OP-09, Korean`), listed by the Artwork's variant ID. None
  * when the Artwork already has a Printing in that language, or has nothing to copy.
  */
-export function printingToCreate(variantId: string, language: "zh" | "ko", printings: PrintingSource[]) {
+export function printingToCreate(variantId: string, language: TcgListedLanguage, printings: PrintingSource[]) {
   if (printings.some((p) => p.language === language)) return null;
   const source = printings.find((p) => p.language === "ja") ?? printings.find((p) => p.language === "en");
   if (!source) return null;

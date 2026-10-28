@@ -1,11 +1,9 @@
-import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, TCG_LISTED_LANGUAGES, type TcgListedLanguage } from "@life-tracker/shared";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const LANGUAGES = ["zh", "ko"] as const;
-type Language = (typeof LANGUAGES)[number];
 
 /**
  * Delete a phantom Simplified Chinese or Korean Printing that CardTrader Listings created
@@ -15,11 +13,11 @@ export function DeletePrinting({
   onDelete,
   pending = false,
 }: {
-  onDelete: (variantId: string, language: Language) => void;
+  onDelete: (variantId: string, language: TcgListedLanguage) => void;
   pending?: boolean;
 }) {
   const [variantId, setVariantId] = useState("");
-  const [language, setLanguage] = useState<Language>("zh");
+  const [language, setLanguage] = useState<TcgListedLanguage>("zh");
   return (
     <form
       className="flex flex-wrap items-end gap-2"
@@ -36,10 +34,10 @@ export function DeletePrinting({
         <span className="block text-muted-foreground">Language</span>
         <select
           value={language}
-          onChange={(e) => setLanguage(e.target.value as Language)}
+          onChange={(e) => setLanguage(e.target.value as TcgListedLanguage)}
           className="block h-8 rounded-md border border-border bg-background px-2 text-sm"
         >
-          {LANGUAGES.map((l) => (
+          {TCG_LISTED_LANGUAGES.map((l) => (
             <option key={l} value={l}>
               {TCG_LANGUAGE_NAME[l]}
             </option>
