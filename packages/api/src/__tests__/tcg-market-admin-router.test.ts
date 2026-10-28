@@ -16,6 +16,7 @@ import { db } from "@life-tracker/db";
 import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
 import { and, eq } from "drizzle-orm";
 
+import { parseAdminEmails } from "../lib/admins";
 import { rawKey } from "../lib/market/capture";
 import { runMarketJob } from "../lib/market/worker";
 import { appRouter } from "../routers/index";
@@ -23,7 +24,9 @@ import { memoryStore } from "./helpers/memory-store";
 import { truncateAll } from "./helpers/pglite";
 
 const PAST_DAY = "2026-10-20";
-const admin = appRouter.createCaller({ session: { user: { id: "admin", email: "admin@test.internal" } } } as any);
+// The setup's ADMIN_EMAILS (or a local .env's): the test admin is whoever is listed first.
+const ADMIN = parseAdminEmails(process.env.ADMIN_EMAILS)[0]!;
+const admin = appRouter.createCaller({ session: { user: { id: "admin", email: ADMIN } } } as any);
 const member = appRouter.createCaller({ session: { user: { id: "member", email: "member@test.internal" } } } as any);
 
 const noFetch = (async () => {
@@ -107,7 +110,7 @@ const stored = (externalId: string) =>
 
 /** `market.derive` for TCGCSV on `day`, through the job handler, from the raw copy landed in `store`. */
 const replay = (store: ReturnType<typeof memoryStore>, day: string) =>
-  runMarketJob("market.derive", { db, store, fetch: noFetch }, { source: "tcgcsv", day });
+  runMarketJob("market.derive", { db, store, fetch: noFetch, adminEmails: [], databaseSize: async () => 0 }, { source: "tcgcsv", day });
 
 describe("admin.market.setManualMatch", () => {
   it("stores a manual match to an Artwork, or 'not an Artwork' with no variant ID", async () => {
