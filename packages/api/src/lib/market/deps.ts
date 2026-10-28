@@ -19,6 +19,7 @@ export function marketDeps(): WorkerDeps {
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
     }),
     fetch: globalThis.fetch,
+    cardtraderToken: env.CARDTRADER_TOKEN,
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     databaseSize: () => databaseSize(db),
   };

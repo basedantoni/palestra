@@ -22,16 +22,29 @@ const percent = new Intl.NumberFormat("en-US", {
   signDisplay: "exceptZero",
 });
 
+/** The tile languages, in display order, each with where its price comes from. */
+export const TILE_PRICE_TITLES = {
+  en: "TCGplayer Market Price, NM",
+  ja: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
+} as const;
+
 /**
- * The English Printing's Current Market Price on a tile (TCGplayer, NM, USD): dated once older than
- * 7 days, a dash when there is none. Never carried forward or estimated. Its 7d Price Move and
- * 30-day sparkline show only when there is data for them. Clicking it opens the Printing drawer.
+ * A Printing's Current Market Price on a tile (NM, in USD): dated once older than 7 days, a dash
+ * when there is none. Never carried forward or estimated. Its 7d Price Move (in the Marketplace's
+ * currency) and 30-day sparkline show only when there is data for them. Clicking it opens the
+ * Printing drawer.
  */
-export function TilePrice({ price }: { price: TilePrices[number] | undefined }) {
+export function TilePrice({
+  language,
+  price,
+}: {
+  language: keyof typeof TILE_PRICE_TITLES;
+  price: TilePrices[number] | undefined;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="flex flex-wrap items-baseline gap-1 text-xs" title="TCGplayer Market Price, NM">
-      <span className="text-muted-foreground">EN</span>
+    <div className="flex flex-wrap items-baseline gap-1 text-xs" title={TILE_PRICE_TITLES[language]}>
+      <span className="text-muted-foreground">{language.toUpperCase()}</span>
       {price ? (
         <button
           type="button"

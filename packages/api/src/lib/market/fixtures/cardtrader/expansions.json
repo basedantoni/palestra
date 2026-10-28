@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "game_id": 1,
+    "code": "lea",
+    "name": "Limited Edition Alpha"
+  },
+  {
+    "id": 2961,
+    "game_id": 15,
+    "code": "op01",
+    "name": "Romance Dawn"
+  },
+  {
+    "id": 3062,
+    "game_id": 15,
+    "code": "op05",
+    "name": "Awakening of the New Era"
+  },
+  {
+    "id": 3100,
+    "game_id": 5,
+    "code": "sv1",
+    "name": "Scarlet & Violet"
+  }
+]

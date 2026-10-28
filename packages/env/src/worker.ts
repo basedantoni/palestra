@@ -20,6 +20,9 @@ export const env = createEnv({
     AWS_ENDPOINT_URL_S3: z.url(),
     AWS_REGION: z.string().min(1).default("auto"),
     BUCKET_NAME: z.string().min(1),
+    // CardTrader's self-serve API token (profile settings → API). Optional so a missing token fails
+    // only market.cardtrader, never the worker's boot or the other sources.
+    CARDTRADER_TOKEN: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

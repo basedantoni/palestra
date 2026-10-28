@@ -12,6 +12,7 @@ import {
   MARKET_SOURCES,
   type MarketDeps,
   type MarketSource,
+  captureCardtrader,
   captureEcb,
   captureTcgcsv,
   deriveMarketDay,
@@ -99,6 +100,7 @@ const JOBS = {
   // The database-size guard rides on the daily ECB job: one check a day, even when ECB is down.
   "market.ecb": liveCapture("ecb", captureEcb, guardDatabaseSize),
   "market.tcgcsv": liveCapture("tcgcsv", captureTcgcsv),
+  "market.cardtrader": liveCapture("cardtrader", captureCardtrader),
   "market.derive": {
     queue: MANUAL_QUEUE,
     scheduled: false,

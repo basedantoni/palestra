@@ -70,6 +70,20 @@ describe("market_capture_failed", () => {
     expect(rows[0]!.message).toMatch(/tcgcsv.*2026-10-26/);
   });
 
+  it("notifies the admins when market.cardtrader's final retry fails too", async () => {
+    const run = runMarketJob("market.cardtrader", deps({ cardtraderToken: "t" }), null, {
+      createdOn,
+      now,
+      retryCount: 3,
+      retryLimit: 3,
+    });
+
+    await expect(run).rejects.toThrow(/503/);
+    expect((await notifications()).map((n) => [n.userId, n.type, /cardtrader.*2026-10-26/.test(n.message)])).toEqual([
+      ["admin", "market_capture_failed", true],
+    ]);
+  });
+
   it("sends nothing for a failure pg-boss will retry, nor for the retry that then succeeds", async () => {
     const retry = runMarketJob("market.ecb", deps(), null, { createdOn, now, retryCount: 2, retryLimit: 3 });
     await expect(retry).rejects.toThrow(/503/);

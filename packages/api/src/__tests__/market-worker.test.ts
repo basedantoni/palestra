@@ -48,12 +48,12 @@ describe("worker boot", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it.each(["market.ecb", "market.tcgcsv"])("schedules %s daily at 21:17 UTC", async (name) => {
+  it.each(["market.ecb", "market.tcgcsv", "market.cardtrader"])("schedules %s daily at 21:17 UTC", async (name) => {
     const [schedule] = await boss.getSchedules(name);
     expect(schedule).toMatchObject({ cron: "17 21 * * *", timezone: "UTC" });
   });
 
-  it.each(["market.ecb", "market.tcgcsv"])("retries %s 3 times with backoff", async (name) => {
+  it.each(["market.ecb", "market.tcgcsv", "market.cardtrader"])("retries %s 3 times with backoff", async (name) => {
     expect(await boss.getQueue(name)).toMatchObject({ retryLimit: 3, retryBackoff: true });
   });
 

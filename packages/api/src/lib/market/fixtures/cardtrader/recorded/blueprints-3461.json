@@ -1,0 +1,315 @@
+[
+ {
+  "id": 256557,
+  "name": "Awakening of the New Era Booster Box",
+  "version": "",
+  "game_id": 15,
+  "category_id": 193,
+  "expansion_id": 3461,
+  "fixed_properties": {},
+  "editable_properties": [
+   {
+    "name": "onepiece_language",
+    "type": "string",
+    "default_value": "en",
+    "possible_values": [
+     "en",
+     "jp",
+     "zh-CN",
+     "kr",
+     "fr"
+    ]
+   }
+  ],
+  "card_market_ids": [
+   725745
+  ],
+  "tcg_player_id": 498734,
+  "scryfall_id": null,
+  "image_url": "https://cardtrader.com/uploads/blueprints/image/256557/preview_awakening-of-the-new-era-booster-box-awakening-of-the-new-era.jpg",
+  "image": {
+   "url": "/uploads/blueprints/image/256557/awakening-of-the-new-era-booster-box-awakening-of-the-new-era.jpg",
+   "show": {
+    "url": "/uploads/blueprints/image/256557/show_awakening-of-the-new-era-booster-box-awakening-of-the-new-era.jpg"
+   },
+   "preview": {
+    "url": "/uploads/blueprints/image/256557/preview_awakening-of-the-new-era-booster-box-awakening-of-the-new-era.jpg"
+   },
+   "social": {
+    "url": "/uploads/blueprints/image/256557/social_awakening-of-the-new-era-booster-box-awakening-of-the-new-era.jpg"
+   }
+  },
+  "back_image": null
+ },
+ {
+  "id": 256558,
+  "name": "Awakening of the New Era Booster Box",
+  "version": "Asian",
+  "game_id": 15,
+  "category_id": 193,
+  "expansion_id": 3461,
+  "fixed_properties": {},
+  "editable_properties": [
+   {
+    "name": "onepiece_language",
+    "type": "string",
+    "default_value": "jp",
+    "possible_values": [
+     "jp",
+     "zh-CN",
+     "kr"
+    ]
+   }
+  ],
+  "card_market_ids": [
+   725746
+  ],
+  "tcg_player_id": null,
+  "scryfall_id": null,
+  "image_url": "https://cardtrader.com/uploads/blueprints/image/256558/preview_awakening-of-the-new-era-booster-box-asian-awakening-of-the-new-era.jpg",
+  "image": {
+   "url": "/uploads/blueprints/image/256558/awakening-of-the-new-era-booster-box-asian-awakening-of-the-new-era.jpg",
+   "show": {
+    "url": "/uploads/blueprints/image/256558/show_awakening-of-the-new-era-booster-box-asian-awakening-of-the-new-era.jpg"
+   },
+   "preview": {
+    "url": "/uploads/blueprints/image/256558/preview_awakening-of-the-new-era-booster-box-asian-awakening-of-the-new-era.jpg"
+   },
+   "social": {
+    "url": "/uploads/blueprints/image/256558/social_awakening-of-the-new-era-booster-box-asian-awakening-of-the-new-era.jpg"
+   }
+  },
+  "back_image": null
+ },
+ {
+  "id": 268444,
+  "name": "Belo Betty",
+  "version": "002 | Alternate Art",
+  "game_id": 15,
+  "category_id": 192,
+  "expansion_id": 3461,
+  "fixed_properties": {
+   "collector_number": "OP05-002a",
+   "onepiece_rarity": "Alternate Art"
+  },
+  "editable_properties": [
+   {
+    "name": "condition",
+    "type": "string",
+    "default_value": "Near Mint",
+    "possible_values": [
+     "Mint",
+     "Near Mint",
+     "Slightly Played",
+     "Moderately Played",
+     "Played",
+     "Poor"
+    ]
+   },
+   {
+    "name": "signed",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "altered",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "onepiece_language",
+    "type": "string",
+    "default_value": "en",
+    "possible_values": [
+     "en",
+     "jp",
+     "zh-CN",
+     "kr",
+     "fr"
+    ]
+   }
+  ],
+  "card_market_ids": [
+   747440,
+   733276
+  ],
+  "tcg_player_id": 527008,
+  "scryfall_id": null,
+  "image_url": "https://cardtrader.com/uploads/blueprints/image/268444/preview_belo-betty-alternate-art-awakening-of-the-new-era.jpg",
+  "image": {
+   "url": "/uploads/blueprints/image/268444/belo-betty-alternate-art-awakening-of-the-new-era.jpg",
+   "show": {
+    "url": "/uploads/blueprints/image/268444/show_belo-betty-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "preview": {
+    "url": "/uploads/blueprints/image/268444/preview_belo-betty-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "social": {
+    "url": "/uploads/blueprints/image/268444/social_belo-betty-alternate-art-awakening-of-the-new-era.jpg"
+   }
+  },
+  "back_image": null
+ },
+ {
+  "id": 268445,
+  "name": "Enel",
+  "version": "098 | Alternate Art",
+  "game_id": 15,
+  "category_id": 192,
+  "expansion_id": 3461,
+  "fixed_properties": {
+   "collector_number": "OP05-098a",
+   "onepiece_rarity": "Alternate Art"
+  },
+  "editable_properties": [
+   {
+    "name": "condition",
+    "type": "string",
+    "default_value": "Near Mint",
+    "possible_values": [
+     "Mint",
+     "Near Mint",
+     "Slightly Played",
+     "Moderately Played",
+     "Played",
+     "Poor"
+    ]
+   },
+   {
+    "name": "signed",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "altered",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "onepiece_language",
+    "type": "string",
+    "default_value": "en",
+    "possible_values": [
+     "en",
+     "jp",
+     "zh-CN",
+     "kr",
+     "fr"
+    ]
+   }
+  ],
+  "card_market_ids": [
+   747800,
+   733436
+  ],
+  "tcg_player_id": 527021,
+  "scryfall_id": null,
+  "image_url": "https://cardtrader.com/uploads/blueprints/image/268445/preview_enel-098-alternate-art-awakening-of-the-new-era.jpg",
+  "image": {
+   "url": "/uploads/blueprints/image/268445/enel-098-alternate-art-awakening-of-the-new-era.jpg",
+   "show": {
+    "url": "/uploads/blueprints/image/268445/show_enel-098-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "preview": {
+    "url": "/uploads/blueprints/image/268445/preview_enel-098-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "social": {
+    "url": "/uploads/blueprints/image/268445/social_enel-098-alternate-art-awakening-of-the-new-era.jpg"
+   }
+  },
+  "back_image": null
+ },
+ {
+  "id": 268446,
+  "name": "Donquixote Rosinante",
+  "version": "Alternate Art",
+  "game_id": 15,
+  "category_id": 192,
+  "expansion_id": 3461,
+  "fixed_properties": {
+   "collector_number": "OP05-022",
+   "onepiece_rarity": "Alternate Art"
+  },
+  "editable_properties": [
+   {
+    "name": "condition",
+    "type": "string",
+    "default_value": "Near Mint",
+    "possible_values": [
+     "Mint",
+     "Near Mint",
+     "Slightly Played",
+     "Moderately Played",
+     "Played",
+     "Poor"
+    ]
+   },
+   {
+    "name": "signed",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "altered",
+    "type": "boolean",
+    "default_value": "false",
+    "possible_values": [
+     true,
+     false
+    ]
+   },
+   {
+    "name": "onepiece_language",
+    "type": "string",
+    "default_value": "en",
+    "possible_values": [
+     "en",
+     "jp",
+     "zh-CN",
+     "kr",
+     "fr"
+    ]
+   }
+  ],
+  "card_market_ids": [
+   747466,
+   733307
+  ],
+  "tcg_player_id": 527010,
+  "scryfall_id": null,
+  "image_url": "https://cardtrader.com/uploads/blueprints/image/268446/preview_donquixote-rosinante-alternate-art-awakening-of-the-new-era.jpg",
+  "image": {
+   "url": "/uploads/blueprints/image/268446/donquixote-rosinante-alternate-art-awakening-of-the-new-era.jpg",
+   "show": {
+    "url": "/uploads/blueprints/image/268446/show_donquixote-rosinante-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "preview": {
+    "url": "/uploads/blueprints/image/268446/preview_donquixote-rosinante-alternate-art-awakening-of-the-new-era.jpg"
+   },
+   "social": {
+    "url": "/uploads/blueprints/image/268446/social_donquixote-rosinante-alternate-art-awakening-of-the-new-era.jpg"
+   }
+  },
+  "back_image": null
+ }
+]

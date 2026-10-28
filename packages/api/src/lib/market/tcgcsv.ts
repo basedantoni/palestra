@@ -100,15 +100,17 @@ export const setKey = (set: string) => set.replace(/[^A-Za-z0-9]/g, "").toUpperC
 export type Candidate = { variantId: string; variantKind: "base" | "parallel" | "manga" | "reprint" };
 
 /**
- * The rule tier: `candidates` are the Artworks with the product's card number that have an English
- * Printing in its set. An untagged product goes to the base Artwork, a tagged one to the others; a
- * single candidate is a match, anything else leaves the product unmatched with a reason. A tag that
- * is part of the Card's English name (`Mr.3(Galdino)`) does not count.
+ * The rule tier: `candidates` are the Artworks with the product's card number that have a Printing
+ * in its set, in the Marketplace's language (English for TCGplayer, Japanese for CardTrader). An
+ * untagged product goes to the base Artwork, a tagged one to the others; a single candidate is a
+ * match, anything else leaves the product unmatched with a reason. A tag that is part of the
+ * Card's English name (`Mr.3(Galdino)`) does not count.
  */
 export function matchRule(
   product: Pick<TcgcsvProduct, "number" | "set" | "tags">,
   candidates: Candidate[],
   cardName: string | null,
+  language = "English",
 ): { variantId: string } | { reason: string } {
   const aliases = parentheticals(cardName ?? "");
   const tagged = product.tags.some((t) => !aliases.includes(t));
@@ -118,5 +120,5 @@ export function matchRule(
     return { reason: `${fitting.length} candidate Artworks in ${product.set}: ${fitting.map((c) => c.variantId).join(", ")}` };
   }
   const kind = candidates.length === 0 ? "" : tagged ? "non-base " : "base ";
-  return { reason: `No ${kind}Artwork of ${product.number} has an English Printing in ${product.set}` };
+  return { reason: `No ${kind}Artwork of ${product.number} has ${language === "English" ? "an" : "a"} ${language} Printing in ${product.set}` };
 }
