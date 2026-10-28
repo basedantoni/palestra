@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { offerVsMarket, wantMarketPrice } from "./want-market";
+import { offerVsMarket, currentPriceWithRange } from "./want-market";
 
 const TODAY = "2026-10-27";
 
-describe("wantMarketPrice", () => {
+describe("currentPriceWithRange", () => {
   it("is the Current Market Price in USD with its 30-day low and high", () => {
     const prices = [
       { day: "2026-09-26", price: 1 },
@@ -13,7 +13,7 @@ describe("wantMarketPrice", () => {
       { day: "2026-10-26", price: 10 },
     ];
 
-    expect(wantMarketPrice(prices, TODAY, 1.25)).toEqual({
+    expect(currentPriceWithRange(prices, TODAY, 1.25)).toEqual({
       price: 12.5,
       day: "2026-10-26",
       asOf: false,
@@ -23,13 +23,13 @@ describe("wantMarketPrice", () => {
   });
 
   it("flags an 'as of' price older than 7 days", () => {
-    expect(wantMarketPrice([{ day: "2026-10-19", price: 5 }], TODAY, 1)).toMatchObject({ price: 5, asOf: true });
+    expect(currentPriceWithRange([{ day: "2026-10-19", price: 5 }], TODAY, 1)).toMatchObject({ price: 5, asOf: true });
   });
 
   it("has no price without a Current Market Price or a rate to convert it", () => {
-    expect(wantMarketPrice([], TODAY, 1)).toBeNull();
-    expect(wantMarketPrice([{ day: "2026-09-26", price: 5 }], TODAY, 1)).toBeNull();
-    expect(wantMarketPrice([{ day: "2026-10-26", price: 5 }], TODAY, null)).toBeNull();
+    expect(currentPriceWithRange([], TODAY, 1)).toBeNull();
+    expect(currentPriceWithRange([{ day: "2026-09-26", price: 5 }], TODAY, 1)).toBeNull();
+    expect(currentPriceWithRange([{ day: "2026-10-26", price: 5 }], TODAY, null)).toBeNull();
   });
 });
 

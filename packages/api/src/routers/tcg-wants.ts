@@ -21,7 +21,7 @@ import { protectedProcedure, router } from "../index";
 import { toUsd } from "../lib/market/ecb";
 import { ratesOn } from "../lib/market/exchange-rate-db";
 import { CURRENT_PRICE_MAX_AGE_DAYS, MARKETPLACE_CURRENCY, daysBefore } from "../lib/market/market-price";
-import { offerVsMarket, wantMarketPrice } from "../lib/market/want-market";
+import { offerVsMarket, currentPriceWithRange } from "../lib/market/want-market";
 import type { Conn } from "../lib/rules-db";
 import { isBelowCondition } from "../lib/tcg-condition";
 
@@ -41,7 +41,7 @@ export const tcgWantsRouter = router({
   /**
    * The caller's Wants in one status (open by default), newest first, with their Artwork; each
    * accepted language's NM Current Market Price in USD with its 30-day range, and each Offer
-   * against today's NM price for its Printing at today's rate (KOI-373).
+   * against today's NM Current Market Price for its Printing at today's rate (KOI-373).
    */
   list: protectedProcedure
     .input(z.object({ status: z.enum(tcgWantStatusEnum.enumValues).default("open") }).default({ status: "open" }))
@@ -109,7 +109,7 @@ export const tcgWantsRouter = router({
       ]);
 
       const today = todayInTimeZone(new Date(), "UTC");
-      const marketByPrinting = await marketPrices(
+      const marketByPrinting = await currentPricesByPrinting(
         printings.map((p) => p.id),
         today,
       );
@@ -119,7 +119,7 @@ export const tcgWantsRouter = router({
         const wantOffers = (offersByWant.get(want.id) ?? [])
           .map(({ wantId: _wantId, ...o }) => ({
             ...o,
-            /** ±% against today's market, muted once the Offer is over 7 days old. */
+            /** ±% against today's NM Current Market Price, muted once the Offer is over 7 days old. */
             vsMarket: offerVsMarket(o, marketByPrinting.get(o.printingId)?.price ?? null, today),
           }))
           .toSorted((a, b) => a.price - b.price);
@@ -288,8 +288,8 @@ export const tcgWantsRouter = router({
  * TCGplayer, the other languages from CardTrader (as tile prices), at today's rate. An unpriced
  * Printing is absent.
  */
-async function marketPrices(printingIds: string[], today: string) {
-  if (printingIds.length === 0) return new Map<string, NonNullable<ReturnType<typeof wantMarketPrice>>>();
+async function currentPricesByPrinting(printingIds: string[], today: string) {
+  if (printingIds.length === 0) return new Map<string, NonNullable<ReturnType<typeof currentPriceWithRange>>>();
   const [rows, rates] = await Promise.all([
     db
       .select({
@@ -318,7 +318,7 @@ async function marketPrices(printingIds: string[], today: string) {
   return new Map(
     [...Map.groupBy(rows, (r) => r.printingId)].flatMap(([printingId, prices]) => {
       const usdPerUnit = toUsd(1, MARKETPLACE_CURRENCY[prices[0]!.marketplace], rates);
-      const market = wantMarketPrice(prices, today, usdPerUnit);
+      const market = currentPriceWithRange(prices, today, usdPerUnit);
       return market ? [[printingId, market] as const] : [];
     }),
   );

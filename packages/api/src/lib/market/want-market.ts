@@ -3,7 +3,7 @@
  */
 import { CURRENT_PRICE_MAX_AGE_DAYS, currentMarketPrice, daysBefore } from "./market-price";
 
-/** An Offer is compared with today's market; once older than this, the comparison is muted. */
+/** An Offer is compared with today's Current Market Price; once older than this, the comparison is muted. */
 const OFFER_FRESH_DAYS = 7;
 
 /**
@@ -12,7 +12,7 @@ const OFFER_FRESH_DAYS = 7;
  * that currency. One rate for every price, like the tile sparkline. Null with no Current Market
  * Price or no rate.
  */
-export function wantMarketPrice(prices: Array<{ day: string; price: number }>, today: string, usdPerUnit: number | null) {
+export function currentPriceWithRange(prices: Array<{ day: string; price: number }>, today: string, usdPerUnit: number | null) {
   const start = daysBefore(today, CURRENT_PRICE_MAX_AGE_DAYS);
   const window = prices.filter((p) => p.day >= start && p.day <= today);
   const current = currentMarketPrice(window.at(-1) ?? null, today);

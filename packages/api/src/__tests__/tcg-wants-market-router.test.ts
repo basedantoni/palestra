@@ -1,6 +1,6 @@
 /**
  * Market Prices on Wants and Offers (KOI-373): each accepted language's NM Current Market Price in
- * USD with its 30-day range, and each Offer against today's NM price for its Printing at today's
+ * USD with its 30-day range, and each Offer against today's NM Current Market Price for its Printing at today's
  * rate. Real SQL (PGlite).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -137,7 +137,7 @@ describe("tcg.wants.list market prices", () => {
     ]);
   });
 
-  it("compares each Offer with today's NM price for its language at today's rate, whatever the minimum Condition", async () => {
+  it("compares each Offer with today's NM Current Market Price for its language at today's rate, whatever the minimum Condition", async () => {
     const p = await artwork("OP05-119_p1");
     const id = await want("OP05-119_p1", ["en", "ja"], "LP");
     await price(p.ja, "ja", "2026-10-20", 40);
@@ -145,7 +145,7 @@ describe("tcg.wants.list market prices", () => {
     await price(p.ja, "ja", "2026-10-26", 20, "LP");
     await price(p.en, "en", "2026-10-26", 25);
     await price(p.en, "en", "2026-10-26", 10, "LP");
-    // Seen 7 days ago (at a $1 euro): today's market, $50, still; not muted.
+    // Seen 7 days ago (at a $1 euro): compared with today's Current Market Price, $50; not muted.
     await offer(id, p.ja, 60, "2026-10-20");
     // Seen 8 days ago: muted.
     await offer(id, p.en, 20, "2026-10-19");

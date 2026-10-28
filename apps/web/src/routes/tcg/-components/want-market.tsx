@@ -1,3 +1,4 @@
+/** Market Prices beside Wants and Offers (KOI-373). */
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,6 @@ import { shortDay, usd } from "./market-format";
 import { PrintingDrawer } from "./printing-drawer";
 import { TILE_PRICE_TITLES } from "./tile-price";
 
-/** Market Prices beside Wants and Offers (KOI-373). */
 type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 
 const percent = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 0, signDisplay: "exceptZero" });
