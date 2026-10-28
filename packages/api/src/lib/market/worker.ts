@@ -6,7 +6,15 @@ import { todayInTimeZone } from "@life-tracker/shared";
 import { type ConstructorOptions, PgBoss, type Queue } from "pg-boss";
 import { z } from "zod";
 
-import { MARKET_SOURCES, type MarketDeps, captureEcb, captureTcgcsv, deriveMarketDay, loadEcbHistory } from "./capture";
+import {
+  MARKET_SOURCES,
+  type MarketDeps,
+  captureCardtrader,
+  captureEcb,
+  captureTcgcsv,
+  deriveMarketDay,
+  loadEcbHistory,
+} from "./capture";
 
 const CAPTURE_HOUR = 21;
 const CAPTURE_MINUTE = 17;
@@ -52,6 +60,7 @@ const liveCapture = (name: string, capture: (deps: MarketDeps, day: string) => P
 const JOBS = {
   "market.ecb": liveCapture("market.ecb", captureEcb),
   "market.tcgcsv": liveCapture("market.tcgcsv", captureTcgcsv),
+  "market.cardtrader": liveCapture("market.cardtrader", captureCardtrader),
   "market.derive": {
     queue: MANUAL_QUEUE,
     scheduled: false,

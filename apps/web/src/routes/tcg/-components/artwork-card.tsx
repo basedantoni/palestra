@@ -10,7 +10,7 @@ import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
 import { artworkImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
 import { invalidateBrowse } from "./invalidate-browse";
-import { TilePrice, type TilePrices } from "./tile-price";
+import { TILE_PRICE_SOURCES, TilePrice, type TilePrices } from "./tile-price";
 import { WantDialog } from "./want-dialog";
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -84,7 +84,6 @@ function ArtworkCard({
   onWant: () => void;
 }) {
   const image = artworkImage(a.printings);
-  const en = a.printings.find((p) => p.language === "en");
   return (
     <li className="space-y-1">
       {image && (
@@ -125,7 +124,15 @@ function ArtworkCard({
         ))}
         {a.owned && <Badge>Owned</Badge>}
       </div>
-      {en && prices && <TilePrice price={prices.find((p) => p.printingId === en.id)} />}
+      {prices &&
+        (Object.keys(TILE_PRICE_SOURCES) as Array<keyof typeof TILE_PRICE_SOURCES>).map((language) => {
+          const printing = a.printings.find((p) => p.language === language);
+          return (
+            printing && (
+              <TilePrice key={language} language={language} price={prices.find((p) => p.printingId === printing.id)} />
+            )
+          );
+        })}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {a.wanted && <Badge>Wanted</Badge>}
         <Button size="xs" variant="outline" onClick={onAdd}>

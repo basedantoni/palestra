@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
 
 import { db } from "@life-tracker/db";
+import { eq } from "drizzle-orm";
 import { exchangeRate, tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
@@ -159,6 +160,52 @@ describe("tcg.market.tilePrices", () => {
 
     const [tile] = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
     expect(tile!.move7d).toBe(0);
+  });
+
+  it("prices the Japanese Printing at its CardTrader NM price in USD at today's rate, moving in EUR", async () => {
+    await artwork("OP05-119_p1");
+    const [ja] = await db.select({ id: tcgPrinting.id }).from(tcgPrinting).where(eq(tcgPrinting.language, "ja"));
+    const [{ id: blueprint }] = (await db
+      .insert(tcgMarketplaceProduct)
+      .values({ marketplace: "cardtrader", externalId: "300001", name: "Luffy", number: "OP05-119", set: "op05", variantId: "OP05-119_p1", method: "tcgplayer_id", lastSeenOn: TODAY })
+      .returning({ id: tcgMarketplaceProduct.id })) as [{ id: number }];
+    const ask = (day: string, value: number, condition: "NM" | "LP" = "NM") =>
+      price(ja!.id, day, value, { marketplace: "cardtrader", condition, listingCount: 2, marketplaceProductId: blueprint });
+    await ask("2026-10-20", 40);
+    await ask(TODAY, 40);
+    await ask(TODAY, 1, "LP");
+    // The euro rose against the dollar over the week; the EUR price stayed flat.
+    await db.insert(exchangeRate).values([
+      { day: "2026-10-20", currency: "USD", perEur: 1 },
+      { day: "2026-10-26", currency: "USD", perEur: 1.25 },
+    ]);
+
+    expect(await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] })).toEqual([
+      {
+        printingId: ja!.id,
+        variantId: "OP05-119_p1",
+        language: "ja",
+        currency: "USD",
+        price: 50,
+        day: TODAY,
+        asOf: false,
+        move7d: 0,
+        sparkline: [
+          [
+            { day: "2026-10-20", price: 50 },
+            { day: TODAY, price: 50 },
+          ],
+        ],
+      },
+    ]);
+  });
+
+  it("has no Japanese tile price without a dollar rate", async () => {
+    await artwork("OP05-119_p1");
+    const [ja] = await db.select({ id: tcgPrinting.id }).from(tcgPrinting).where(eq(tcgPrinting.language, "ja"));
+    await price(ja!.id, TODAY, 40, { marketplace: "cardtrader" });
+
+    expect(await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] })).toEqual([]);
   });
 
   it("has no Price Move without a start price", async () => {

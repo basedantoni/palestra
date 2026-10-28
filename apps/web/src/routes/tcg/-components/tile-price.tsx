@@ -21,15 +21,27 @@ const percent = new Intl.NumberFormat("en-US", {
   signDisplay: "exceptZero",
 });
 
+/** The tile languages, in display order, and where each one's price comes from. */
+export const TILE_PRICE_SOURCES = {
+  en: "TCGplayer Market Price, NM",
+  ja: "CardTrader lowest ask, NM, in USD at today's ECB rate",
+} as const;
+
 /**
- * The English Printing's Current Market Price on a tile (TCGplayer, NM, USD): dated once older than
- * 7 days, a dash when there is none. Never carried forward or estimated. Its 7d Price Move and
- * 30-day sparkline show only when there is data for them.
+ * A Printing's Current Market Price on a tile (NM, in USD): dated once older than 7 days, a dash
+ * when there is none. Never carried forward or estimated. Its 7d Price Move (in the Marketplace's
+ * currency) and 30-day sparkline show only when there is data for them.
  */
-export function TilePrice({ price }: { price: TilePrices[number] | undefined }) {
+export function TilePrice({
+  language,
+  price,
+}: {
+  language: keyof typeof TILE_PRICE_SOURCES;
+  price: TilePrices[number] | undefined;
+}) {
   return (
-    <div className="flex flex-wrap items-baseline gap-1 text-xs" title="TCGplayer Market Price, NM">
-      <span className="text-muted-foreground">EN</span>
+    <div className="flex flex-wrap items-baseline gap-1 text-xs" title={TILE_PRICE_SOURCES[language]}>
+      <span className="text-muted-foreground">{language.toUpperCase()}</span>
       {price ? (
         <>
           <span className="font-medium tabular-nums">{usd.format(price.price)}</span>

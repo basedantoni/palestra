@@ -16,5 +16,6 @@ export function marketDeps(): MarketDeps {
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
     }),
     fetch: globalThis.fetch,
+    cardtraderToken: env.CARDTRADER_TOKEN,
   };
 }
