@@ -7,8 +7,15 @@ import { type CardtraderBundle, cardtraderCondition, parseCardtrader, parseCardt
 
 const fixture = (name: string) =>
   JSON.parse(readFileSync(join(import.meta.dirname, "fixtures/cardtrader", name), "utf8")) as unknown;
+/** A real response recorded on 2026-10-28 (see "recorded CardTrader responses"). */
+const recorded = (name: string) => fixture(`recorded/${name}`);
 
-/** Hand-built responses for OP01 and OP05 (`jp`), bundled as a capture lands them. */
+/**
+ * Scenario responses for OP01 and OP05 (`jp`), bundled as a capture lands them. They are
+ * hand-built to cover every rule (graded, signed and altered Listings, each Condition, several
+ * blueprints on one Artwork), and their shape was checked against real responses on 2026-10-28
+ * (`recorded/`, below).
+ */
 const bundle: CardtraderBundle = {
   expansions: fixture("expansions.json"),
   blueprints: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`blueprints-${id}.json`)])),
@@ -55,8 +62,8 @@ describe("parseCardtrader", () => {
     });
   });
 
-  it("skips and reports a Condition it doesn't know", () => {
-    expect(skipped.conditions).toEqual(["Excellent"]);
+  it("skips and reports a Condition it doesn't know, or a missing one", () => {
+    expect(skipped.conditions).toEqual(["Excellent", "(none)"]);
   });
 
   it("drops a Listing in another language", () => {
@@ -67,6 +74,69 @@ describe("parseCardtrader", () => {
     const { blueprints: noUsd, skipped: noRate } = parseCardtrader(bundle, "jp", new Map());
     expect(noUsd.find((b) => b.externalId === "300001")!.lowest.NM).toEqual({ price: 39, count: 2 });
     expect(noRate.currencies).toEqual(["USD"]);
+  });
+});
+
+/**
+ * Real responses, recorded 2026-10-28 with the self-serve token (read-only) and trimmed: two One
+ * Piece expansions, OP-05's first 5 blueprints, and `jp` Listings for 3 of its blueprints. Each
+ * Listing's seller (`user`) and `description` are removed. Prices came in the account's currency
+ * (USD), not EUR.
+ */
+describe("recorded CardTrader responses", () => {
+  const listings = recorded("listings-jp-3461.json") as Record<
+    string,
+    Array<{ blueprint_id: number; name_en: string; properties_hash: { collector_number: string; onepiece_rarity: string } }>
+  >;
+  // The sampled Listings' blueprints aren't among the 5 sampled blueprints, so each Listing's
+  // blueprint is built from the Listing's own recorded fields.
+  const ownBlueprints = Object.values(listings).map(([l]) => ({
+    id: l!.blueprint_id,
+    name: l!.name_en,
+    version: "",
+    expansion_id: 3461,
+    tcg_player_id: null,
+    fixed_properties: {
+      collector_number: l!.properties_hash.collector_number,
+      onepiece_rarity: l!.properties_hash.onepiece_rarity,
+    },
+  }));
+  const bundle: CardtraderBundle = {
+    expansions: recorded("expansions.json"),
+    blueprints: { 3461: [...(recorded("blueprints-3461.json") as unknown[]), ...ownBlueprints] },
+    listings: { jp: { 3461: listings } },
+  };
+  // 1 EUR = 1.25 USD: a $0.14 Listing is €0.112.
+  const { blueprints, skipped } = parseCardtrader(bundle, "jp", new Map([["USD", 1.25]]));
+  const byId = new Map(blueprints.map((b) => [b.externalId, b]));
+
+  it("keeps the One Piece expansions (game 15)", () => {
+    expect(parseCardtraderExpansions(bundle.expansions)).toEqual([3324, 3461]);
+  });
+
+  it("drops the sealed booster boxes, which have no collector number", () => {
+    expect(byId.has("256557")).toBe(false);
+    expect(byId.has("256558")).toBe(false);
+    expect(byId.get("268446")).toMatchObject({ name: "Donquixote Rosinante", number: "OP05-022", set: "op05", tcgPlayerId: "527010" });
+  });
+
+  it("keeps a suffixed collector number as CardTrader prints it", () => {
+    // No Artwork has the number OP05-002a, so the rule tier can't match it. Its tcg_player_id
+    // does; failing that it waits for a manual match or the TypeSafe tier (KOI-371).
+    expect(byId.get("268444")).toMatchObject({
+      number: "OP05-002a",
+      tags: ["002 | Alternate Art"],
+      tcgPlayerId: "527008",
+    });
+  });
+
+  it("converts the USD Listings to EUR before taking the lowest per Condition", () => {
+    expect(byId.get("269084")!.lowest).toEqual({ NM: { price: expect.closeTo(0.112, 6), count: 3 } }); // 3 × $0.14
+    expect(byId.get("268453")!.lowest).toEqual({
+      NM: { price: expect.closeTo(0.448, 6), count: 1 }, // $0.56
+      LP: { price: expect.closeTo(0.28, 6), count: 2 }, // $0.35 and $0.36
+    });
+    expect(skipped).toEqual({ conditions: [], currencies: [] });
   });
 });
 

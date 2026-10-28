@@ -1,6 +1,8 @@
 /**
- * CardTrader capture against a real Postgres (PGlite, KOI-369): the job with hand-built CardTrader
+ * CardTrader capture against a real Postgres (PGlite, KOI-369): the job with scenario CardTrader
  * responses (OP01 and OP05, `jp`) for fetch, a fake clock, and an in-memory bucket for Tigris.
+ * The scenarios are hand-built to cover every rule, in the shape of the real responses recorded on
+ * 2026-10-28 (lib/market/fixtures/cardtrader/recorded, see cardtrader.test.ts).
  *
  * - at most 1 request per second, with the token, and Listings only through the `jp` filter
  * - a capture lands the raw responses at raw/cardtrader/<day>/ before deriving
@@ -191,7 +193,7 @@ describe("market.cardtrader capture", () => {
       ["OP05-119", "ja", "DMG", 9, 1, "300001"],
       ["OP05-119_p2", "ja", "NM", 1200, 1, "300002"], // its TCGplayer product's manual match
     ]);
-    expect(result).toMatchObject({ prices: 12, unmatched: 1, skipped: { conditions: ["Excellent"], currencies: [] } });
+    expect(result).toMatchObject({ prices: 12, unmatched: 1, skipped: { conditions: ["Excellent", "(none)"], currencies: [] } });
   });
 
   it("records each blueprint with how it was matched, and why the unmatched one has no Artwork", async () => {

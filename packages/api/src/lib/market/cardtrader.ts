@@ -110,9 +110,10 @@ export type CardtraderBlueprint = {
 /**
  * Every card blueprint in the bundle with its `language` Listings. Blueprints with no collector
  * number (sealed product) or of rarity DON!! are dropped. Graded, signed and altered Listings, and
- * any in another language, count toward neither the lowest price nor the count. A non-EUR Listing is
- * converted at `rates` before the lowest is taken; one with no rate, or with a Condition that has
- * no mapping, is skipped and reported.
+ * any in another language, count toward neither the lowest price nor the count. Listings are priced
+ * in the token account's currency (USD, seen 2026-10-28), so a non-EUR Listing is converted at
+ * `rates` before the lowest is taken; one with no rate, or with a missing or unmapped Condition, is
+ * skipped and reported.
  */
 export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLanguage, rates: PerEur) {
   const skipped = { conditions: new Set<string>(), currencies: new Set<string>() };
@@ -130,7 +131,8 @@ export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLa
         if (l.graded || p.signed || p.altered || p.onepiece_language !== language) continue;
         const condition = cardtraderCondition(p.condition);
         if (!condition) {
-          skipped.conditions.add(String(p.condition));
+          // Real responses have Listings with no condition at all (2026-10-28).
+          skipped.conditions.add(p.condition ?? "(none)");
           continue;
         }
         const { cents, currency } = l.price;
