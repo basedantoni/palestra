@@ -26,12 +26,14 @@ const store = memoryStore();
 const noFetch = (async () => {
   throw new Error("no network in tests");
 }) as typeof globalThis.fetch;
+/** No admins, and a database well under the size limit (market-alerts-db.test.ts covers both). */
+const alerts = { adminEmails: [], databaseSize: async () => 0 };
 
 beforeAll(async () => {
   ({ db } = await pgliteDbModule());
   const client = (db as unknown as { $client: PGlite }).$client;
   boss = new PgBoss({ db: fromPglite(client) });
-  await startWorker(boss, { db, store, fetch: noFetch });
+  await startWorker(boss, { db, store, fetch: noFetch, ...alerts });
 }, 60_000);
 
 afterAll(async () => {
@@ -56,7 +58,7 @@ describe("worker boot", () => {
   });
 
   it("boots again on a redeploy", async () => {
-    await expect(startWorker(boss, { db, store, fetch: noFetch })).resolves.toBeUndefined();
+    await expect(startWorker(boss, { db, store, fetch: noFetch, ...alerts })).resolves.toBeUndefined();
   });
 
   it("runs a queued market.derive through its handler", async () => {
@@ -74,17 +76,18 @@ describe("market.ecb capture day", () => {
   const fetch = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
   // Created 2026-10-26 21:17 UTC (16:17 in Chicago); the scheduled job carries no data.
   const createdOn = new Date("2026-10-26T21:17:00Z");
+  const at = (now: string) => ({ createdOn, now: new Date(now) });
 
   it("is the UTC day the scheduled job was created, even when an attempt runs later that day", async () => {
     const bucket = memoryStore();
-    await runMarketJob("market.ecb", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-26T23:59:00Z"));
+    await runMarketJob("market.ecb", { db, store: bucket, fetch, ...alerts }, null, at("2026-10-26T23:59:00Z"));
 
     expect([...bucket.objects.keys()]).toEqual(["raw/ecb/2026-10-26/eurofxref-daily.xml.gz"]);
   });
 
   it("stops at UTC midnight: an attempt on the next day fails without capturing", async () => {
     const bucket = memoryStore();
-    const run = runMarketJob("market.ecb", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-27T00:00:00Z"));
+    const run = runMarketJob("market.ecb", { db, store: bucket, fetch, ...alerts }, null, at("2026-10-27T00:00:00Z"));
 
     await expect(run).rejects.toThrow(/capture window for 2026-10-26 closed/);
     expect(bucket.objects.size).toBe(0);
@@ -92,7 +95,7 @@ describe("market.ecb capture day", () => {
 
   it("closes market.tcgcsv's window at UTC midnight too", async () => {
     const bucket = memoryStore();
-    const run = runMarketJob("market.tcgcsv", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-27T00:00:00Z"));
+    const run = runMarketJob("market.tcgcsv", { db, store: bucket, fetch, ...alerts }, null, at("2026-10-27T00:00:00Z"));
 
     await expect(run).rejects.toThrow(/market\.tcgcsv: capture window for 2026-10-26 closed/);
     expect(bucket.objects.size).toBe(0);

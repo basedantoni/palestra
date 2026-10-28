@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { env } from "@life-tracker/env/server";
 
 import type { Context } from "./context";
+import { parseAdminEmails } from "./lib/admins";
 
 export const t = initTRPC.context<Context>().create();
 
@@ -10,10 +11,7 @@ export const router = t.router;
 
 export const publicProcedure = t.procedure;
 
-const adminEmails = (env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
+const adminEmails = parseAdminEmails(env.ADMIN_EMAILS);
 
 export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.session) {

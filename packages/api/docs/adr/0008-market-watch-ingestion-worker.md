@@ -13,6 +13,7 @@ Each job fetches its source, **saves the raw response to Tigris** (`raw/<source>
 
 ## Consequences
 
-- Three independent jobs (`market.ecb`, `market.tcgcsv`, `market.cardtrader`) run at 21:17 UTC. pg-boss queue names allow no colon, so jobs are named with a dot. Each has 3 retries, and retries expire at the end of that UTC day, because the day of the capture is the Market Price's day. After the final failure, each admin user gets an in-app `market_capture_failed` notification.
+- Three independent jobs (`market.ecb`, `market.tcgcsv`, `market.cardtrader`) run at 21:17 UTC. pg-boss queue names allow no colon, so jobs are named with a dot. Each has 3 retries, and retries expire at the end of that UTC day, because the day of the capture is the Market Price's day. After the final failure, each admin user gets an in-app `market_capture_failed` notification. Admins are the users matching `ADMIN_EMAILS` (there is no role column), so the worker reads that var too.
+- `market.ecb` also checks `pg_database_size` once a day, on its first attempt, and sends each admin `database_near_full` past 80% of the 5 GB `palestra-db` volume.
 - Worker-only secrets live in their own env module, so the web server never requires them. Migrations stay on `palestra`'s release command. pg-boss owns its `pgboss` schema.
 - There is no public dashboard. `@pg-boss/dashboard` and manual enqueues run locally through `with-prod-db.sh`.
