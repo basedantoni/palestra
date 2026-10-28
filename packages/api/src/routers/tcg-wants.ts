@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
@@ -9,14 +9,19 @@ import {
   tcgConditionEnum,
   tcgCopy,
   tcgLanguageEnum,
+  tcgMarketPrice,
   tcgOffer,
   tcgPrinting,
   tcgWant,
   tcgWantStatusEnum,
 } from "@life-tracker/db/schema/index";
-import { TCG_LANGUAGE_NAME } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { toUsd } from "../lib/market/ecb";
+import { ratesOn } from "../lib/market/exchange-rate-db";
+import { CURRENT_PRICE_MAX_AGE_DAYS, MARKETPLACE_CURRENCY, daysBefore } from "../lib/market/market-price";
+import { offerVsMarket, currentPriceWithRange } from "../lib/market/want-market";
 import type { Conn } from "../lib/rules-db";
 import { isBelowCondition } from "../lib/tcg-condition";
 
@@ -33,7 +38,11 @@ const terms = z.object({
 
 /** Wants (KOI-308): the Artworks the user is after. */
 export const tcgWantsRouter = router({
-  /** The caller's Wants in one status (open by default), newest first, with their Artwork. */
+  /**
+   * The caller's Wants in one status (open by default), newest first, with their Artwork; each
+   * accepted language's NM Current Market Price in USD with its 30-day range, and each Offer
+   * against today's NM Current Market Price for its Printing at today's rate (KOI-373).
+   */
   list: protectedProcedure
     .input(z.object({ status: z.enum(tcgWantStatusEnum.enumValues).default("open") }).default({ status: "open" }))
     .query(async ({ ctx, input }) => {
@@ -55,8 +64,6 @@ export const tcgWantsRouter = router({
           variantKind: tcgArtwork.variantKind,
           nameEn: tcgCard.nameEn,
           nameJa: tcgCard.nameJa,
-          // Japanese first (enum order), like browse.
-          imageUrl: sql<string | null>`(select ${tcgPrinting.imageUrl} from ${tcgPrinting} where ${tcgPrinting.variantId} = ${tcgWant.variantId} order by ${tcgPrinting.language} limit 1)`,
         })
         .from(tcgWant)
         .innerJoin(tcgArtwork, eq(tcgArtwork.variantId, tcgWant.variantId))
@@ -73,6 +80,7 @@ export const tcgWantsRouter = router({
             variantId: tcgPrinting.variantId,
             language: tcgPrinting.language,
             setName: tcgPrinting.setName,
+            imageUrl: tcgPrinting.imageUrl,
           })
           .from(tcgPrinting)
           .where(inArray(tcgPrinting.variantId, [...new Set(wants.map((w) => w.variantId))]))
@@ -100,18 +108,42 @@ export const tcgWantsRouter = router({
           .orderBy(desc(tcgOffer.seenOn)),
       ]);
 
+      const today = todayInTimeZone(new Date(), "UTC");
+      const marketByPrinting = await currentPricesByPrinting(
+        printings.map((p) => p.id),
+        today,
+      );
+
       const offersByWant = Map.groupBy(offers, (o) => o.wantId);
       return wants.map((want) => {
         const wantOffers = (offersByWant.get(want.id) ?? [])
-          .map(({ wantId: _wantId, ...o }) => o)
+          .map(({ wantId: _wantId, ...o }) => ({
+            ...o,
+            /** ±% against today's NM Current Market Price, muted once the Offer is over 7 days old. */
+            vsMarket: offerVsMarket(o, marketByPrinting.get(o.printingId)?.price ?? null, today),
+          }))
           .toSorted((a, b) => a.price - b.price);
         const cheapest = wantOffers[0] ?? null;
+        const artworkPrintings = printings.filter((p) => p.variantId === want.variantId);
+        const accepted = artworkPrintings.filter((p) => want.languages.includes(p.language));
+        // Japanese first (enum order), like browse; an accepted language over any other.
+        const pictured = accepted[0] ?? artworkPrintings[0] ?? null;
         return {
           ...want,
+          imageUrl: pictured?.imageUrl ?? null,
+          /** The pictured Printing, whose drawer the image opens. */
+          pictured: pictured && { printingId: pictured.id, language: pictured.language },
+          /** Each accepted language's NM Current Market Price; null where there is none. */
+          market: want.languages.map((language) => {
+            const printing = accepted.find((p) => p.language === language);
+            return {
+              language,
+              printingId: printing?.id ?? null,
+              current: (printing && marketByPrinting.get(printing.id)) ?? null,
+            };
+          }),
           /** Printings an Offer may name: this Artwork, accepted languages. */
-          printings: printings
-            .filter((p) => p.variantId === want.variantId && want.languages.includes(p.language))
-            .map(({ variantId: _variantId, ...p }) => p),
+          printings: accepted.map(({ variantId: _variantId, imageUrl: _imageUrl, ...p }) => p),
           /** Cheapest first; Japanese and English compete when both are accepted. */
           offers: wantOffers,
           cheapest,
@@ -250,6 +282,47 @@ export const tcgWantsRouter = router({
       }),
     ),
 });
+
+/**
+ * Each Printing's NM Current Market Price in USD on `today` with its 30-day range: English from
+ * TCGplayer, the other languages from CardTrader (as tile prices), at today's rate. An unpriced
+ * Printing is absent.
+ */
+async function currentPricesByPrinting(printingIds: string[], today: string) {
+  if (printingIds.length === 0) return new Map<string, NonNullable<ReturnType<typeof currentPriceWithRange>>>();
+  const [rows, rates] = await Promise.all([
+    db
+      .select({
+        printingId: tcgMarketPrice.printingId,
+        marketplace: tcgMarketPrice.marketplace,
+        day: tcgMarketPrice.day,
+        price: tcgMarketPrice.price,
+      })
+      .from(tcgMarketPrice)
+      .innerJoin(tcgPrinting, eq(tcgPrinting.id, tcgMarketPrice.printingId))
+      .where(
+        and(
+          inArray(tcgMarketPrice.printingId, printingIds),
+          or(
+            and(eq(tcgPrinting.language, "en"), eq(tcgMarketPrice.marketplace, "tcgplayer")),
+            and(ne(tcgPrinting.language, "en"), eq(tcgMarketPrice.marketplace, "cardtrader")),
+          ),
+          eq(tcgMarketPrice.condition, "NM"),
+          lte(tcgMarketPrice.day, today),
+          gte(tcgMarketPrice.day, daysBefore(today, CURRENT_PRICE_MAX_AGE_DAYS)),
+        ),
+      )
+      .orderBy(tcgMarketPrice.printingId, tcgMarketPrice.day),
+    ratesOn(db, today),
+  ]);
+  return new Map(
+    [...Map.groupBy(rows, (r) => r.printingId)].flatMap(([printingId, prices]) => {
+      const usdPerUnit = toUsd(1, MARKETPLACE_CURRENCY[prices[0]!.marketplace], rates);
+      const market = currentPriceWithRange(prices, today, usdPerUnit);
+      return market ? [[printingId, market] as const] : [];
+    }),
+  );
+}
 
 type WantStatus = (typeof tcgWantStatusEnum.enumValues)[number];
 

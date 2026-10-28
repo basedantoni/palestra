@@ -277,8 +277,12 @@ describe("tcg.wants.list with Offers", () => {
       [W3, "o-w3", false],
       [W4, null, false],
     ]);
-    expect(rows[0]!.offers).toEqual([mercariEn, shopJa]);
-    expect(rows[0]!.cheapest).toEqual(mercariEn);
+    // No Market Prices here, so no ±% vs market.
+    expect(rows[0]!.offers).toEqual([
+      { ...mercariEn, vsMarket: null },
+      { ...shopJa, vsMarket: null },
+    ]);
+    expect(rows[0]!.cheapest).toEqual({ ...mercariEn, vsMarket: null });
   });
 
   it("offers only the Printings in the Want's accepted languages", async () => {

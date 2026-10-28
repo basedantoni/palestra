@@ -11,11 +11,11 @@ import { authClient } from "@/lib/auth-client";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { CardFundPanel, useCardFund } from "./-components/card-fund-panel";
-import { cardImage } from "./-components/card-image";
 import { CopyDialog } from "./-components/copy-dialog";
 import { invalidateBrowse } from "./-components/invalidate-browse";
 import { OfferDialog } from "./-components/offer-dialog";
 import { WantDialog } from "./-components/want-dialog";
+import { OfferVsMarket, WantImage, WantMarket } from "./-components/want-market";
 
 type Want = RouterOutputs["tcg"]["wants"]["list"][number];
 type Offer = Want["offers"][number];
@@ -120,20 +120,14 @@ function WantsPage() {
             return (
             <li key={w.id} className="space-y-2 p-2">
               <div className="flex items-center gap-3">
-                {w.imageUrl && (
-                  <img
-                    src={cardImage(w.imageUrl)}
-                    alt={w.variantId}
-                    loading="lazy"
-                    className="aspect-[63/88] w-12 rounded-sm bg-muted object-cover"
-                  />
-                )}
+                <WantImage want={w} />
                 <div className="min-w-0 flex-1 text-sm">
                   <div className="font-medium">{w.nameEn ?? w.nameJa}</div>
                   <div className="text-xs text-muted-foreground">
                     {w.variantId} · {w.languages.map((l) => LANGUAGE_LABEL[l]).join(" / ")} · max {price(w.maxPrice)} ·{" "}
                     {w.minCondition} or better
                   </div>
+                  <WantMarket market={w.market} />
                   <div className="flex items-center gap-2 text-xs">
                     {bought ? (
                       <span>
@@ -209,6 +203,7 @@ function WantsPage() {
                         <span className="text-muted-foreground">· {o.setName}</span>
                       </span>
                       <span className={o.price <= w.maxPrice ? "font-medium" : undefined}>{price(o.price)}</span>
+                      <OfferVsMarket offer={o} />
                       {fund && (
                         <span className={o.price <= fund.balance ? "text-muted-foreground" : "text-destructive"}>
                           {o.price <= fund.balance ? "within fund" : "over fund"}
