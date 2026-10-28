@@ -36,6 +36,7 @@ import { Route as FinanceSpendingRouteImport } from './routes/finance/spending'
 import { Route as FinanceGoalsRouteImport } from './routes/finance/goals'
 import { Route as FinanceBudgetsRouteImport } from './routes/finance/budgets'
 import { Route as FinanceAccountsRouteImport } from './routes/finance/accounts'
+import { Route as AdminMarketRouteImport } from './routes/admin/market'
 import { Route as AdminExercisesIndexRouteImport } from './routes/admin/exercises/index'
 import { Route as FinanceCategoriesIdRouteImport } from './routes/finance/categories.$id'
 
@@ -174,6 +175,11 @@ const FinanceAccountsRoute = FinanceAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => FinanceRouteRoute,
 } as any)
+const AdminMarketRoute = AdminMarketRouteImport.update({
+  id: '/market',
+  path: '/market',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminExercisesIndexRoute = AdminExercisesIndexRouteImport.update({
   id: '/exercises/',
   path: '/exercises/',
@@ -194,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/admin/market': typeof AdminMarketRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
@@ -223,6 +230,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/admin/market': typeof AdminMarketRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
+  '/admin/market': typeof AdminMarketRoute
   '/finance/accounts': typeof FinanceAccountsRoute
   '/finance/budgets': typeof FinanceBudgetsRoute
   '/finance/goals': typeof FinanceGoalsRoute
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/admin/market'
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
@@ -317,6 +327,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/admin/market'
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/settings'
+    | '/admin/market'
     | '/finance/accounts'
     | '/finance/budgets'
     | '/finance/goals'
@@ -585,6 +597,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FinanceAccountsRouteImport
       parentRoute: typeof FinanceRouteRoute
     }
+    '/admin/market': {
+      id: '/admin/market'
+      path: '/market'
+      fullPath: '/admin/market'
+      preLoaderRoute: typeof AdminMarketRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/exercises/': {
       id: '/admin/exercises/'
       path: '/exercises'
@@ -627,11 +646,13 @@ const FinanceRouteRouteWithChildren = FinanceRouteRoute._addFileChildren(
 )
 
 interface AdminRouteChildren {
+  AdminMarketRoute: typeof AdminMarketRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminExercisesIndexRoute: typeof AdminExercisesIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminMarketRoute: AdminMarketRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminExercisesIndexRoute: AdminExercisesIndexRoute,
 }
