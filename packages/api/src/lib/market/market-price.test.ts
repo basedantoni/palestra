@@ -85,8 +85,13 @@ describe("rangeAvailability", () => {
     expect(rangeAvailability(["2026-07-30"], TODAY)["3M"]).toBe(false);
   });
 
-  it("takes the shown Marketplace that reaches back furthest, and enables All with 1Y", () => {
+  it("takes the shown Marketplace that reaches back furthest", () => {
     expect(rangeAvailability(["2026-10-20", "2025-10-27"], TODAY)).toEqual({ "1M": true, "3M": true, "1Y": true, All: true });
+  });
+
+  it("enables All once history goes back past 1M, so no real day is out of reach", () => {
+    expect(rangeAvailability(["2026-08-28"], TODAY)).toEqual({ "1M": true, "3M": false, "1Y": false, All: true });
+    expect(rangeAvailability(["2026-09-27"], TODAY).All).toBe(false);
   });
 
   it("keeps 1M, the default, with no history at all", () => {

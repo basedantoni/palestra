@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
-import { shortDay, usd } from "./tile-price";
+import { money, shortDay, usd } from "./market-format";
 
 type Drawer = RouterOutputs["tcg"]["market"]["printing"];
 type Condition = keyof Drawer["ranges"];
@@ -23,16 +23,13 @@ const MARKETPLACES: Record<Marketplace, { label: string; color: string }> = {
 };
 const ECB_URL = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html";
 
-const money = (currency: string, amount: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
-
 /**
  * The Printing drawer (KOI-370): the one place holding a Printing's Price History, with a
  * Marketplace × Condition grid of Current Market Prices. Open while `printing` is set.
  */
 export function PrintingDrawer({ printing, onClose }: { printing: DrawerPrinting | null; onClose: () => void }) {
   return (
-    <Sheet open={printing !== null} onOpenChange={(o) => !o && onClose()}>
+    <Sheet open={printing !== null} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <SheetContent side="right" className="w-full space-y-5 overflow-y-auto p-5 data-[side=right]:sm:max-w-xl">
         {printing && (
           <>

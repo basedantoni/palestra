@@ -74,10 +74,10 @@ export const rangeStart = (range: PriceRange, today: string) => {
 /**
  * Which range tabs a chart offers, from each shown Marketplace's earliest real day: a range is
  * available when one of them reaches its start, so no range is ever faked. 1M, the default, always
- * is; All is once 1Y is, as it only adds what lies before that.
+ * is; All, which has no start, is once history goes back past 1M, so no real day is out of reach.
  */
 export function rangeAvailability(earliest: string[], today: string): Record<PriceRange, boolean> {
   const oldest = earliest.toSorted()[0];
   const reaches = (range: PriceRange) => oldest !== undefined && oldest <= rangeStart(range, today)!;
-  return { "1M": true, "3M": reaches("3M"), "1Y": reaches("1Y"), All: reaches("1Y") };
+  return { "1M": true, "3M": reaches("3M"), "1Y": reaches("1Y"), All: oldest !== undefined && oldest < rangeStart("1M", today)! };
 }

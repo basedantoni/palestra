@@ -17,6 +17,7 @@ import { TCG_ARTWORKS_MAX_LIMIT, todayInTimeZone } from "@life-tracker/shared";
 import { protectedProcedure, router } from "../index";
 import { toUsd } from "../lib/market/ecb";
 import { ratesOn } from "../lib/market/exchange-rate-db";
+import type { Condition } from "../lib/tcg-condition";
 import {
   CURRENT_PRICE_MAX_AGE_DAYS,
   MARKETPLACE_CURRENCY,
@@ -103,7 +104,7 @@ export const tcgMarketRouter = router({
       const today = todayInTimeZone(new Date(), "UTC");
       const start = rangeStart(input.range, today);
       const where = and(eq(tcgMarketPrice.printingId, input.printingId), lte(tcgMarketPrice.day, today));
-      const [firsts, rows, rates, offers, paid] = await Promise.all([
+      const [earliest, rows, rates, offers, paid] = await Promise.all([
         // Each Marketplace × Condition's first real day, whatever the range: what the range tabs reach.
         db
           .select({ marketplace: tcgMarketPrice.marketplace, condition: tcgMarketPrice.condition, day: min(tcgMarketPrice.day) })
@@ -158,13 +159,13 @@ export const tcgMarketRouter = router({
       const ranges = Object.fromEntries(
         tcgConditionEnum.enumValues.map((condition) => [
           condition,
-          rangeAvailability(firsts.flatMap((f) => (f.condition === condition && f.day ? [f.day] : [])), today),
+          rangeAvailability(earliest.flatMap((f) => (f.condition === condition && f.day ? [f.day] : [])), today),
         ]),
-      ) as Record<(typeof tcgConditionEnum.enumValues)[number], Record<PriceRange, boolean>>;
+      ) as Record<Condition, Record<PriceRange, boolean>>;
 
       // Every range starts at least 30 days back, so the rows hold each line's Current Market Price.
       const grid = tcgMarketplaceEnum.enumValues
-        .filter((marketplace) => firsts.some((f) => f.marketplace === marketplace))
+        .filter((marketplace) => earliest.some((f) => f.marketplace === marketplace))
         .flatMap((marketplace) =>
           tcgConditionEnum.enumValues.map((condition) => {
             const currency = MARKETPLACE_CURRENCY[marketplace];

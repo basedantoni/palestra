@@ -264,7 +264,7 @@ describe("tcg.market.printing", () => {
       ["cardtrader", "NM", ["2026-10-08"]],
     ]);
     expect(month.ranges).toEqual({
-      NM: { "1M": true, "3M": true, "1Y": false, All: false },
+      NM: { "1M": true, "3M": true, "1Y": false, All: true },
       LP: { "1M": true, "3M": true, "1Y": true, All: true },
       MP: { "1M": true, "3M": false, "1Y": false, All: false },
       HP: { "1M": true, "3M": false, "1Y": false, All: false },

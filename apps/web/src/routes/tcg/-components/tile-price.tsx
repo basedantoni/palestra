@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
+import { shortDay, usd } from "./market-format";
 import { PrintingDrawer } from "./printing-drawer";
 
 export type TilePrices = RouterOutputs["tcg"]["market"]["tilePrices"];
@@ -14,9 +15,6 @@ export function useTilePrices(artworks: Array<{ variantId: string }> | undefined
   return useQuery({ ...trpc.tcg.market.tilePrices.queryOptions({ variantIds }), enabled: variantIds.length > 0 }).data;
 }
 
-export const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-export const shortDay = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 const percent = new Intl.NumberFormat("en-US", {
   style: "percent",
