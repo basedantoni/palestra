@@ -48,6 +48,32 @@ export function PrintingDrawer({ printing, onClose }: { printing: DrawerPrinting
 }
 
 function DrawerBody({ printingId }: { printingId: string }) {
+  // The grid is today's whatever the range: read it from the 1M request PriceHistory opens on.
+  const { data } = useQuery(trpc.tcg.market.printing.queryOptions({ printingId, range: "1M" }));
+  return (
+    <>
+      <PriceHistory printingId={printingId} />
+      {data && (
+        <>
+          <MarketGrid grid={data.grid} />
+          <footer className="border-t border-border pt-3 text-[11px] text-muted-foreground">
+            USD converted at the{" "}
+            <a href={ECB_URL} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              European Central Bank euro reference rates
+            </a>
+            : the chart at each day's rate, the grid at today's.
+          </footer>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * A Printing's Price History chart with its Condition and range tabs: the drawer's, and the Binder
+ * aside's under the selected card (KOI-375). Opens on NM, 1M.
+ */
+export function PriceHistory({ printingId }: { printingId: string }) {
   const [range, setRange] = useState<PriceRange>("1M");
   const [condition, setCondition] = useState<Condition>("NM");
   const { data, isPlaceholderData } = useQuery({
@@ -59,58 +85,48 @@ function DrawerBody({ printingId }: { printingId: string }) {
   const ranges = data.ranges[condition];
   const series = data.series.filter((s) => s.condition === condition);
   return (
-    <>
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Tabs
-            value={condition}
-            onValueChange={(next) => {
-              setCondition(next as Condition);
-              // A range the new Condition's history doesn't reach falls back to the default.
-              if (!data.ranges[next as Condition][range]) setRange("1M");
-            }}
-          >
-            <TabsList aria-label="Condition">
-              {(Object.keys(data.ranges) as Condition[]).map((c) => (
-                <TabsTrigger key={c} value={c}>
-                  {c}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <Tabs value={range} onValueChange={(next) => setRange(next as PriceRange)}>
-            <TabsList aria-label="Range">
-              {(Object.keys(PRICE_RANGES) as PriceRange[]).map((r) => (
-                <TabsTrigger key={r} value={r} disabled={!ranges[r]}>
-                  {r}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className={isPlaceholderData ? "opacity-50" : undefined}>
-          {series.length > 0 ? (
-            <PriceHistoryChart
-              series={series}
-              offers={data.offers}
-              pricesPaid={data.pricesPaid}
-              from={rangeStart(range, data.today)}
-              today={data.today}
-            />
-          ) : (
-            <p className="text-xs text-muted-foreground">No {condition} Price History in this range.</p>
-          )}
-        </div>
-      </section>
-      <MarketGrid grid={data.grid} />
-      <footer className="border-t border-border pt-3 text-[11px] text-muted-foreground">
-        USD converted at the{" "}
-        <a href={ECB_URL} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-          European Central Bank euro reference rates
-        </a>
-        : the chart at each day's rate, the grid at today's.
-      </footer>
-    </>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs
+          value={condition}
+          onValueChange={(next) => {
+            setCondition(next as Condition);
+            // A range the new Condition's history doesn't reach falls back to the default.
+            if (!data.ranges[next as Condition][range]) setRange("1M");
+          }}
+        >
+          <TabsList aria-label="Condition">
+            {(Object.keys(data.ranges) as Condition[]).map((c) => (
+              <TabsTrigger key={c} value={c}>
+                {c}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <Tabs value={range} onValueChange={(next) => setRange(next as PriceRange)}>
+          <TabsList aria-label="Range">
+            {(Object.keys(PRICE_RANGES) as PriceRange[]).map((r) => (
+              <TabsTrigger key={r} value={r} disabled={!ranges[r]}>
+                {r}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+      <div className={isPlaceholderData ? "opacity-50" : undefined}>
+        {series.length > 0 ? (
+          <PriceHistoryChart
+            series={series}
+            offers={data.offers}
+            pricesPaid={data.pricesPaid}
+            from={rangeStart(range, data.today)}
+            today={data.today}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">No {condition} Price History in this range.</p>
+        )}
+      </div>
+    </section>
   );
 }
 
