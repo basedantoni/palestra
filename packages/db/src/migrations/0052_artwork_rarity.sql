@@ -1,0 +1,1 @@
+ALTER TABLE "tcg_artwork" ADD COLUMN "rarity" text;

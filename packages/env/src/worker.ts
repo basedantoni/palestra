@@ -23,6 +23,9 @@ export const env = createEnv({
     // CardTrader's self-serve API token (profile settings → API). Optional so a missing token fails
     // only market.cardtrader, never the worker's boot or the other sources.
     CARDTRADER_TOKEN: z.string().min(1).optional(),
+    // TypeSafe API key (console.typesafe.ai) for the matcher's TypeSafe tier (KOI-371). Optional:
+    // without it the tier is skipped and ambiguous products stay on the unmatched list.
+    TYPESAFE_API_KEY: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

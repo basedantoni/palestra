@@ -100,6 +100,8 @@ export type CardtraderBlueprint = {
   number: string;
   /** The expansion's code (`op05`), or its name when it has none. */
   set: string;
+  /** `onepiece_rarity` (`Secret Rare`, `Alternate Art`), for the TypeSafe tier. */
+  rarity: string | null;
   /** The blueprint's `version` (`Parallel`, `Manga`), when it has one. */
   tags: string[];
   /** The TCGplayer product it is, when CardTrader knows it. */
@@ -160,6 +162,7 @@ export function parseCardtrader(bundle: CardtraderBundle, rates: PerEur) {
         name: b.name,
         number,
         set: sets.get(b.expansion_id) ?? expansionId,
+        rarity: b.fixed_properties?.onepiece_rarity ?? null,
         tags: b.version ? [b.version] : [],
         tcgPlayerId: b.tcg_player_id ? String(b.tcg_player_id) : null,
         lowest,

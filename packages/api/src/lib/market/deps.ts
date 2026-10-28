@@ -4,6 +4,7 @@ import { env } from "@life-tracker/env/worker";
 import { parseAdminEmails } from "../admins";
 import { databaseSize } from "./alerts";
 import { s3Store } from "./object-store";
+import { typesafeChooser } from "./typesafe-tier";
 import type { WorkerDeps } from "./worker";
 
 /** The real collaborators, from the worker env: Postgres, the Tigris bucket, the network, the admins. */
@@ -20,6 +21,7 @@ export function marketDeps(): WorkerDeps {
     }),
     fetch: globalThis.fetch,
     cardtraderToken: env.CARDTRADER_TOKEN,
+    chooser: env.TYPESAFE_API_KEY ? typesafeChooser(env.TYPESAFE_API_KEY, globalThis.fetch) : undefined,
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     databaseSize: () => databaseSize(db),
   };
