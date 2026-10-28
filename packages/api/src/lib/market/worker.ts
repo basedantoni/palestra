@@ -46,9 +46,14 @@ export type WorkerDeps = MarketDeps & { adminEmails: string[]; databaseSize: () 
  * local CLI passes no counters, so its failures alert nobody.
  */
 export type Attempt = { createdOn?: Date; now?: Date; retryCount?: number; retryLimit?: number };
+type Run = Attempt & { createdOn: Date; now: Date };
 
 /** Whether pg-boss fails the job, rather than retrying it, when this attempt throws. */
 const isFinal = ({ retryCount = 0, retryLimit }: Attempt) => retryLimit !== undefined && retryCount >= retryLimit;
+
+/** Log a side task's failure: an alert must never fail, or replace the error of, the job it rides on. */
+const logged = (job: string, task: Promise<unknown>) =>
+  task.catch((err) => console.error(`[worker] ${job}: alert failed`, err));
 
 /** A capture's day: `--date` when given, else the UTC day the job was created (the schedule sends no data). */
 const captureDay = (data: unknown, createdOn: Date) =>
@@ -56,13 +61,19 @@ const captureDay = (data: unknown, createdOn: Date) =>
 
 /**
  * A daily capture of a source's live response. When the last retry fails too, the day has no
- * capture, so every admin is notified.
+ * capture, so every admin is notified. `daily` runs once per job, on its first attempt, whether or
+ * not the capture then succeeds.
  */
-const liveCapture = (source: MarketSource, capture: (deps: WorkerDeps, day: string) => Promise<unknown>) => ({
+const liveCapture = (
+  source: MarketSource,
+  capture: (deps: MarketDeps, day: string) => Promise<unknown>,
+  daily?: (deps: WorkerDeps) => Promise<void>,
+) => ({
   queue: CAPTURE_QUEUE,
   scheduled: true,
-  run: async (deps: WorkerDeps, data: unknown, { createdOn = new Date(), now = new Date(), ...retries }: Attempt) => {
+  run: async (deps: WorkerDeps, data: unknown, { createdOn, now, ...retries }: Run) => {
     const day = captureDay(data, createdOn);
+    if (daily && !retries.retryCount) await logged(`market.${source}`, daily(deps));
     try {
       // The live response is today's: once the capture day has ended in UTC, an attempt (a late
       // retry, a stale enqueue) fails instead of landing it under the wrong day, and further retries
@@ -75,7 +86,9 @@ const liveCapture = (source: MarketSource, capture: (deps: WorkerDeps, day: stri
       // ponytail: an attempt that pg-boss expires (15 min) or loses to a crash never reaches this
       // catch, so that final failure sends nothing. A dead-letter queue would catch it, but its
       // copied job carries no day for a scheduled run.
-      if (isFinal(retries)) await notifyAdmins(deps.db, deps.adminEmails, captureFailed(source, day, err));
+      if (isFinal(retries)) {
+        await logged(`market.${source}`, notifyAdmins(deps.db, deps.adminEmails, captureFailed(source, day, err)));
+      }
       throw err;
     }
   },
@@ -83,13 +96,8 @@ const liveCapture = (source: MarketSource, capture: (deps: WorkerDeps, day: stri
 
 /** Job name → queue options, whether it is scheduled, and its handler. */
 const JOBS = {
-  "market.ecb": liveCapture("ecb", async (deps, day) => {
-    const result = await captureEcb(deps, day);
-    // The size guard rides on the daily ECB run, once it has landed: one check (and at most one
-    // notification) a day, however many retries the capture took.
-    await guardDatabaseSize(deps);
-    return result;
-  }),
+  // The database-size guard rides on the daily ECB job: one check a day, even when ECB is down.
+  "market.ecb": liveCapture("ecb", captureEcb, guardDatabaseSize),
   "market.tcgcsv": liveCapture("tcgcsv", captureTcgcsv),
   "market.derive": {
     queue: MANUAL_QUEUE,
@@ -100,8 +108,7 @@ const JOBS = {
   "market.ecb-history": {
     queue: MANUAL_QUEUE,
     scheduled: false,
-    run: (deps: WorkerDeps, data: unknown, { createdOn = new Date() }: Attempt) =>
-      loadEcbHistory(deps, captureDay(data, createdOn)),
+    run: (deps: WorkerDeps, data: unknown, { createdOn }: Run) => loadEcbHistory(deps, captureDay(data, createdOn)),
   },
 } as const;
 
@@ -110,7 +117,8 @@ export const MARKET_JOBS = Object.keys(JOBS) as MarketJob[];
 
 /** Run one job in this process, as the worker would (the local CLI's `run`). */
 export function runMarketJob(name: MarketJob, deps: WorkerDeps, data: unknown, attempt: Attempt = {}) {
-  return JOBS[name].run(deps, data, attempt);
+  const { createdOn = new Date(), now = new Date() } = attempt;
+  return JOBS[name].run(deps, data, { ...attempt, createdOn, now });
 }
 
 /** pg-boss on the app database, in its own `pgboss` schema. */

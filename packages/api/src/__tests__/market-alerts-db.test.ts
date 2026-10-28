@@ -5,7 +5,8 @@
  * - a capture's final failed attempt leaves one market_capture_failed per admin, naming source and day
  * - an attempt that will be retried sends nothing
  * - admins are the users matching ADMIN_EMAILS; an email with no user is skipped
- * - market.ecb sends database_near_full only past the size limit
+ * - market.ecb sends database_near_full only past the size limit, checked once a day on its first
+ *   attempt, and a failing probe never fails the capture
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,7 +27,8 @@ const ADMIN = parseAdminEmails(process.env.ADMIN_EMAILS)[0]!;
 const adminEmails = [ADMIN, "nobody@test.internal"];
 
 const DAILY = readFileSync(join(import.meta.dirname, "../lib/market/fixtures/eurofxref-daily-2026-10-26.xml"));
-const down =(async () => new Response("down", { status: 503 })) as typeof globalThis.fetch;
+const down = (async () => new Response("down", { status: 503 })) as typeof globalThis.fetch;
+const ok = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
 // Created 2026-10-26 21:17 UTC; every attempt runs within the capture day.
 const createdOn = new Date("2026-10-26T21:17:00Z");
 const now = new Date("2026-10-26T22:00:00Z");
@@ -72,7 +74,6 @@ describe("market_capture_failed", () => {
     const retry = runMarketJob("market.ecb", deps(), null, { createdOn, now, retryCount: 2, retryLimit: 3 });
     await expect(retry).rejects.toThrow(/503/);
 
-    const ok = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
     await runMarketJob("market.ecb", deps({ fetch: ok }), null, { createdOn, now, retryCount: 3, retryLimit: 3 });
 
     expect(await notifications()).toEqual([]);
@@ -89,18 +90,33 @@ describe("market_capture_failed", () => {
   });
 });
 
-describe("database_near_full", () => {
-  const ok = (async () => new Response(new Uint8Array(DAILY))) as typeof globalThis.fetch;
-  const GB = 1024 ** 3;
-  const ecbWith = (probe: () => Promise<number>) =>
-    runMarketJob("market.ecb", deps({ fetch: ok, databaseSize: probe }), null, { createdOn, now });
+const over = async () => 4.2 * 1024 ** 3;
+/** market.ecb's first attempt, ECB answering, with `probe` reporting the database size. */
+const ecbWith = (probe: () => Promise<number>) =>
+  runMarketJob("market.ecb", deps({ fetch: ok, databaseSize: probe }), null, { createdOn, now });
+/** An attempt of market.ecb with ECB down and the database past the limit. */
+const ecbDownAttempt = (retryCount: number) =>
+  runMarketJob("market.ecb", deps({ databaseSize: over }), null, { createdOn, now, retryCount, retryLimit: 3 });
 
+describe("database_near_full", () => {
   it("is sent to each admin when market.ecb finds the database past the limit", async () => {
-    await ecbWith(async () => 4.2 * GB);
+    await ecbWith(over);
 
     expect(await notifications()).toEqual([
       { userId: "admin", type: "database_near_full", message: expect.stringMatching(/4\.2 GB/) },
     ]);
+  });
+
+  it("is checked once a day, on the first attempt, even when ECB is down", async () => {
+    await expect(ecbDownAttempt(0)).rejects.toThrow(/503/);
+    await expect(ecbDownAttempt(1)).rejects.toThrow(/503/);
+
+    expect((await notifications()).map((n) => n.type)).toEqual(["database_near_full"]);
+  });
+
+  it("never fails the capture when the size probe does", async () => {
+    await expect(ecbWith(async () => Promise.reject(new Error("probe down")))).resolves.toBeDefined();
+    expect(await notifications()).toEqual([]);
   });
 
   it("is not sent at the limit or under it, as this test database is", async () => {
