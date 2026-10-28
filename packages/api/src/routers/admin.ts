@@ -20,7 +20,7 @@ import {
 import { adminProcedure, router } from "../index";
 import { isManualCategory } from "../lib/rules";
 import { writeSeedMapping } from "../lib/rules-db";
-import { marketAdminRouter } from "./market-admin";
+import { marketAdminRouter } from "./tcg-market-admin";
 import { seedBankCategoryMapping } from "../lib/category-seed";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
