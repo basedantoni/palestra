@@ -27,12 +27,13 @@ describe("parseTcgcsv", () => {
     expect(products).toHaveLength(13);
   });
 
-  it("reads each card's number and its group's abbreviation as the set", () => {
+  it("reads each card's number, rarity and its group's abbreviation as the set", () => {
     expect(byId.get("527022")).toEqual({
       externalId: "527022",
       name: "Enel (100)",
       number: "OP05-100",
       set: "OP05",
+      rarity: "SR",
       tags: [],
       marketPrice: 0.54,
     });

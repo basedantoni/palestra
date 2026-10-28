@@ -50,6 +50,8 @@ export type TcgcsvProduct = {
   number: string;
   /** The group's abbreviation (`OP05`), or its name when it has none. */
   set: string;
+  /** TCGplayer's rarity code (`SR`, `SEC`), for the TypeSafe tier. */
+  rarity: string | null;
   /**
    * The name's parentheticals other than a number (`Sabo (001)`, `Izo (OP03-003)`): `Parallel`,
    * `SP`, `Alternate Art`, or an alias that belongs to the Card's name (`Mr.3 (Galdino)`).
@@ -75,13 +77,15 @@ export function parseTcgcsv(bundle: TcgcsvBundle): TcgcsvProduct[] {
     }
     const productRows = bundle.products[group.groupId];
     for (const p of productRows ? productsResponse.parse(productRows).results : []) {
-      const number = p.extendedData.find((e) => e.name === "Number")?.value;
+      const extended = (name: string) => p.extendedData.find((e) => e.name === name)?.value;
+      const number = extended("Number");
       if (!number) continue;
       products.push({
         externalId: String(p.productId),
         name: p.name,
         number,
         set,
+        rarity: extended("Rarity") ?? null,
         tags: parentheticals(p.name).filter((t) => !/^\d+$/.test(t) && !/^[A-Z]+\d*-\d+$/.test(t)),
         marketPrice: prices.get(p.productId)?.marketPrice ?? null,
       });
