@@ -1,18 +1,34 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte, min, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@life-tracker/db";
-import { tcgMarketPrice, tcgPrinting } from "@life-tracker/db/schema/index";
+import {
+  exchangeRate,
+  tcgConditionEnum,
+  tcgCopy,
+  tcgMarketPrice,
+  tcgMarketplaceEnum,
+  tcgOffer,
+  tcgPrinting,
+  tcgWant,
+} from "@life-tracker/db/schema/index";
 import { TCG_ARTWORKS_MAX_LIMIT, todayInTimeZone } from "@life-tracker/shared";
 
 import { protectedProcedure, router } from "../index";
+import { toUsd } from "../lib/market/ecb";
+import { ratesOn } from "../lib/market/exchange-rate-db";
+import type { Condition } from "../lib/tcg-condition";
 import {
   CURRENT_PRICE_MAX_AGE_DAYS,
   MARKETPLACE_CURRENCY,
+  PRICE_RANGES,
   currentMarketPrice,
   daysBefore,
   priceMove,
+  rangeAvailability,
+  rangeStart,
   shapeSeries,
+  type PriceRange,
 } from "../lib/market/market-price";
 
 /** Market Watch reads (KOI-366). Market Prices are global; "today" is the UTC day, as capture days are. */
@@ -68,5 +84,110 @@ export const tcgMarketRouter = router({
           ];
         })
         .toSorted((a, b) => a.variantId.localeCompare(b.variantId));
+    }),
+
+  /**
+   * The Printing drawer (KOI-370): Price History per Marketplace × Condition over `range`, in USD
+   * at each day's ECB rate so it compares with Offers and prices paid; the range tabs each Condition
+   * reaches; a grid of Current Market Prices in native currency and USD at today's rate; and the
+   * user's own Offers in the range and Copies' prices paid on this Printing.
+   */
+  printing: protectedProcedure
+    .input(
+      z.object({
+        printingId: z.uuid(),
+        range: z.enum(Object.keys(PRICE_RANGES) as [PriceRange, ...PriceRange[]]),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const today = todayInTimeZone(new Date(), "UTC");
+      const start = rangeStart(input.range, today);
+      const where = and(eq(tcgMarketPrice.printingId, input.printingId), lte(tcgMarketPrice.day, today));
+      const [earliest, rows, rates, offers, paid] = await Promise.all([
+        // Each Marketplace × Condition's first real day, whatever the range: what the range tabs reach.
+        db
+          .select({ marketplace: tcgMarketPrice.marketplace, condition: tcgMarketPrice.condition, day: min(tcgMarketPrice.day) })
+          .from(tcgMarketPrice)
+          .where(where)
+          .groupBy(tcgMarketPrice.marketplace, tcgMarketPrice.condition),
+        db
+          .select({
+            marketplace: tcgMarketPrice.marketplace,
+            condition: tcgMarketPrice.condition,
+            day: tcgMarketPrice.day,
+            price: tcgMarketPrice.price,
+            listingCount: tcgMarketPrice.listingCount,
+            // The latest USD rate on or before the day (only EUR needs one: the Marketplace currencies are
+            // USD and EUR). The outer day is qualified by hand: drizzle would render it as a bare "day".
+            usdPerEur: sql<number | null>`(select ${exchangeRate.perEur} from ${exchangeRate} where ${exchangeRate.currency} = 'USD' and ${exchangeRate.day} <= ${tcgMarketPrice}.${sql.identifier(tcgMarketPrice.day.name)} order by ${exchangeRate.day} desc limit 1)`,
+          })
+          .from(tcgMarketPrice)
+          .where(and(where, start === null ? undefined : gte(tcgMarketPrice.day, start)))
+          .orderBy(tcgMarketPrice.marketplace, tcgMarketPrice.condition, tcgMarketPrice.day),
+        ratesOn(db, today),
+        db
+          .select({ seenOn: tcgOffer.seenOn, price: tcgOffer.price })
+          .from(tcgOffer)
+          .innerJoin(tcgWant, eq(tcgWant.id, tcgOffer.wantId))
+          .where(
+            and(
+              eq(tcgWant.userId, userId),
+              eq(tcgOffer.printingId, input.printingId),
+              start === null ? undefined : gte(tcgOffer.seenOn, start),
+            ),
+          )
+          .orderBy(tcgOffer.seenOn),
+        db
+          .select({ pricePaid: tcgCopy.pricePaid })
+          .from(tcgCopy)
+          .where(and(eq(tcgCopy.userId, userId), eq(tcgCopy.printingId, input.printingId), isNotNull(tcgCopy.pricePaid)))
+          .orderBy(tcgCopy.acquiredOn),
+      ]);
+
+      const byLine = Map.groupBy(rows, (r) => `${r.marketplace}:${r.condition}`);
+      const series = [...byLine.values()].map((prices) => {
+        const { marketplace, condition } = prices[0]!;
+        const currency = MARKETPLACE_CURRENCY[marketplace];
+        // A day with no rate yet can't be drawn in USD, so it is left out rather than guessed.
+        const points = prices.flatMap(({ day, price, usdPerEur }) => {
+          const usd = toUsd(price, currency, new Map(usdPerEur === null ? [] : [["USD", usdPerEur]]));
+          return usd === null ? [] : [{ day, price, usd }];
+        });
+        return { marketplace, condition, currency, segments: shapeSeries(points).segments };
+      });
+      const ranges = Object.fromEntries(
+        tcgConditionEnum.enumValues.map((condition) => [
+          condition,
+          rangeAvailability(earliest.flatMap((f) => (f.condition === condition && f.day ? [f.day] : [])), today),
+        ]),
+      ) as Record<Condition, Record<PriceRange, boolean>>;
+
+      // Every range starts at least 30 days back, so the rows hold each line's Current Market Price.
+      const grid = tcgMarketplaceEnum.enumValues
+        .filter((marketplace) => earliest.some((f) => f.marketplace === marketplace))
+        .flatMap((marketplace) =>
+          tcgConditionEnum.enumValues.map((condition) => {
+            const currency = MARKETPLACE_CURRENCY[marketplace];
+            const latest = byLine.get(`${marketplace}:${condition}`)?.at(-1);
+            const current = latest && currentMarketPrice(latest, today);
+            return {
+              marketplace,
+              condition,
+              currency,
+              current: current
+                ? {
+                    price: current.price,
+                    usd: toUsd(current.price, currency, rates),
+                    day: current.day,
+                    asOf: current.asOf,
+                    listingCount: current.listingCount,
+                  }
+                : null,
+            };
+          }),
+        );
+
+      return { today, series, ranges, grid, offers, pricesPaid: paid.map((c) => c.pricePaid!) };
     }),
 });

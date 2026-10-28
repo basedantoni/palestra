@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
+
+import { shortDay, usd } from "./market-format";
+import { PrintingDrawer } from "./printing-drawer";
 
 export type TilePrices = RouterOutputs["tcg"]["market"]["tilePrices"];
 
@@ -11,9 +15,6 @@ export function useTilePrices(artworks: Array<{ variantId: string }> | undefined
   return useQuery({ ...trpc.tcg.market.tilePrices.queryOptions({ variantIds }), enabled: variantIds.length > 0 }).data;
 }
 
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const shortDay = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 const percent = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -24,14 +25,19 @@ const percent = new Intl.NumberFormat("en-US", {
 /**
  * The English Printing's Current Market Price on a tile (TCGplayer, NM, USD): dated once older than
  * 7 days, a dash when there is none. Never carried forward or estimated. Its 7d Price Move and
- * 30-day sparkline show only when there is data for them.
+ * 30-day sparkline show only when there is data for them. Clicking it opens the Printing drawer.
  */
 export function TilePrice({ price }: { price: TilePrices[number] | undefined }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-wrap items-baseline gap-1 text-xs" title="TCGplayer Market Price, NM">
       <span className="text-muted-foreground">EN</span>
       {price ? (
-        <>
+        <button
+          type="button"
+          className="flex flex-wrap items-baseline gap-1 rounded-sm text-left hover:underline underline-offset-2"
+          onClick={() => setOpen(true)}
+        >
           <span className="font-medium tabular-nums">{usd.format(price.price)}</span>
           {price.asOf && <span className="text-muted-foreground">as of {shortDay(price.day)}</span>}
           {price.move7d !== null && (
@@ -47,10 +53,12 @@ export function TilePrice({ price }: { price: TilePrices[number] | undefined }) 
             </span>
           )}
           <Sparkline segments={price.sparkline} />
-        </>
+        </button>
       ) : (
         <span className="text-muted-foreground">—</span>
       )}
+      {/* Outside the button: React events bubble through the portal, so a close click would reopen it. */}
+      <PrintingDrawer printing={open && price ? price : null} onClose={() => setOpen(false)} />
     </div>
   );
 }

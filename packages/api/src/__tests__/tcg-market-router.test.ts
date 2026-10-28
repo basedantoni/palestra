@@ -8,7 +8,18 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
 
 import { db } from "@life-tracker/db";
-import { exchangeRate, tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
+import {
+  exchangeRate,
+  tcgArtwork,
+  tcgCard,
+  tcgCopy,
+  tcgMarketPrice,
+  tcgMarketplaceProduct,
+  tcgOffer,
+  tcgPrinting,
+  tcgWant,
+  user,
+} from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
@@ -167,5 +178,195 @@ describe("tcg.market.tilePrices", () => {
 
     const [tile] = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
     expect(tile).toMatchObject({ price: 10, move7d: null, sparkline: [[{ day: TODAY, price: 10 }]] });
+  });
+});
+
+const none = (marketplace: string, condition: string, currency: string) => ({ marketplace, condition, currency, current: null });
+const offer = (wantId: string, printingId: string, seenOn: string, value: number) => ({
+  wantId,
+  printingId,
+  seller: "Mercari",
+  price: value,
+  seenOn,
+});
+const copy = (userId: string, printingId: string, acquiredOn: string, pricePaid: number | null) => ({
+  userId,
+  printingId,
+  condition: "NM" as const,
+  acquiredOn,
+  pricePaid,
+});
+
+describe("tcg.market.printing", () => {
+  let en: string;
+  beforeEach(async () => {
+    en = await artwork("OP05-119_p1");
+  });
+
+  it("draws a USD line per Marketplace and Condition, each day at that day's rate, broken at gaps over 7 days", async () => {
+    await db.insert(exchangeRate).values([
+      { day: "2026-10-20", currency: "USD", perEur: 1.1 },
+      { day: "2026-10-23", currency: "USD", perEur: 1.2 },
+    ]);
+    await price(en, "2026-10-01", 20);
+    await price(en, "2026-10-20", 30);
+    await price(en, "2026-10-25", 35);
+    await price(en, "2026-10-20", 10, { marketplace: "cardtrader", listingCount: 2 });
+    // A Saturday: no ECB publication, so Friday's rate.
+    await price(en, "2026-10-24", 10, { marketplace: "cardtrader", listingCount: 3 });
+    await price(en, "2026-10-21", 8, { marketplace: "cardtrader", condition: "LP", listingCount: 1 });
+
+    const { series } = await caller.tcg.market.printing({ printingId: en, range: "1M" });
+    expect(series).toEqual([
+      {
+        marketplace: "tcgplayer",
+        condition: "NM",
+        currency: "USD",
+        segments: [
+          [{ day: "2026-10-01", price: 20, usd: 20 }],
+          [
+            { day: "2026-10-20", price: 30, usd: 30 },
+            { day: "2026-10-25", price: 35, usd: 35 },
+          ],
+        ],
+      },
+      {
+        marketplace: "cardtrader",
+        condition: "NM",
+        currency: "EUR",
+        segments: [
+          [
+            { day: "2026-10-20", price: 10, usd: expect.closeTo(11, 6) },
+            { day: "2026-10-24", price: 10, usd: expect.closeTo(12, 6) },
+          ],
+        ],
+      },
+      {
+        marketplace: "cardtrader",
+        condition: "LP",
+        currency: "EUR",
+        segments: [[{ day: "2026-10-21", price: 8, usd: expect.closeTo(8.8, 6) }]],
+      },
+    ]);
+  });
+
+  it("draws only the range, and offers each Condition the ranges its Marketplaces' history reaches", async () => {
+    // 3M starts 2026-07-29, 1Y starts 2025-10-27.
+    await db.insert(exchangeRate).values({ day: "2025-01-02", currency: "USD", perEur: 1.1 });
+    await price(en, "2026-07-29", 20);
+    await price(en, "2026-10-20", 30);
+    await price(en, "2026-10-08", 10, { marketplace: "cardtrader" });
+    await price(en, "2025-10-27", 5, { marketplace: "cardtrader", condition: "LP" });
+
+    const month = await caller.tcg.market.printing({ printingId: en, range: "1M" });
+    expect(month.series.map((s) => [s.marketplace, s.condition, s.segments.flat().map((p) => p.day)])).toEqual([
+      ["tcgplayer", "NM", ["2026-10-20"]],
+      ["cardtrader", "NM", ["2026-10-08"]],
+    ]);
+    expect(month.ranges).toEqual({
+      NM: { "1M": true, "3M": true, "1Y": false, All: true },
+      LP: { "1M": true, "3M": true, "1Y": true, All: true },
+      MP: { "1M": true, "3M": false, "1Y": false, All: false },
+      HP: { "1M": true, "3M": false, "1Y": false, All: false },
+      DMG: { "1M": true, "3M": false, "1Y": false, All: false },
+    });
+
+    const all = await caller.tcg.market.printing({ printingId: en, range: "All" });
+    expect(all.series.map((s) => s.segments.flat().map((p) => p.day))).toEqual([
+      ["2026-07-29", "2026-10-20"],
+      ["2026-10-08"],
+      ["2025-10-27"],
+    ]);
+  });
+
+  it("grids each Marketplace with history by Condition: Current Market Prices in native currency and USD at today's rate", async () => {
+    await db.insert(exchangeRate).values([
+      { day: "2026-10-01", currency: "USD", perEur: 1.1 },
+      { day: "2026-10-26", currency: "USD", perEur: 1.25 },
+    ]);
+    await price(en, TODAY, 35.9);
+    await price(en, "2026-10-20", 10, { marketplace: "cardtrader", listingCount: 3 });
+    await price(en, "2026-10-19", 8, { marketplace: "cardtrader", condition: "LP", listingCount: 1 });
+    await price(en, "2026-09-27", 4, { marketplace: "cardtrader", condition: "MP", listingCount: 2 });
+    await price(en, "2026-09-26", 2, { marketplace: "cardtrader", condition: "HP", listingCount: 5 });
+
+    const { grid } = await caller.tcg.market.printing({ printingId: en, range: "All" });
+    expect(grid).toEqual([
+      {
+        marketplace: "tcgplayer",
+        condition: "NM",
+        currency: "USD",
+        current: { price: 35.9, usd: 35.9, day: TODAY, asOf: false, listingCount: null },
+      },
+      none("tcgplayer", "LP", "USD"),
+      none("tcgplayer", "MP", "USD"),
+      none("tcgplayer", "HP", "USD"),
+      none("tcgplayer", "DMG", "USD"),
+      {
+        marketplace: "cardtrader",
+        condition: "NM",
+        currency: "EUR",
+        current: { price: 10, usd: 12.5, day: "2026-10-20", asOf: false, listingCount: 3 },
+      },
+      {
+        marketplace: "cardtrader",
+        condition: "LP",
+        currency: "EUR",
+        current: { price: 8, usd: 10, day: "2026-10-19", asOf: true, listingCount: 1 },
+      },
+      {
+        marketplace: "cardtrader",
+        condition: "MP",
+        currency: "EUR",
+        current: { price: 4, usd: 5, day: "2026-09-27", asOf: true, listingCount: 2 },
+      },
+      none("cardtrader", "HP", "EUR"),
+      none("cardtrader", "DMG", "EUR"),
+    ]);
+  });
+
+  it("marks only the signed-in user's Offers in the range and their Copies' prices paid", async () => {
+    const other = await artwork("OP05-119_p2");
+    await db.insert(user).values(
+      ["user-market", "someone-else"].map((id) => ({ id, name: id, email: `${id}@test.internal` })),
+    );
+    const wants = await db
+      .insert(tcgWant)
+      .values(
+        ["user-market", "someone-else"].map((userId) => ({
+          userId,
+          variantId: "OP05-119_p1",
+          languages: ["en" as const],
+          maxPrice: 50,
+          minCondition: "LP" as const,
+        })),
+      )
+      .returning({ id: tcgWant.id });
+    const [mine, theirs] = wants.map((w) => w.id) as [string, string];
+    await db.insert(tcgOffer).values([
+      offer(mine, en, "2026-10-02", 31),
+      offer(mine, en, "2026-10-20", 28.5),
+      offer(mine, en, "2026-09-26", 40), // before 1M starts
+      offer(mine, other, "2026-10-20", 99),
+      offer(theirs, en, "2026-10-21", 25),
+    ]);
+    await db.insert(tcgCopy).values([
+      copy("user-market", en, "2025-06-01", 22),
+      copy("user-market", en, "2026-10-10", 30),
+      copy("user-market", en, "2026-10-11", null), // a gift
+      copy("user-market", other, "2026-10-10", 80),
+      copy("someone-else", en, "2026-10-10", 18),
+    ]);
+
+    const drawer = await caller.tcg.market.printing({ printingId: en, range: "1M" });
+    expect(drawer.offers).toEqual([
+      { seenOn: "2026-10-02", price: 31 },
+      { seenOn: "2026-10-20", price: 28.5 },
+    ]);
+    expect(drawer.pricesPaid).toEqual([22, 30]);
+  });
+
+  it("has an empty grid for a Printing with no Market Prices", async () => {
+    expect(await caller.tcg.market.printing({ printingId: en, range: "1M" })).toMatchObject({ series: [], grid: [] });
   });
 });

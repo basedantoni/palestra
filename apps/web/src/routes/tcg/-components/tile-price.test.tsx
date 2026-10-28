@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
@@ -64,5 +64,16 @@ describe("TilePrice", () => {
 
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("opens the Printing drawer when the price is clicked", () => {
+    renderWithData(<TilePrice price={price("2026-10-27", false)} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /\$35\.90/ }));
+    expect(screen.getByRole("dialog", { name: "OP05-119_p1 · EN" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
