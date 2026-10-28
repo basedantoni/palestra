@@ -1,14 +1,14 @@
 /**
- * Tile prices (KOI-366): each shown Artwork's English Printing priced at its Current Market Price,
- * the latest TCGplayer NM price on or before today (UTC), at most 30 days old and flagged "as of"
- * once older than 7 days. Real SQL (PGlite): "latest on or before" is a DISTINCT ON range scan.
+ * Tile prices (KOI-366, KOI-367): each shown Artwork's English Printing priced at its Current Market
+ * Price, the latest TCGplayer NM price on or before today (UTC), at most 30 days old and flagged
+ * "as of" once older than 7 days, with its 7d Price Move and 30-day sparkline. Real SQL (PGlite).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@life-tracker/db", () => import("./helpers/pglite").then((m) => m.pgliteDbModule()));
 
 import { db } from "@life-tracker/db";
-import { tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
+import { exchangeRate, tcgArtwork, tcgCard, tcgMarketPrice, tcgMarketplaceProduct, tcgPrinting } from "@life-tracker/db/schema/index";
 
 import { appRouter } from "../routers/index";
 import { truncateAll } from "./helpers/pglite";
@@ -72,7 +72,22 @@ describe("tcg.market.tilePrices", () => {
     await price(en, "2026-10-25", 35.9);
 
     expect(await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] })).toEqual([
-      { printingId: en, variantId: "OP05-119_p1", language: "en", currency: "USD", price: 35.9, day: "2026-10-25", asOf: false },
+      {
+        printingId: en,
+        variantId: "OP05-119_p1",
+        language: "en",
+        currency: "USD",
+        price: 35.9,
+        day: "2026-10-25",
+        asOf: false,
+        move7d: expect.closeTo(19.67, 2),
+        sparkline: [
+          [
+            { day: "2026-10-20", price: 30 },
+            { day: "2026-10-25", price: 35.9 },
+          ],
+        ],
+      },
     ]);
   });
 
@@ -107,5 +122,50 @@ describe("tcg.market.tilePrices", () => {
     await price(hidden, TODAY, 7);
 
     expect(await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] })).toEqual([]);
+  });
+
+  it("gives each price its 7d Price Move and a 30-day sparkline of real points", async () => {
+    const en = await artwork("OP05-119_p1");
+    await price(en, "2026-09-26", 99);
+    await price(en, "2026-09-27", 10);
+    await price(en, "2026-10-04", 12);
+    await price(en, "2026-10-13", 16);
+    await price(en, "2026-10-20", 20);
+    await price(en, "2026-10-26", 25);
+
+    const [tile] = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
+    expect(tile).toMatchObject({ price: 25, day: "2026-10-26", move7d: 25 });
+    expect(tile!.sparkline).toEqual([
+      [
+        { day: "2026-09-27", price: 10 },
+        { day: "2026-10-04", price: 12 },
+      ],
+      [
+        { day: "2026-10-13", price: 16 },
+        { day: "2026-10-20", price: 20 },
+        { day: "2026-10-26", price: 25 },
+      ],
+    ]);
+  });
+
+  it("moves 0% on a flat native price while the exchange rate swings", async () => {
+    const en = await artwork("OP05-119_p1");
+    await db.insert(exchangeRate).values([
+      { day: "2026-10-20", currency: "USD", perEur: 1 },
+      { day: TODAY, currency: "USD", perEur: 1.2 },
+    ]);
+    await price(en, "2026-10-20", 10);
+    await price(en, TODAY, 10);
+
+    const [tile] = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
+    expect(tile!.move7d).toBe(0);
+  });
+
+  it("has no Price Move without a start price", async () => {
+    const en = await artwork("OP05-119_p1");
+    await price(en, TODAY, 10);
+
+    const [tile] = await caller.tcg.market.tilePrices({ variantIds: ["OP05-119_p1"] });
+    expect(tile).toMatchObject({ price: 10, move7d: null, sparkline: [[{ day: TODAY, price: 10 }]] });
   });
 });
