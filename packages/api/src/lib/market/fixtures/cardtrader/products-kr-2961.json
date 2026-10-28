@@ -1,0 +1,40 @@
+{
+  "200003": [
+    {
+      "id": 9100006,
+      "blueprint_id": 200003,
+      "name_en": "Shanks",
+      "quantity": 1,
+      "price": {
+        "cents": 400,
+        "currency": "EUR"
+      },
+      "price_cents": 400,
+      "price_currency": "EUR",
+      "description": "",
+      "graded": false,
+      "on_vacation": false,
+      "bundle_size": 1,
+      "tag": null,
+      "properties_hash": {
+        "condition": "Near Mint",
+        "onepiece_language": "kr",
+        "signed": false,
+        "altered": false,
+        "onepiece_foil": false
+      },
+      "expansion": {
+        "id": 2961,
+        "code": "op01",
+        "name_en": "Romance Dawn"
+      },
+      "user": {
+        "id": 1106,
+        "username": "seller",
+        "country_code": "CN",
+        "user_type": "normal",
+        "can_sell_via_hub": true
+      }
+    }
+  ]
+}

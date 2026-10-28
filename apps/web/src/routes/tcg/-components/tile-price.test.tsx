@@ -47,6 +47,17 @@ describe("TilePrice", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
+  it.each([
+    ["zh", "ZH"],
+    ["ko", "KO"],
+  ] as const)("shows the %s Printing's CardTrader price in USD", (language, label) => {
+    renderWithData(<TilePrice language={language} price={price("2026-10-27", false, { language, price: 8 })} />);
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByText("$8.00")).toBeInTheDocument();
+    expect(screen.getByTitle(/CardTrader/)).toBeInTheDocument();
+  });
+
   it("dates a price older than 7 days", () => {
     renderWithData(<TilePrice language="en" price={price("2026-10-02", true)} />);
 

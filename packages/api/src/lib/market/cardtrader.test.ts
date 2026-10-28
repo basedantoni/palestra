@@ -3,7 +3,13 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { type CardtraderBundle, cardtraderCondition, parseCardtrader, parseCardtraderExpansions } from "./cardtrader";
+import {
+  type CardtraderBundle,
+  cardtraderCondition,
+  parseCardtrader,
+  parseCardtraderExpansions,
+  printingToCreate,
+} from "./cardtrader";
 
 const fixture = (name: string) =>
   JSON.parse(readFileSync(join(import.meta.dirname, "fixtures/cardtrader", name), "utf8")) as unknown;
@@ -11,15 +17,17 @@ const fixture = (name: string) =>
 const recorded = (name: string) => fixture(`recorded/${name}`);
 
 /**
- * Scenario responses for OP01 and OP05 (`jp`), bundled as a capture lands them. They are
- * hand-built to cover every rule (graded, signed and altered Listings, each Condition, several
- * blueprints on one Artwork), and their shape was checked against real responses on 2026-10-28
- * (`recorded/`, below).
+ * Scenario responses for OP01 and OP05 (`jp`, `zh-CN`, `kr`), bundled as a capture lands them.
+ * They are hand-built to cover every rule (graded, signed and altered Listings, each Condition,
+ * several blueprints on one Artwork), and their shape was checked against real `jp` responses on
+ * 2026-10-28 (`recorded/`, below).
  */
+const listingsIn = (language: string) =>
+  Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`products-${language}-${id}.json`)]));
 const bundle: CardtraderBundle = {
   expansions: fixture("expansions.json"),
   blueprints: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`blueprints-${id}.json`)])),
-  listings: { jp: Object.fromEntries(["2961", "3062"].map((id) => [id, fixture(`products-jp-${id}.json`)])) },
+  listings: { jp: listingsIn("jp"), "zh-CN": listingsIn("zh-CN"), kr: listingsIn("kr") },
 };
 const rates = new Map([["USD", 1.1]]);
 
@@ -30,7 +38,7 @@ describe("parseCardtraderExpansions", () => {
 });
 
 describe("parseCardtrader", () => {
-  const { blueprints, skipped } = parseCardtrader(bundle, "jp", rates);
+  const { blueprints, skipped } = parseCardtrader(bundle, rates);
   const byId = new Map(blueprints.map((b) => [b.externalId, b]));
 
   it("drops blueprints with no collector number or with rarity DON!!", () => {
@@ -51,7 +59,7 @@ describe("parseCardtrader", () => {
   });
 
   it("gives the lowest EUR Listing per Condition with its Listing count, ignoring graded, signed and altered Listings", () => {
-    const lowest = byId.get("300001")!.lowest;
+    const lowest = byId.get("300001")!.lowest.ja!;
     // NM: €39 Mint, $41.80 (= €38 at 1.10) and €42; the €30 signed, €31 altered and €35 graded don't count.
     expect(lowest.NM).toEqual({ price: expect.closeTo(38, 6), count: 3 });
     expect(lowest).toMatchObject({
@@ -67,12 +75,25 @@ describe("parseCardtrader", () => {
   });
 
   it("drops a Listing in another language", () => {
-    expect(byId.get("200002")!.lowest.NM).toEqual({ price: 7.5, count: 2 });
+    expect(byId.get("200002")!.lowest.ja!.NM).toEqual({ price: 7.5, count: 2 });
+  });
+
+  it("gives the zh-CN and kr Listings' lowest as Simplified Chinese and Korean", () => {
+    expect(byId.get("300001")!.lowest).toMatchObject({
+      zh: { NM: { price: 20, count: 2 }, LP: { price: 15, count: 1 } }, // the signed €10 doesn't count
+    });
+    expect(byId.get("200003")!.lowest.ko).toEqual({ NM: { price: 4, count: 1 } });
+    expect(byId.get("200003")!.lowest.zh).toBeUndefined();
+  });
+
+  it("reads a day landed with only jp Listings", () => {
+    const { blueprints: jpOnly } = parseCardtrader({ ...bundle, listings: { jp: bundle.listings.jp } }, rates);
+    expect(jpOnly.find((b) => b.externalId === "300001")!.lowest).toEqual({ ja: expect.any(Object) });
   });
 
   it("skips and reports a Listing in a currency with no rate", () => {
-    const { blueprints: noUsd, skipped: noRate } = parseCardtrader(bundle, "jp", new Map());
-    expect(noUsd.find((b) => b.externalId === "300001")!.lowest.NM).toEqual({ price: 39, count: 2 });
+    const { blueprints: noUsd, skipped: noRate } = parseCardtrader(bundle, new Map());
+    expect(noUsd.find((b) => b.externalId === "300001")!.lowest.ja!.NM).toEqual({ price: 39, count: 2 });
     expect(noRate.currencies).toEqual(["USD"]);
   });
 });
@@ -107,7 +128,7 @@ describe("recorded CardTrader responses", () => {
     listings: { jp: { 3461: listings } },
   };
   // 1 EUR = 1.25 USD: a $0.14 Listing is €0.112.
-  const { blueprints, skipped } = parseCardtrader(bundle, "jp", new Map([["USD", 1.25]]));
+  const { blueprints, skipped } = parseCardtrader(bundle, new Map([["USD", 1.25]]));
   const byId = new Map(blueprints.map((b) => [b.externalId, b]));
 
   it("keeps the One Piece expansions (game 15)", () => {
@@ -131,8 +152,8 @@ describe("recorded CardTrader responses", () => {
   });
 
   it("converts the USD Listings to EUR before taking the lowest per Condition", () => {
-    expect(byId.get("269084")!.lowest).toEqual({ NM: { price: expect.closeTo(0.112, 6), count: 3 } }); // 3 × $0.14
-    expect(byId.get("268453")!.lowest).toEqual({
+    expect(byId.get("269084")!.lowest).toEqual({ ja: { NM: { price: expect.closeTo(0.112, 6), count: 3 } } }); // 3 × $0.14
+    expect(byId.get("268453")!.lowest.ja).toEqual({
       NM: { price: expect.closeTo(0.448, 6), count: 1 }, // $0.56
       LP: { price: expect.closeTo(0.28, 6), count: 2 }, // $0.35 and $0.36
     });
@@ -156,5 +177,34 @@ describe("cardtraderCondition", () => {
   it("has no Condition for one it doesn't know", () => {
     expect(cardtraderCondition("Excellent")).toBeNull();
     expect(cardtraderCondition(undefined)).toBeNull();
+  });
+});
+
+describe("printingToCreate", () => {
+  const ja = { language: "ja" as const, packId: "550109", setName: "OP-09", imageUrl: "https://img.test/ja/OP09-001.png" };
+  const en = { language: "en" as const, packId: "569109", setName: "OP09", imageUrl: "https://img.test/en/OP09-001.png" };
+
+  it("copies the Japanese Printing's pack, set and image, labelled with its language, listed by the variant ID", () => {
+    expect(printingToCreate("OP09-001_p1", "ko", [en, ja])).toEqual({
+      variantId: "OP09-001_p1",
+      language: "ko",
+      listId: "OP09-001_p1",
+      packId: "550109",
+      setName: "OP-09, Korean",
+      imageUrl: "https://img.test/ja/OP09-001.png",
+    });
+  });
+
+  it("falls back to the English Printing", () => {
+    expect(printingToCreate("OP09-001", "zh", [en])).toMatchObject({
+      packId: "569109",
+      setName: "OP09, Simplified Chinese",
+      imageUrl: "https://img.test/en/OP09-001.png",
+    });
+  });
+
+  it("creates none when the Artwork has a Printing in that language, or nothing to copy", () => {
+    expect(printingToCreate("OP09-001", "zh", [ja, { ...ja, language: "zh" }])).toBeNull();
+    expect(printingToCreate("OP09-001", "ko", [])).toBeNull();
   });
 });

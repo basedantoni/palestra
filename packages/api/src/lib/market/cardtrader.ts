@@ -5,7 +5,7 @@
  * CardTrader publishes Listings, not an aggregate: per One Piece expansion, its blueprints (one
  * per Artwork, across languages) and, per language, the cheapest Listings of each blueprint.
  */
-import type { TCG_CONDITIONS } from "@life-tracker/shared";
+import { TCG_LANGUAGE_NAME, type TCG_CONDITIONS, type TcgListedLanguage } from "@life-tracker/shared";
 import { z } from "zod";
 
 import type { PerEur } from "./ecb";
@@ -20,11 +20,12 @@ export const cardtraderListingsUrl = (expansionId: number, language: CardtraderL
   `${API}/marketplace/products?expansion_id=${expansionId}&language=${language}`;
 
 /**
- * The Listing languages captured, as CardTrader names them. The ToS exception (ADR 0007) allows
- * `jp`, `zh-CN` and `kr` only; `zh-CN` and `kr` come with KOI-372.
+ * The Listing languages captured, as CardTrader names them, and the Printing language each prices.
+ * The ToS exception (ADR 0007) allows `jp`, `zh-CN` and `kr` only (`fr` and the rest stay ignored).
  */
-export const CARDTRADER_LANGUAGES = ["jp"] as const;
-export type CardtraderLanguage = (typeof CARDTRADER_LANGUAGES)[number];
+export const CARDTRADER_LANGUAGES = { jp: "ja", "zh-CN": "zh", kr: "ko" } as const;
+export type CardtraderLanguage = keyof typeof CARDTRADER_LANGUAGES;
+type PrintingLanguage = (typeof CARDTRADER_LANGUAGES)[CardtraderLanguage];
 
 /**
  * One capture as landed: the raw expansions response, each One Piece expansion's blueprints
@@ -103,47 +104,56 @@ export type CardtraderBlueprint = {
   tags: string[];
   /** The TCGplayer product it is, when CardTrader knows it. */
   tcgPlayerId: string | null;
-  /** The lowest Listing in EUR per Condition, and how many Listings it was drawn from. */
-  lowest: Partial<Record<Condition, { price: number; count: number }>>;
+  /**
+   * Per Printing language that has any, the lowest Listing in EUR per Condition, and how many
+   * Listings it was drawn from.
+   */
+  lowest: Partial<Record<PrintingLanguage, Partial<Record<Condition, { price: number; count: number }>>>>;
 };
 
 /**
- * Every card blueprint in the bundle with its `language` Listings. Blueprints with no collector
- * number (sealed product) or of rarity DON!! are dropped. Graded, signed and altered Listings, and
- * any in another language, count toward neither the lowest price nor the count. Listings are priced
- * in the token account's currency (USD, seen 2026-10-28), so a non-EUR Listing is converted at
- * `rates` before the lowest is taken; one with no rate, or with a missing or unmapped Condition, is
- * skipped and reported.
+ * Every card blueprint in the bundle with its Listings in each captured language (a day landed
+ * before KOI-372 has only `jp`). Blueprints with no collector number (sealed product) or of rarity
+ * DON!! are dropped. Graded, signed and altered Listings, and any in another language than the call
+ * asked for, count toward neither the lowest price nor the count. Listings are priced in the token
+ * account's currency (USD, seen 2026-10-28), so a non-EUR Listing is converted at `rates` before the
+ * lowest is taken; one with no rate, or with a missing or unmapped Condition, is skipped and reported.
  */
-export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLanguage, rates: PerEur) {
+export function parseCardtrader(bundle: CardtraderBundle, rates: PerEur) {
   const skipped = { conditions: new Set<string>(), currencies: new Set<string>() };
   const blueprints: CardtraderBlueprint[] = [];
   const sets = new Map(expansionsResponse.parse(bundle.expansions).map((e) => [e.id, e.code || e.name]));
+  const languages = Object.entries(CARDTRADER_LANGUAGES) as Array<[CardtraderLanguage, PrintingLanguage]>;
   for (const [expansionId, raw] of Object.entries(bundle.blueprints)) {
-    const listingsRaw = bundle.listings[language]?.[expansionId];
-    const listings = listingsRaw ? listingsResponse.parse(listingsRaw) : {};
+    const listings = languages.map(([cardtrader, language]) => {
+      const listingsRaw = bundle.listings[cardtrader]?.[expansionId];
+      return { cardtrader, language, byBlueprint: listingsRaw ? listingsResponse.parse(listingsRaw) : {} };
+    });
     for (const b of blueprintsResponse.parse(raw)) {
       const number = b.fixed_properties?.collector_number;
       if (!number || b.fixed_properties?.onepiece_rarity === "DON!!") continue;
       const lowest: CardtraderBlueprint["lowest"] = {};
-      for (const l of listings[b.id] ?? []) {
-        const p = l.properties_hash;
-        if (l.graded || p.signed || p.altered || p.onepiece_language !== language) continue;
-        const condition = cardtraderCondition(p.condition);
-        if (!condition) {
-          // Real responses have Listings with no condition at all (2026-10-28).
-          skipped.conditions.add(p.condition ?? "(none)");
-          continue;
+      for (const { cardtrader, language, byBlueprint } of listings) {
+        for (const l of byBlueprint[b.id] ?? []) {
+          const p = l.properties_hash;
+          if (l.graded || p.signed || p.altered || p.onepiece_language !== cardtrader) continue;
+          const condition = cardtraderCondition(p.condition);
+          if (!condition) {
+            // Real responses have Listings with no condition at all (2026-10-28).
+            skipped.conditions.add(p.condition ?? "(none)");
+            continue;
+          }
+          const { cents, currency } = l.price;
+          const perEur = currency === "EUR" ? 1 : rates.get(currency);
+          if (perEur === undefined) {
+            skipped.currencies.add(currency);
+            continue;
+          }
+          const price = cents / minorUnits(currency) / perEur;
+          const byCondition = (lowest[language] ??= {});
+          const current = byCondition[condition];
+          byCondition[condition] = { price: Math.min(price, current?.price ?? Infinity), count: (current?.count ?? 0) + 1 };
         }
-        const { cents, currency } = l.price;
-        const perEur = currency === "EUR" ? 1 : rates.get(currency);
-        if (perEur === undefined) {
-          skipped.currencies.add(currency);
-          continue;
-        }
-        const price = cents / minorUnits(currency) / perEur;
-        const current = lowest[condition];
-        lowest[condition] = { price: Math.min(price, current?.price ?? Infinity), count: (current?.count ?? 0) + 1 };
       }
       blueprints.push({
         externalId: String(b.id),
@@ -157,4 +167,20 @@ export function parseCardtrader(bundle: CardtraderBundle, language: CardtraderLa
     }
   }
   return { blueprints, skipped: { conditions: [...skipped.conditions], currencies: [...skipped.currencies] } };
+}
+
+type PrintingSource = { language: keyof typeof TCG_LANGUAGE_NAME; packId: string; setName: string; imageUrl: string };
+
+/**
+ * The `zh` or `ko` Printing a matched Artwork's first Listing in that language creates (KOI-372),
+ * from the Artwork's `printings`: the Japanese one's pack, set and image (else the English one's),
+ * its set labelled with the language (`OP-09, Korean`), listed by the Artwork's variant ID. None
+ * when the Artwork already has a Printing in that language, or has nothing to copy.
+ */
+export function printingToCreate(variantId: string, language: TcgListedLanguage, printings: PrintingSource[]) {
+  if (printings.some((p) => p.language === language)) return null;
+  const source = printings.find((p) => p.language === "ja") ?? printings.find((p) => p.language === "en");
+  if (!source) return null;
+  const { packId, setName, imageUrl } = source;
+  return { variantId, language, listId: variantId, packId, setName: `${setName}, ${TCG_LANGUAGE_NAME[language]}`, imageUrl };
 }

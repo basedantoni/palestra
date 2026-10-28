@@ -13,6 +13,7 @@ import {
   CARDTRADER_EXPANSIONS_URL,
   CARDTRADER_LANGUAGES,
   type CardtraderBundle,
+  type CardtraderLanguage,
   cardtraderBlueprintsUrl,
   cardtraderListingsUrl,
   parseCardtrader,
@@ -80,7 +81,7 @@ async function downloadCardtrader({ fetch, clock, cardtraderToken }: MarketDeps)
   const bundle: CardtraderBundle = { expansions, blueprints: {}, listings: {} };
   for (const id of parseCardtraderExpansions(expansions)) {
     bundle.blueprints[id] = await json(cardtraderBlueprintsUrl(id));
-    for (const language of CARDTRADER_LANGUAGES) {
+    for (const language of Object.keys(CARDTRADER_LANGUAGES) as CardtraderLanguage[]) {
       (bundle.listings[language] ??= {})[id] = await json(cardtraderListingsUrl(id, language));
     }
   }
@@ -116,13 +117,16 @@ const SOURCES = {
     file: "tcgcsv.json",
     derive: (db, raw, day) => replaceTcgplayerDay(db, parseTcgcsv(JSON.parse(utf8(raw)) as TcgcsvBundle), day),
   },
-  /** CardTrader's Japanese Market Prices; a non-EUR Listing converts at the latest rate on or before the day. */
+  /**
+   * CardTrader's Japanese, Simplified Chinese and Korean Market Prices; a non-EUR Listing converts
+   * at the latest rate on or before the day.
+   */
   cardtrader: {
     download: downloadCardtrader,
     file: "cardtrader.json",
     derive: async (db, raw, day) => {
       const bundle = JSON.parse(utf8(raw)) as CardtraderBundle;
-      const { blueprints, skipped } = parseCardtrader(bundle, "jp", await ratesOn(db, day));
+      const { blueprints, skipped } = parseCardtrader(bundle, await ratesOn(db, day));
       if (skipped.conditions.length || skipped.currencies.length) {
         console.warn(`[market.cardtrader] ${day}: skipped Listings with unmapped`, skipped);
       }
@@ -153,7 +157,7 @@ export const loadEcbHistory = (deps: MarketDeps, day: string) => capture(deps, "
 /** `market.tcgcsv`: today's TCGplayer Market Prices. */
 export const captureTcgcsv = (deps: MarketDeps, day: string) => capture(deps, "tcgcsv", day);
 
-/** `market.cardtrader`: today's CardTrader Japanese Market Prices. */
+/** `market.cardtrader`: today's CardTrader Japanese, Simplified Chinese and Korean Market Prices. */
 export const captureCardtrader = (deps: MarketDeps, day: string) => capture(deps, "cardtrader", day);
 
 /** `market.derive`: rebuild a landed day's rows from its raw copy. */

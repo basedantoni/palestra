@@ -1,6 +1,10 @@
 /** TCG labels and limits shared by the API and the web app. */
 
-export const TCG_LANGUAGE_NAME = { ja: "Japanese", en: "English" } as const;
+export const TCG_LANGUAGE_NAME = { ja: "Japanese", en: "English", zh: "Simplified Chinese", ko: "Korean" } as const;
+
+/** The languages whose Printings CardTrader Listings create (KOI-372); the catalog import brings only `ja` and `en`. */
+export const TCG_LISTED_LANGUAGES = ["zh", "ko"] as const;
+export type TcgListedLanguage = (typeof TCG_LISTED_LANGUAGES)[number];
 
 /** Best first: a Want's "at least LP" accepts NM and LP. Matches the `tcg_condition` enum order. */
 export const TCG_CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"] as const;

@@ -358,6 +358,13 @@
       "when": 1793157581847,
       "tag": "0050_market_alert_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793163516413,
+      "tag": "0051_tcg_language_zh_ko",
+      "breakpoints": true
     }
   ]
 }

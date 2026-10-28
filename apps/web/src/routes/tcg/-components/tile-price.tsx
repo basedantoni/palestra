@@ -22,10 +22,14 @@ const percent = new Intl.NumberFormat("en-US", {
   signDisplay: "exceptZero",
 });
 
+const CARDTRADER_TITLE = "CardTrader lowest Listing, NM, in USD at today's ECB rate";
+
 /** The tile languages, in display order, each with where its price comes from. */
 export const TILE_PRICE_TITLES = {
   en: "TCGplayer Market Price, NM",
-  ja: "CardTrader lowest Listing, NM, in USD at today's ECB rate",
+  ja: CARDTRADER_TITLE,
+  zh: CARDTRADER_TITLE,
+  ko: CARDTRADER_TITLE,
 } as const;
 
 /**
