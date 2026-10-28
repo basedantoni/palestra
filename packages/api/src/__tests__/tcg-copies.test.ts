@@ -103,7 +103,10 @@ describe("tcg.copies.list", () => {
     ];
     mockDb.onSelect(tcgCopy, rows);
 
-    await expect(caller().tcg.copies.list()).resolves.toEqual([{ ...rows[0], belowMinimum: false }]);
+    await expect(caller().tcg.copies.list()).resolves.toEqual([
+      // No Market Prices queued: unpriced (Copy Value is covered on PGlite in tcg-copy-value-router.test.ts).
+      { ...rows[0], belowMinimum: false, value: null, gain: null, sparkline: [] },
+    ]);
     expect(mockDb.selected(tcgCopy)).toEqual([[USER_ID]]);
   });
 });

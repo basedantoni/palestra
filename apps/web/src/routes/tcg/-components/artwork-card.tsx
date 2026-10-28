@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { trpc, type RouterOutputs } from "@/utils/trpc";
 import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
 import { artworkImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
+import { HeldCopyValues } from "./copy-value";
 import { invalidateBrowse } from "./invalidate-browse";
 import { TILE_PRICE_TITLES, TilePrice, type TilePrices } from "./tile-price";
 import { WantDialog } from "./want-dialog";
@@ -30,6 +31,7 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
         setAdding(null);
         invalidateBrowse(queryClient);
         queryClient.invalidateQueries({ queryKey: trpc.tcg.copies.list.pathKey() });
+        queryClient.invalidateQueries({ queryKey: trpc.tcg.market.collectionHistory.pathKey() });
       },
     }),
   );
@@ -84,6 +86,8 @@ function ArtworkCard({
   onWant: () => void;
 }) {
   const image = artworkImage(a.printings);
+  // An owned tile is priced by its held Copies (KOI-374): one shared request, only once one shows.
+  const { data: copies } = useQuery({ ...trpc.tcg.copies.list.queryOptions(), enabled: a.owned });
   return (
     <li className="space-y-1">
       {image && (
@@ -124,7 +128,10 @@ function ArtworkCard({
         ))}
         {a.owned && <Badge>Owned</Badge>}
       </div>
-      {prices &&
+      {a.owned ? (
+        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} />
+      ) : (
+        prices &&
         (Object.keys(TILE_PRICE_TITLES) as Array<keyof typeof TILE_PRICE_TITLES>).map((language) => {
           const printing = a.printings.find((p) => p.language === language);
           return (
@@ -132,7 +139,8 @@ function ArtworkCard({
               <TilePrice key={language} language={language} price={prices.find((p) => p.printingId === printing.id)} />
             )
           );
-        })}
+        })
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {a.wanted && <Badge>Wanted</Badge>}
         <Button size="xs" variant="outline" onClick={onAdd}>

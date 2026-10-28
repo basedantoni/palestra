@@ -87,7 +87,13 @@ const DAY_MS = 86_400_000;
  * Real points only, across the last 30 days ending today (UTC, the capture day): one line per
  * segment (gaps over 7 days break it), a dot for a lone point.
  */
-function Sparkline({ segments }: { segments: TilePrices[number]["sparkline"] }) {
+export function Sparkline({
+  segments,
+  label = "30-day Market Price",
+}: {
+  segments: TilePrices[number]["sparkline"];
+  label?: string;
+}) {
   const points = segments.flat();
   if (points.length < 2) return null;
   const today = Date.parse(new Date().toISOString().slice(0, 10));
@@ -101,7 +107,7 @@ function Sparkline({ segments }: { segments: TilePrices[number]["sparkline"] }) 
   return (
     <svg
       role="img"
-      aria-label="30-day Market Price"
+      aria-label={label}
       viewBox="-2 -2 104 24"
       preserveAspectRatio="none"
       className="h-4 w-16 self-center text-muted-foreground"
