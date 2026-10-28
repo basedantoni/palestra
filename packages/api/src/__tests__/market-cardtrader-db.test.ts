@@ -27,6 +27,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { captureCardtrader, deriveMarketDay, type MarketDb } from "../lib/market/capture";
+import { fakeChooser } from "./helpers/fake-chooser";
 import { memoryStore } from "./helpers/memory-store";
 import { pgliteDbModule, truncateAll } from "./helpers/pglite";
 
@@ -234,6 +235,41 @@ describe("market.cardtrader capture", () => {
       /CARDTRADER_TOKEN/,
     );
     expect(store.objects.size).toBe(0);
+  });
+});
+
+describe("the TypeSafe tier (KOI-371)", () => {
+  it("asks only blueprints both earlier tiers leave unmatched, with the card's Japanese Artworks, and stores a match", async () => {
+    const { chooser, asked } = fakeChooser({ Shanks: { choice: "OP01-120_p1", confidence: 0.96 } });
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps, chooser }, DAY);
+
+    expect(asked).toEqual([
+      {
+        product: { marketplace: "cardtrader", name: "Shanks", number: "OP01-120", set: "op01", rarity: "Secret Rare", tags: ["Parallel"] },
+        candidates: [
+          { variantId: "OP01-120", variantKind: "base", sets: ["OP-01"], rarity: null, artist: null },
+          { variantId: "OP01-120_p1", variantKind: "parallel", sets: ["OP-01"], rarity: null, artist: null },
+          { variantId: "OP01-120_p2", variantKind: "manga", sets: ["OP-01"], rarity: null, artist: null },
+        ],
+      },
+    ]);
+    expect(await blueprint("200001")).toMatchObject({ method: "typesafe", variantId: "OP01-120_p1", confidence: expect.closeTo(0.96, 5) });
+    expect((await pricesOn(DAY)).filter(([v]) => v === "OP01-120_p1")).toEqual([["OP01-120_p1", "ja", "NM", 90, 1, "200001"]]);
+  });
+
+  it("never asks about a blueprint whose TCGplayer product is marked 'not an Artwork'", async () => {
+    await db
+      .update(tcgMarketplaceProduct)
+      .set({ method: "manual", variantId: null })
+      .where(and(eq(tcgMarketplaceProduct.marketplace, "tcgplayer"), eq(tcgMarketplaceProduct.externalId, "454664")));
+    const { chooser, asked } = fakeChooser();
+    await captureCardtrader({ db, store: memoryStore(), ...recordedCardtrader().deps, chooser }, DAY);
+
+    expect(asked.map((a) => a.product.tags)).toEqual([["Parallel"]]); // 200001 only, not 200002
+    expect(await blueprint("200001")).toMatchObject({
+      variantId: null,
+      reason: "2 candidate Artworks in op01: OP01-120_p1, OP01-120_p2; TypeSafe tier: none of the 3 candidate Artworks fits",
+    });
   });
 });
 

@@ -39,11 +39,12 @@ describe("parseCardtrader", () => {
     expect(blueprints).toHaveLength(8);
   });
 
-  it("reads a blueprint's number, expansion code as its set, version as a tag and TCGplayer id", () => {
+  it("reads a blueprint's number, rarity, expansion code as its set, version as a tag and TCGplayer id", () => {
     expect(byId.get("300002")).toMatchObject({
       name: "Monkey.D.Luffy",
       number: "OP05-119",
       set: "op05",
+      rarity: "Secret Rare",
       tags: ["Manga"],
       tcgPlayerId: "527026",
     });

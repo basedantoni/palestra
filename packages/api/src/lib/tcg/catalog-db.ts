@@ -56,6 +56,7 @@ export async function upsertCatalog(
           // A manga set from Limitless's label (KOI-306) outranks the import's heuristic.
           set: {
             cardNumber: sql`excluded.card_number`,
+            rarity: sql`excluded.rarity`,
             variantKind: sql`case when ${tcgArtwork.variantKind} = 'manga' then ${tcgArtwork.variantKind} else excluded.variant_kind end`,
           },
         });

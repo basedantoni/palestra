@@ -18,6 +18,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { captureTcgcsv, deriveMarketDay, type MarketDb } from "../lib/market/capture";
+import { type ArtworkChooser, TYPESAFE_GATE } from "../lib/market/typesafe-tier";
+import { fakeChooser } from "./helpers/fake-chooser";
 import { memoryStore } from "./helpers/memory-store";
 import { pgliteDbModule, truncateAll } from "./helpers/pglite";
 
@@ -251,6 +253,103 @@ describe("market.tcgcsv capture", () => {
     await expect(captureTcgcsv({ db, store, fetch }, DAY)).rejects.toThrow(/503/);
     expect(store.objects.size).toBe(0);
     expect(await db.select().from(tcgMarketplaceProduct)).toEqual([]);
+  });
+});
+
+/** A capture with `chooser` as the TypeSafe tier. */
+const captureWith = (chooser: ArtworkChooser, store = memoryStore()) =>
+  captureTcgcsv({ db, store, fetch: recordedTcgcsv().fetch, chooser }, DAY);
+
+describe("the TypeSafe tier (KOI-371)", () => {
+  it("asks only the products the rule tier leaves unmatched, never a manual row, with each card's English Artworks", async () => {
+    await matchByHand("454665", "OP01-120_p1");
+    const { chooser, asked } = fakeChooser();
+    await captureWith(chooser);
+
+    expect(asked.map((a) => a.product.name).toSorted()).toEqual([
+      "Enel (100) (SP)",
+      "Inazuma",
+      "Monkey.D.Luffy (119) (Alternate Art) (Manga)",
+    ]);
+    const luffy = asked.find((a) => a.product.name.startsWith("Monkey"))!;
+    expect(luffy.product).toEqual({
+      marketplace: "tcgplayer",
+      name: "Monkey.D.Luffy (119) (Alternate Art) (Manga)",
+      number: "OP05-119",
+      set: "OP05",
+      rarity: "SEC",
+      tags: ["Alternate Art", "Manga"],
+    });
+    expect(luffy.candidates).toEqual([
+      { variantId: "OP05-119", variantKind: "base", sets: ["OP-05"], rarity: null, artist: null },
+      { variantId: "OP05-119_p1", variantKind: "parallel", sets: ["OP-05"], rarity: null, artist: null },
+      { variantId: "OP05-119_p2", variantKind: "manga", sets: ["OP-05"], rarity: null, artist: null },
+    ]);
+    // Inazuma's anniversary product has no candidate in its set, but its card's Artwork is one.
+    expect(asked.find((a) => a.product.name === "Inazuma")!.candidates.map((c) => c.variantId)).toEqual(["OP05-003"]);
+  });
+
+  it("stores a choice at or above the gate with method typesafe and its confidence, and prices it", async () => {
+    const { chooser } = fakeChooser({ "Enel (100) (SP)": { choice: "OP05-100_p2", confidence: 0.97 } });
+    const result = await captureWith(chooser);
+
+    expect(await product("527043")).toMatchObject({
+      method: "typesafe",
+      variantId: "OP05-100_p2",
+      confidence: expect.closeTo(0.97, 5),
+      reason: null,
+      matchedAt: expect.any(Date),
+    });
+    expect((await pricesOn(DAY)).filter(([v]) => v === "OP05-100_p2")).toEqual([
+      ["OP05-100_p2", "en", "NM", 91.07, null, "527043"],
+    ]);
+    expect(result).toMatchObject({ unmatched: 3 });
+  });
+
+  it("leaves a choice below the gate unmatched, with a reason naming the tier", async () => {
+    const { chooser } = fakeChooser({ "Enel (100) (SP)": { choice: "OP05-100_p2", confidence: 0.4 } });
+    await captureWith(chooser);
+
+    expect(await product("527043")).toMatchObject({
+      method: "rule",
+      variantId: null,
+      confidence: null,
+      reason: `2 candidate Artworks in OP05: OP05-100_p1, OP05-100_p2; TypeSafe tier: OP05-100_p2 at confidence 0.40, below the ${TYPESAFE_GATE} gate`,
+    });
+  });
+
+  it("leaves a product unmatched on 'none', with a reason naming the tier", async () => {
+    const { chooser } = fakeChooser({ Inazuma: { choice: "none", confidence: 0.99 } });
+    await captureWith(chooser);
+
+    expect(await product("530887")).toMatchObject({
+      variantId: null,
+      reason: "No Artwork of OP05-003 has an English Printing in OP05 ANN; TypeSafe tier: none of the 1 candidate Artworks fits",
+    });
+  });
+
+  it("does not ask again for a product it matched, but asks again for one it left unmatched", async () => {
+    const store = memoryStore();
+    const { chooser, asked } = fakeChooser({ "Enel (100) (SP)": { choice: "OP05-100_p2", confidence: 0.97 } });
+    await captureWith(chooser, store);
+    await captureWith(chooser, store);
+    await deriveMarketDay({ db, store, chooser }, { source: "tcgcsv", day: DAY });
+
+    const names = asked.map((a) => a.product.name);
+    expect(names.filter((n) => n === "Enel (100) (SP)")).toHaveLength(1);
+    expect(names.filter((n) => n === "Inazuma")).toHaveLength(3);
+    expect(await product("527043")).toMatchObject({ method: "typesafe", variantId: "OP05-100_p2" });
+  });
+
+  it("leaves a product unmatched when TypeSafe fails, and still derives the day", async () => {
+    const { chooser } = fakeChooser({ "Enel (100) (SP)": new Error("TypeSafe answered 503") });
+    await captureWith(chooser);
+
+    expect(await product("527043")).toMatchObject({
+      variantId: null,
+      reason: "2 candidate Artworks in OP05: OP05-100_p1, OP05-100_p2; TypeSafe tier failed: TypeSafe answered 503",
+    });
+    expect(await pricesOn(DAY)).toHaveLength(9);
   });
 });
 
