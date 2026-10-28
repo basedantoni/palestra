@@ -24,7 +24,17 @@ describe("tcg.wants.list", () => {
     mockDb.onSelect(tcgWant, [row], []);
 
     await expect(caller().tcg.wants.list()).resolves.toEqual([
-      { ...row, printings: [], offers: [], cheapest: null, buyable: false, belowMinimum: false },
+      {
+        ...row,
+        imageUrl: null,
+        pictured: null,
+        market: [{ language: "ja", printingId: null, current: null }],
+        printings: [],
+        offers: [],
+        cheapest: null,
+        buyable: false,
+        belowMinimum: false,
+      },
     ]);
     await expect(caller().tcg.wants.list({ status: "dropped" })).resolves.toEqual([]);
     expect(mockDb.selected(tcgWant)).toEqual([

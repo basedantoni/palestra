@@ -173,6 +173,7 @@ function createMockDb() {
   const db: any = {
     select: vi.fn(select),
     selectDistinct: vi.fn(select),
+    selectDistinctOn: vi.fn(select),
     insert: vi.fn(write("insert")),
     update: vi.fn(write("update")),
     delete: vi.fn(write("delete")),
@@ -231,6 +232,7 @@ function createMockDb() {
       ops.length = 0;
       db.select.mockReset().mockImplementation(select);
       db.selectDistinct.mockReset().mockImplementation(select);
+      db.selectDistinctOn.mockReset().mockImplementation(select);
       db.insert.mockReset().mockImplementation(write("insert"));
       db.update.mockReset().mockImplementation(write("update"));
       db.delete.mockReset().mockImplementation(write("delete"));
