@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
@@ -77,5 +77,30 @@ describe("TilePrice", () => {
 
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("opens the Printing drawer when the price is clicked", () => {
+    renderWithData(<TilePrice language="en" price={price("2026-10-27", false)} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /\$35\.90/ }));
+    expect(screen.getByRole("dialog", { name: "OP05-119_p1 · EN" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the Japanese Printing's drawer from its price", () => {
+    const ja = "00000000-0000-4000-8000-000000000002";
+    renderWithData(<TilePrice language="ja" price={price("2026-10-27", false, { printingId: ja, language: "ja", price: 50 })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /\$50\.00/ }));
+    expect(screen.getByRole("dialog", { name: "OP05-119_p1 · JA" })).toBeInTheDocument();
+  });
+
+  it("opens no drawer when there is no price", () => {
+    renderWithData(<TilePrice language="ja" price={undefined} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

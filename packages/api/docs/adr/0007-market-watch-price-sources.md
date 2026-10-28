@@ -14,6 +14,8 @@ CardTrader's terms permit the self-serve API token for "handling your inventory"
 - language-filtered calls for `jp`, `zh-CN` and `kr` only, about 300 a day (English never comes from CardTrader);
 - read-only, personal use, no redistribution.
 
+**Amended with KOI-369: which calls are language-filtered.** The language filter applies to the price calls, `marketplace/products?expansion_id=…&language=…`, one per One Piece expansion per language. The catalog calls carry no prices and have no language filter: `expansions` is called once a day, and `blueprints/export` once per expansion. They are made because only blueprints carry the collector number, rarity and `tcg_player_id` that matching needs. That comes to about 2 calls per expansion a day for `jp`, plus one more per expansion for each of `zh-CN` and `kr`. The user accepted this.
+
 If CardTrader grants market-API access, the grant replaces the exception. If CardTrader declines or objects, the capture stops. Japanese then falls back to **PriceCharting Legendary**, which is $49/mo, priced from ungraded sold listings with no Condition split, licensed for internal use and purged if the subscription lapses. Chinese and Korean then have no prices, since no other permitted source exists. PriceCharting is not built until that happens. The accepted risk: CardTrader may revoke the token or act on the account.
 
 Rejected: Cardmarket (API closed, and its public price guide blends languages and Conditions), SNKRDUNK, 集换社, Xianyu, Bunjang and KREAM (scraping forbidden or no aggregate price), eBay (sold history is a restricted Limited Release), Korean price aggregators (they repackage other sites with no licence), and Frankfurter (a third-party relay of the same ECB numbers).
