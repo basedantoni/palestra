@@ -110,6 +110,8 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "custom_exercise_approved",
   "custom_exercise_rejected",
   "whoop_workout_imported",
+  "market_capture_failed",
+  "database_near_full",
 ]);
 
 export const cardioSubtypeEnum = pgEnum("cardio_subtype", [

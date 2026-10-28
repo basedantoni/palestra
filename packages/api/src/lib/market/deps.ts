@@ -1,13 +1,16 @@
 import { createDb } from "@life-tracker/db/client";
 import { env } from "@life-tracker/env/worker";
 
-import type { MarketDeps } from "./capture";
+import { parseAdminEmails } from "../admins";
+import { databaseSize } from "./alerts";
 import { s3Store } from "./object-store";
+import type { WorkerDeps } from "./worker";
 
-/** The real collaborators, from the worker env: Postgres, the Tigris bucket, the network. */
-export function marketDeps(): MarketDeps {
+/** The real collaborators, from the worker env: Postgres, the Tigris bucket, the network, the admins. */
+export function marketDeps(): WorkerDeps {
+  const db = createDb(env.DATABASE_URL);
   return {
-    db: createDb(env.DATABASE_URL),
+    db,
     store: s3Store({
       endpoint: env.AWS_ENDPOINT_URL_S3,
       bucket: env.BUCKET_NAME,
@@ -17,5 +20,7 @@ export function marketDeps(): MarketDeps {
     }),
     fetch: globalThis.fetch,
     cardtraderToken: env.CARDTRADER_TOKEN,
+    adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
+    databaseSize: () => databaseSize(db),
   };
 }

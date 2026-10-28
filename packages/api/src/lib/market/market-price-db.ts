@@ -125,9 +125,14 @@ async function upsertProducts<P extends Product>(
   matcher: (unsettled: P[]) => Promise<(p: P) => Match>,
 ) {
   const existing = new Map(
-    (await tx.select().from(tcgMarketplaceProduct).where(eq(tcgMarketplaceProduct.marketplace, marketplace))).map(
-      (r) => [r.externalId, r],
-    ),
+    (
+      await tx
+        .select()
+        .from(tcgMarketplaceProduct)
+        .where(eq(tcgMarketplaceProduct.marketplace, marketplace))
+        // A manual match saved mid-derive waits for the commit instead of being upserted over.
+        .for("update")
+    ).map((r) => [r.externalId, r]),
   );
   const settled = (p: P) => {
     const row = existing.get(p.externalId);
