@@ -351,6 +351,13 @@
       "when": 1793147272515,
       "tag": "0049_market_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793157581847,
+      "tag": "0050_market_alert_notifications",
+      "breakpoints": true
     }
   ]
 }

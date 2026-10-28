@@ -10,6 +10,9 @@ import { z } from "zod";
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().min(1),
+    // The web server's admins, who get the worker's failed-capture and database-size notifications
+    // (KOI-365). Set it on palestra-worker too. Omit = nobody is notified.
+    ADMIN_EMAILS: z.string().min(1).optional(),
     // Tigris (S3) bucket for raw snapshots, private. `fly storage create -a palestra-worker` sets
     // all five as secrets on the app.
     AWS_ACCESS_KEY_ID: z.string().min(1),
