@@ -46,13 +46,13 @@ describe("worker boot", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("schedules market.ecb daily at 21:17 UTC", async () => {
-    const [schedule] = await boss.getSchedules("market.ecb");
+  it.each(["market.ecb", "market.tcgcsv"])("schedules %s daily at 21:17 UTC", async (name) => {
+    const [schedule] = await boss.getSchedules(name);
     expect(schedule).toMatchObject({ cron: "17 21 * * *", timezone: "UTC" });
   });
 
-  it("retries market.ecb 3 times with backoff", async () => {
-    expect(await boss.getQueue("market.ecb")).toMatchObject({ retryLimit: 3, retryBackoff: true });
+  it.each(["market.ecb", "market.tcgcsv"])("retries %s 3 times with backoff", async (name) => {
+    expect(await boss.getQueue(name)).toMatchObject({ retryLimit: 3, retryBackoff: true });
   });
 
   it("boots again on a redeploy", async () => {
@@ -87,6 +87,14 @@ describe("market.ecb capture day", () => {
     const run = runMarketJob("market.ecb", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-27T00:00:00Z"));
 
     await expect(run).rejects.toThrow(/capture window for 2026-10-26 closed/);
+    expect(bucket.objects.size).toBe(0);
+  });
+
+  it("closes market.tcgcsv's window at UTC midnight too", async () => {
+    const bucket = memoryStore();
+    const run = runMarketJob("market.tcgcsv", { db, store: bucket, fetch }, null, createdOn, new Date("2026-10-27T00:00:00Z"));
+
+    await expect(run).rejects.toThrow(/market\.tcgcsv: capture window for 2026-10-26 closed/);
     expect(bucket.objects.size).toBe(0);
   });
 });

@@ -1,0 +1,164 @@
+{
+ "totalItems": 6,
+ "success": true,
+ "errors": [],
+ "results": [
+  {
+   "productId": 450087,
+   "name": "Romance Dawn - Booster Box Case (Wave 2 - White)",
+   "cleanName": "Romance Dawn Booster Box Case Wave 2 White",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/450087_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/450087/one-piece-card-game-romance-dawn-romance-dawn-booster-box-case-wave-2-white",
+   "modifiedOn": "2025-08-26T12:16:11.847",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": []
+  },
+  {
+   "productId": 453505,
+   "name": "Trafalgar Law (002)",
+   "cleanName": "Trafalgar Law 002",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/453505_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/453505/one-piece-card-game-romance-dawn-trafalgar-law-002",
+   "modifiedOn": "2023-01-04T21:14:11.327",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "L"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP01-002"
+    }
+   ]
+  },
+  {
+   "productId": 454514,
+   "name": "Trafalgar Law (002) (Parallel)",
+   "cleanName": "Trafalgar Law 002 Parallel",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/454514_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/454514/one-piece-card-game-romance-dawn-trafalgar-law-002-parallel",
+   "modifiedOn": "2023-01-04T21:16:49.067",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "L"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP01-002"
+    }
+   ]
+  },
+  {
+   "productId": 454517,
+   "name": "Uta",
+   "cleanName": "Uta",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/454517_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/454517/one-piece-card-game-romance-dawn-uta",
+   "modifiedOn": "2025-06-25T18:40:51.073",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "R"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP01-005"
+    }
+   ]
+  },
+  {
+   "productId": 454664,
+   "name": "Shanks",
+   "cleanName": "Shanks",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/454664_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/454664/one-piece-card-game-romance-dawn-shanks",
+   "modifiedOn": "2023-05-12T13:37:47.03",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SEC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP01-120"
+    }
+   ]
+  },
+  {
+   "productId": 454665,
+   "name": "Shanks (Parallel)",
+   "cleanName": "Shanks Parallel",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/454665_200w.jpg",
+   "categoryId": 68,
+   "groupId": 3188,
+   "url": "https://www.tcgplayer.com/product/454665/one-piece-card-game-romance-dawn-shanks-parallel",
+   "modifiedOn": "2023-05-12T13:38:28.3",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SEC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP01-120"
+    }
+   ]
+  }
+ ]
+}

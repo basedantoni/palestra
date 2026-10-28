@@ -1,0 +1,25 @@
+{
+ "totalItems": 2,
+ "success": true,
+ "errors": [],
+ "results": [
+  {
+   "productId": 520771,
+   "lowPrice": 89.98,
+   "midPrice": 103.75,
+   "highPrice": 200.0,
+   "marketPrice": 65.65,
+   "directLowPrice": null,
+   "subTypeName": "Normal"
+  },
+  {
+   "productId": 530887,
+   "lowPrice": 13.5,
+   "midPrice": 27.69,
+   "highPrice": 39.99,
+   "marketPrice": 18.27,
+   "directLowPrice": null,
+   "subTypeName": "Normal"
+  }
+ ]
+}

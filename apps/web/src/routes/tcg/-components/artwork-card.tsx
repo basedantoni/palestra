@@ -10,6 +10,7 @@ import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
 import { artworkImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
 import { invalidateBrowse } from "./invalidate-browse";
+import { TilePrice, type TilePrices } from "./tile-price";
 import { WantDialog } from "./want-dialog";
 
 type ArtworkRow = RouterOutputs["tcg"]["artworks"][number];
@@ -33,10 +34,12 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
     }),
   );
 
-  const renderCard = (a: ArtworkRow) => (
+  /** `prices`: the shown Artworks' tile prices, once loaded. */
+  const renderCard = (a: ArtworkRow, prices?: TilePrices) => (
     <ArtworkCard
       key={a.variantId}
       artwork={a}
+      prices={prices}
       onArtist={onArtist}
       onAdd={() => setAdding(a)}
       onWant={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
@@ -66,19 +69,22 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
   return { renderCard, dialogs };
 }
 
-/** One Artwork in browse: image, credits, Printings, and the buy and taste actions. */
+/** One Artwork in browse: image, credits, Printings, Market Price, and the buy and taste actions. */
 function ArtworkCard({
   artwork: a,
+  prices,
   onArtist,
   onAdd,
   onWant,
 }: {
   artwork: ArtworkRow;
+  prices: TilePrices | undefined;
   onArtist: (artist: string) => void;
   onAdd: () => void;
   onWant: () => void;
 }) {
   const image = artworkImage(a.printings);
+  const en = a.printings.find((p) => p.language === "en");
   return (
     <li className="space-y-1">
       {image && (
@@ -119,6 +125,7 @@ function ArtworkCard({
         ))}
         {a.owned && <Badge>Owned</Badge>}
       </div>
+      {en && prices && <TilePrice price={prices.find((p) => p.printingId === en.id)} />}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {a.wanted && <Badge>Wanted</Badge>}
         <Button size="xs" variant="outline" onClick={onAdd}>

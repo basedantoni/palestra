@@ -24,6 +24,7 @@ import { protectedProcedure, router } from "../index";
 import { isForeignKeyViolation, isUniqueViolation } from "../lib/pg-error";
 import { tcgCopiesRouter } from "./tcg-copies";
 import { tcgFundRouter } from "./tcg-fund";
+import { tcgMarketRouter } from "./tcg-market";
 import { tcgOffersRouter } from "./tcg-offers";
 import { tcgWantsRouter } from "./tcg-wants";
 
@@ -161,6 +162,7 @@ function artworkWhere(userId: string, input: z.infer<typeof artworkFilters>): SQ
 export const tcgRouter = router({
   copies: tcgCopiesRouter,
   fund: tcgFundRouter,
+  market: tcgMarketRouter,
 
   /** Browse the catalog: Artworks with their Card and one Printing per language. */
   artworks: protectedProcedure

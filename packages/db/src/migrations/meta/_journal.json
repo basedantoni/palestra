@@ -344,6 +344,13 @@
       "when": 1793077760573,
       "tag": "0048_lethal_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793147272515,
+      "tag": "0049_market_prices",
+      "breakpoints": true
     }
   ]
 }

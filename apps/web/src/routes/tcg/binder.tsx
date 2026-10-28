@@ -10,6 +10,7 @@ import { trpc } from "@/utils/trpc";
 
 import { useArtworkCards } from "./-components/artwork-card";
 import { artworkImage } from "./-components/card-image";
+import { useTilePrices } from "./-components/tile-price";
 
 // The sheet lives in the URL so a reload or a shared link opens the same page.
 const binderSearchSchema = z.object({
@@ -44,6 +45,7 @@ function BinderPage() {
   const filled = sheet.pockets.filter((a) => a !== null);
   // A flip leaves the old selection behind: fall back to the sheet's first pocket.
   const selected = filled.find((a) => a.variantId === selectedId) ?? filled[0];
+  const prices = useTilePrices(filled);
   const flip = (page: number) =>
     navigate({ search: { page: Math.min(sheet.pages, Math.max(1, page)) }, replace: true });
 
@@ -136,7 +138,7 @@ function BinderPage() {
               Page {sheet.page} of {sheet.pages} · {filled[0]!.variantId} → {filled.at(-1)!.variantId} · [ / ] to flip
             </p>
           </div>
-          <aside className="md:sticky md:top-4 md:self-start">{selected && <ul>{renderCard(selected)}</ul>}</aside>
+          <aside className="md:sticky md:top-4 md:self-start">{selected && <ul>{renderCard(selected, prices)}</ul>}</aside>
         </div>
       )}
       {dialogs}
