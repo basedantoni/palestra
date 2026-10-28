@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { priceMove, shapeSeries } from "./market-price";
+import { priceMove, rangeAvailability, shapeSeries } from "./market-price";
 
 const TODAY = "2026-10-27";
 // The 7d window starts 2026-10-20; its start price may be as old as 2026-10-13.
@@ -71,5 +71,25 @@ describe("shapeSeries", () => {
 
   it("has no segments and no earliest point with no prices", () => {
     expect(shapeSeries([])).toEqual({ segments: [], earliest: null });
+  });
+});
+
+describe("rangeAvailability", () => {
+  // 3M starts 2026-07-29, 1Y starts 2025-10-27.
+  it("enables only 1M with 20 days of history", () => {
+    expect(rangeAvailability(["2026-10-08"], TODAY)).toEqual({ "1M": true, "3M": false, "1Y": false, All: false });
+  });
+
+  it("enables a range once the earliest real point reaches its start, not a day after", () => {
+    expect(rangeAvailability(["2026-07-29"], TODAY)["3M"]).toBe(true);
+    expect(rangeAvailability(["2026-07-30"], TODAY)["3M"]).toBe(false);
+  });
+
+  it("takes the shown Marketplace that reaches back furthest, and enables All with 1Y", () => {
+    expect(rangeAvailability(["2026-10-20", "2025-10-27"], TODAY)).toEqual({ "1M": true, "3M": true, "1Y": true, All: true });
+  });
+
+  it("keeps 1M, the default, with no history at all", () => {
+    expect(rangeAvailability([], TODAY)).toEqual({ "1M": true, "3M": false, "1Y": false, All: false });
   });
 });

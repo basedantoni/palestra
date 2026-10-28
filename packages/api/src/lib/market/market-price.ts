@@ -60,3 +60,24 @@ export function shapeSeries<T extends { day: string }>(points: T[]) {
   }
   return { segments, earliest: points[0]?.day ?? null };
 }
+
+/** The Price History range tabs and the days each spans back from today; All has no start. */
+export const PRICE_RANGES = { "1M": 30, "3M": 90, "1Y": 365, All: null } as const;
+export type PriceRange = keyof typeof PRICE_RANGES;
+
+/** The first day a range shows, or null for All. */
+export const rangeStart = (range: PriceRange, today: string) => {
+  const days = PRICE_RANGES[range];
+  return days === null ? null : daysBefore(today, days);
+};
+
+/**
+ * Which range tabs a chart offers, from each shown Marketplace's earliest real day: a range is
+ * available when one of them reaches its start, so no range is ever faked. 1M, the default, always
+ * is; All is once 1Y is, as it only adds what lies before that.
+ */
+export function rangeAvailability(earliest: string[], today: string): Record<PriceRange, boolean> {
+  const oldest = earliest.toSorted()[0];
+  const reaches = (range: PriceRange) => oldest !== undefined && oldest <= rangeStart(range, today)!;
+  return { "1M": true, "3M": reaches("3M"), "1Y": reaches("1Y"), All: reaches("1Y") };
+}
