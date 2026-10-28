@@ -34,6 +34,9 @@ function AdminLayout() {
           >
             Exercise Review Queue
           </Link>
+          <Link to="/admin/market" className="text-primary hover:underline">
+            Unmatched Products
+          </Link>
         </nav>
       </div>
       <Outlet />

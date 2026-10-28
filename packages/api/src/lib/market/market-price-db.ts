@@ -30,6 +30,8 @@ export async function replaceTcgplayerDay(db: MarketDb, products: TcgcsvProduct[
           .select()
           .from(tcgMarketplaceProduct)
           .where(eq(tcgMarketplaceProduct.marketplace, "tcgplayer"))
+          // A manual match saved mid-derive waits for the commit instead of being upserted over.
+          .for("update")
       ).map((r) => [r.externalId, r]),
     );
     const settled = (p: TcgcsvProduct) => {

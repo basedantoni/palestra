@@ -20,6 +20,7 @@ import {
 import { adminProcedure, router } from "../index";
 import { isManualCategory } from "../lib/rules";
 import { writeSeedMapping } from "../lib/rules-db";
+import { marketAdminRouter } from "./tcg-market-admin";
 import { seedBankCategoryMapping } from "../lib/category-seed";
 import { recordRunningPrs, recordStrengthPrs } from "../lib/personal-records";
 import { WORKOUT_TYPE_ENUM } from "../lib/workout-utils";
@@ -60,6 +61,7 @@ const templateInput = z.object({
 
 export const adminRouter = router({
   isAdmin: adminProcedure.query(() => true),
+  market: marketAdminRouter,
   // ---------------------------------------------------------------------------
   // Backfill: flag existing transactions whose category was picked by hand
   // (KOI-297, ADR 0004). Before the flag existed nothing recorded this, so it is
