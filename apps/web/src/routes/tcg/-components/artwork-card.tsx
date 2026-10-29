@@ -7,7 +7,7 @@ import { useFinanceToday } from "@/hooks/use-finance-today";
 import { trpc, type RouterOutputs } from "@/utils/trpc";
 
 import { ArtRatingSelect, ThemeTagMenu } from "./art-taste";
-import { artworkImage } from "./card-image";
+import { artworkImage, cardImage } from "./card-image";
 import { CopyDialog } from "./copy-dialog";
 import { HeldCopyValues } from "./copy-value";
 import { invalidateBrowse } from "./invalidate-browse";
@@ -36,12 +36,13 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
     }),
   );
 
-  /** `prices`: the shown Artworks' tile prices, once loaded. */
-  const renderCard = (a: ArtworkRow, prices?: TilePrices) => (
+  /** `prices`: the shown Artworks' tile prices, once loaded. `selectedCopyId`: a held Copy to mark. */
+  const renderCard = (a: ArtworkRow, prices?: TilePrices, selectedCopyId?: string) => (
     <ArtworkCard
       key={a.variantId}
       artwork={a}
       prices={prices}
+      selectedCopyId={selectedCopyId}
       onArtist={onArtist}
       onAdd={() => setAdding(a)}
       onWant={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
@@ -75,19 +76,23 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
 function ArtworkCard({
   artwork: a,
   prices,
+  selectedCopyId,
   onArtist,
   onAdd,
   onWant,
 }: {
   artwork: ArtworkRow;
   prices: TilePrices | undefined;
+  selectedCopyId: string | undefined;
   onArtist: (artist: string) => void;
   onAdd: () => void;
   onWant: () => void;
 }) {
-  const image = artworkImage(a.printings);
   // An owned tile is priced by its held Copies (KOI-374): one shared request, only once one shows.
   const { data: copies } = useQuery({ ...trpc.tcg.copies.list.queryOptions(), enabled: a.owned });
+  // With a Copy selected (the Binder's), the tile shows that Copy's own Printing.
+  const selectedCopy = copies?.find((c) => c.id === selectedCopyId);
+  const image = selectedCopy ? cardImage(selectedCopy.imageUrl) : artworkImage(a.printings);
   return (
     <li className="space-y-1">
       {image && (
@@ -129,7 +134,7 @@ function ArtworkCard({
         {a.owned && <Badge>Owned</Badge>}
       </div>
       {a.owned ? (
-        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} />
+        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} selectedCopyId={selectedCopyId} />
       ) : (
         prices &&
         (Object.keys(TILE_PRICE_TITLES) as Array<keyof typeof TILE_PRICE_TITLES>).map((language) => {

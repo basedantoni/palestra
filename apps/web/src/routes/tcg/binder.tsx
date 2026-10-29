@@ -1,17 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { binderSheet, TCG_ARTWORKS_MAX_LIMIT } from "@life-tracker/shared";
-import { useEffect, useState } from "react";
+import { binderSheet } from "@life-tracker/shared";
+import { useEffect } from "react";
 import { z } from "zod";
 
-import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/utils/trpc";
 
-import { useArtworkCards } from "./-components/artwork-card";
-import { artworkImage } from "./-components/card-image";
-import { CollectionValue, CopySticker } from "./-components/copy-value";
-import { PriceHistory } from "./-components/printing-drawer";
+import { BinderSheet } from "./-components/binder-sheet";
+import { CollectionValue } from "./-components/copy-value";
 
 // The sheet lives in the URL so a reload or a shared link opens the same page.
 const binderSearchSchema = z.object({
@@ -32,26 +29,12 @@ export const Route = createFileRoute("/tcg/binder")({
   },
 });
 
-/** The collection as a binder: owned Artworks in card-number order, one 9-pocket sheet at a time. */
+/** The Copies held as a binder: one Copy per Pocket in card-number order, one 9-Pocket sheet at a time. */
 function BinderPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { data: owned, isLoading, isError } = useQuery(
-    trpc.tcg.artworks.queryOptions({ owned: true, limit: TCG_ARTWORKS_MAX_LIMIT }),
-  );
-  const { renderCard, dialogs } = useArtworkCards((artist) => navigate({ to: "/tcg", search: { artist } }));
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const sheet = binderSheet(owned ?? [], search.page ?? 1);
-  const filled = sheet.pockets.filter((a) => a !== null);
-  // A flip leaves the old selection behind: fall back to the sheet's first pocket.
-  const selected = filled.find((a) => a.variantId === selectedId) ?? filled[0];
-  // Each pocket holds one Copy: the Artwork's latest acquired (the list is ordered by acquiredOn, newest first).
-  // The aside's tile still lists every held Copy's value.
-  const { data: copies } = useQuery(trpc.tcg.copies.list.queryOptions());
-  const heldCopies = Map.groupBy(copies ?? [], (c) => c.variantId);
-  const held = (variantId: string) => heldCopies.get(variantId)?.[0];
-  const selectedCopy = selected && held(selected.variantId);
+  const { data: copies, isLoading, isError } = useQuery(trpc.tcg.copies.list.queryOptions());
+  const sheet = binderSheet(copies ?? [], search.page ?? 1);
   const flip = (page: number) =>
     navigate({ search: { page: Math.min(sheet.pages, Math.max(1, page)) }, replace: true });
 
@@ -88,7 +71,7 @@ function BinderPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : isError ? (
         <p className="text-sm text-destructive">Couldn't load your collection.</p>
-      ) : !filled.length ? (
+      ) : !copies?.length ? (
         <p className="text-sm text-muted-foreground">
           No Copies yet. Add one from an Artwork on{" "}
           <Link to="/tcg" className="underline">
@@ -97,73 +80,9 @@ function BinderPage() {
           .
         </p>
       ) : (
-        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="space-y-3">
-            <div className="mx-auto grid max-w-md grid-cols-3 gap-3 rounded-xl border border-border bg-muted p-4 shadow-inner">
-              {sheet.pockets.map((a, i) => {
-                if (!a) return <div key={i} className="aspect-[63/88] rounded-sm border border-dashed border-border" />;
-                const name = `${a.variantId} ${a.nameEn ?? a.nameJa ?? ""}`;
-                const copy = held(a.variantId);
-                return (
-                  <div key={a.variantId} className="flex flex-col items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label={name}
-                      aria-pressed={selected?.variantId === a.variantId}
-                      title={name}
-                      onClick={() => setSelectedId(a.variantId)}
-                      className={`aspect-[63/88] w-full overflow-hidden rounded-sm bg-background transition ${
-                        selected?.variantId === a.variantId ? "ring-2 ring-primary" : "hover:scale-[1.02]"
-                      }`}
-                    >
-                      <img src={artworkImage(a.printings)} alt="" className="size-full object-cover" />
-                    </button>
-                    {/* Beside the pocket, not in it: the sticker is its own button, opening the drawer. */}
-                    {copy && <CopySticker copy={copy} />}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mx-auto flex max-w-md items-center gap-3">
-              <Button size="sm" variant="outline" aria-label="Previous page" disabled={sheet.page === 1} onClick={() => flip(sheet.page - 1)}>
-                ◀
-              </Button>
-              <input
-                type="range"
-                aria-label="Binder page"
-                min={1}
-                max={sheet.pages}
-                value={sheet.page}
-                onChange={(e) => flip(Number(e.target.value))}
-                className="flex-1"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label="Next page"
-                disabled={sheet.page === sheet.pages}
-                onClick={() => flip(sheet.page + 1)}
-              >
-                ▶
-              </Button>
-            </div>
-            <p className="text-center text-xs text-muted-foreground">
-              Page {sheet.page} of {sheet.pages} · {filled[0]!.variantId} → {filled.at(-1)!.variantId} · [ / ] to flip
-            </p>
-          </div>
-          <aside className="space-y-4 md:sticky md:top-4 md:self-start">
-            {selected && <ul>{renderCard(selected)}</ul>}
-            {selectedCopy && (
-              <section className="space-y-2">
-                <h2 className="text-sm font-medium">Price History · {selectedCopy.language.toUpperCase()}</h2>
-                {/* Keyed so each card opens on NM, 1M, like the drawer. */}
-                <PriceHistory key={selectedCopy.printingId} printingId={selectedCopy.printingId} />
-              </section>
-            )}
-          </aside>
-        </div>
+        // The route sizes the sheet only to clamp flips; BinderSheet orders the Pockets.
+        <BinderSheet page={sheet.page} onFlip={flip} onArtist={(artist) => navigate({ to: "/tcg", search: { artist } })} />
       )}
-      {dialogs}
     </div>
   );
 }
