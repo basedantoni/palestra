@@ -112,6 +112,7 @@ function Flipping() {
 const sheet = () => screen.getByRole("group", { name: "Sheet" });
 const pockets = () => within(sheet()).getAllByRole("button", { name: /^OP0/ });
 const aside = () => screen.getByRole("complementary");
+const tileImage = () => decodeURIComponent(within(aside()).getByRole("img", { name: "OP05-119_p1 Monkey.D.Luffy" }).getAttribute("src")!);
 const condition = () => within(within(aside()).getByRole("tablist", { name: "Condition" })).getByRole("tab", { selected: true });
 
 describe("BinderSheet", () => {
@@ -145,6 +146,14 @@ describe("BinderSheet", () => {
     expect(pockets()[0]).toHaveAttribute("aria-pressed", "true");
     expect(within(aside()).getByText("EN LP · acquired Oct 1 · paid $20.00")).toBeInTheDocument();
     expect(aside().querySelector('[aria-current="true"]')).toHaveTextContent("EN LP");
+  });
+
+  it("shows the selected Copy's own Printing in the Artwork's tile", () => {
+    show();
+    expect(tileImage()).toContain("https://img.test/luffy-en.png");
+
+    fireEvent.click(pockets()[1]!);
+    expect(tileImage()).toContain("https://img.test/luffy-ja.png");
   });
 
   it("selecting a Pocket selects its Copy: no price paid, Below Want minimum", () => {
