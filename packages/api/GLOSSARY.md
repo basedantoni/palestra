@@ -148,8 +148,12 @@ A run of Artworks that browse lists together, keyed by the browse sort. By card 
 _Avoid_: Set (a Printing's set is a different thing), group, page
 
 **Binder**:
-The collection laid out like a physical binder: the Artworks the user owns a Copy of, in card-number order, nine pockets to a sheet, one sheet at a time.
+The Copies the user holds laid out like a physical binder: one Copy per Pocket, in card-number order, nine Pockets to a sheet, one sheet at a time.
 _Avoid_: Album, collection view, page (say sheet)
+
+**Pocket**:
+One slot on a Binder sheet, holding one Copy.
+_Avoid_: Slot, cell
 
 ### TCG — buying
 
