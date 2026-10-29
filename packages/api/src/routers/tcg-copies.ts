@@ -91,6 +91,7 @@ export const tcgCopiesRouter = router({
         condition: tcgCopy.condition,
         pricePaid: tcgCopy.pricePaid,
         acquiredOn: tcgCopy.acquiredOn,
+        createdAt: tcgCopy.createdAt,
         minCondition: tcgWant.minCondition,
       })
       .from(tcgCopy)

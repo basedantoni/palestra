@@ -24,6 +24,7 @@ const copy = (extra: Partial<CopyRow> = {}): CopyRow => ({
   condition: "LP",
   pricePaid: 20,
   acquiredOn: "2026-10-01",
+  createdAt: "2026-10-01T12:00:00.000Z",
   belowMinimum: false,
   value: { usd: 32, pricedAt: "NM", day: "2026-10-27", asOf: false },
   gain: 12,

@@ -71,11 +71,11 @@ function DrawerBody({ printingId }: { printingId: string }) {
 
 /**
  * A Printing's Price History chart with its Condition and range tabs: the drawer's, and the Binder
- * aside's under the selected card (KOI-375). Opens on NM, 1M.
+ * aside's under the selected Copy (KOI-375). Opens on 1M and `condition`, NM by default.
  */
-export function PriceHistory({ printingId }: { printingId: string }) {
+export function PriceHistory({ printingId, condition: opening = "NM" }: { printingId: string; condition?: Condition }) {
   const [range, setRange] = useState<PriceRange>("1M");
-  const [condition, setCondition] = useState<Condition>("NM");
+  const [condition, setCondition] = useState<Condition>(opening);
   const { data, isPlaceholderData } = useQuery({
     ...trpc.tcg.market.printing.queryOptions({ printingId, range }),
     placeholderData: keepPreviousData,

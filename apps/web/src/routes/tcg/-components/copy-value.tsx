@@ -148,10 +148,14 @@ export function CollectionValue() {
   );
 }
 
-/** An owned Artwork's tile price: each held Copy's Value, by its Printing and Condition. */
-export function HeldCopyValues({ copies }: { copies: CopyRow[] }) {
+/** An owned Artwork's tile price: each held Copy's Value, by its Printing and Condition. `selectedId`'s row is marked. */
+export function HeldCopyValues({ copies, selectedId }: { copies: CopyRow[]; selectedId?: string }) {
   return copies.map((c) => (
-    <div key={c.id} className="flex flex-wrap items-baseline gap-1 text-xs">
+    <div
+      key={c.id}
+      aria-current={c.id === selectedId || undefined}
+      className={cn("flex flex-wrap items-baseline gap-1 text-xs", c.id === selectedId && "rounded-sm bg-accent px-1 font-medium")}
+    >
       <span className="text-muted-foreground">
         {c.language.toUpperCase()} {c.condition}
       </span>

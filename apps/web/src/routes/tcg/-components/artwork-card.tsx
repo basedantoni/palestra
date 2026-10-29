@@ -36,12 +36,13 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
     }),
   );
 
-  /** `prices`: the shown Artworks' tile prices, once loaded. */
-  const renderCard = (a: ArtworkRow, prices?: TilePrices) => (
+  /** `prices`: the shown Artworks' tile prices, once loaded. `selectedCopyId`: a held Copy to mark. */
+  const renderCard = (a: ArtworkRow, prices?: TilePrices, selectedCopyId?: string) => (
     <ArtworkCard
       key={a.variantId}
       artwork={a}
       prices={prices}
+      selectedCopyId={selectedCopyId}
       onArtist={onArtist}
       onAdd={() => setAdding(a)}
       onWant={() => setWanting({ variantId: a.variantId, label: a.nameEn ?? a.nameJa ?? a.cardNumber })}
@@ -75,12 +76,14 @@ export function useArtworkCards(onArtist: (artist: string) => void) {
 function ArtworkCard({
   artwork: a,
   prices,
+  selectedCopyId,
   onArtist,
   onAdd,
   onWant,
 }: {
   artwork: ArtworkRow;
   prices: TilePrices | undefined;
+  selectedCopyId: string | undefined;
   onArtist: (artist: string) => void;
   onAdd: () => void;
   onWant: () => void;
@@ -129,7 +132,7 @@ function ArtworkCard({
         {a.owned && <Badge>Owned</Badge>}
       </div>
       {a.owned ? (
-        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} />
+        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} selectedId={selectedCopyId} />
       ) : (
         prices &&
         (Object.keys(TILE_PRICE_TITLES) as Array<keyof typeof TILE_PRICE_TITLES>).map((language) => {
