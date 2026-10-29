@@ -28,7 +28,7 @@ describe("binderSheet", () => {
 const copy = (id: string, extra: Partial<Parameters<typeof binderPockets>[0][number]> = {}) => ({
   id,
   variantId: "OP01-001",
-  language: "en",
+  language: "en" as const,
   condition: "NM" as const,
   acquiredOn: "2026-10-01",
   createdAt: "2026-10-01T12:00:00.000Z",
@@ -61,6 +61,10 @@ describe("binderPockets", () => {
         copy("added-first"),
       ]),
     ).toEqual(["added-first", "added-second", "late"]);
+  });
+
+  it("orders Copies added at the same instant by id, so the order is total", () => {
+    expect(order([copy("c2"), copy("c1")])).toEqual(["c1", "c2"]);
   });
 
   it("keeps two Copies of one Printing as two Pockets", () => {

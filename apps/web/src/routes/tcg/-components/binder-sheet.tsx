@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { trpc } from "@/utils/trpc";
 
 import { useArtworkCards } from "./artwork-card";
@@ -29,10 +30,16 @@ export function BinderSheet({
   const { data: owned } = useQuery(trpc.tcg.artworks.queryOptions({ owned: true, limit: TCG_ARTWORKS_MAX_LIMIT }));
   const { renderCard, dialogs } = useArtworkCards(onArtist);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [shownPage, setShownPage] = useState(page);
+  // Every flip, even back again, opens on the sheet's first Pocket.
+  if (page !== shownPage) {
+    setShownPage(page);
+    setSelectedId(null);
+  }
 
   const sheet = binderSheet(binderPockets(copies ?? []), page);
   const filled = sheet.pockets.filter((c) => c !== null);
-  // A flip leaves the old selection behind: fall back to the sheet's first Pocket.
+  // A Copy gone since it was selected falls back to the first Pocket too.
   const selected = filled.find((c) => c.id === selectedId) ?? filled[0];
   if (!selected) return null;
   const artwork = owned?.find((a) => a.variantId === selected.variantId);
@@ -56,9 +63,10 @@ export function BinderSheet({
                   aria-pressed={c.id === selected.id}
                   title={name}
                   onClick={() => setSelectedId(c.id)}
-                  className={`aspect-[63/88] w-full overflow-hidden rounded-sm bg-background transition ${
-                    c.id === selected.id ? "ring-2 ring-primary" : "hover:scale-[1.02]"
-                  }`}
+                  className={cn(
+                    "aspect-[63/88] w-full overflow-hidden rounded-sm bg-background transition",
+                    c.id === selected.id ? "ring-2 ring-primary" : "hover:scale-[1.02]",
+                  )}
                 >
                   <img src={cardImage(c.imageUrl)} alt="" className="size-full object-cover" />
                 </button>

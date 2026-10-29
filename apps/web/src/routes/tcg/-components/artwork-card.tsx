@@ -132,7 +132,7 @@ function ArtworkCard({
         {a.owned && <Badge>Owned</Badge>}
       </div>
       {a.owned ? (
-        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} selectedId={selectedCopyId} />
+        copies && <HeldCopyValues copies={copies.filter((c) => c.variantId === a.variantId)} selectedCopyId={selectedCopyId} />
       ) : (
         prices &&
         (Object.keys(TILE_PRICE_TITLES) as Array<keyof typeof TILE_PRICE_TITLES>).map((language) => {

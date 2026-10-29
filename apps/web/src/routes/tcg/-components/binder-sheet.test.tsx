@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { TCG_ARTWORKS_MAX_LIMIT } from "@life-tracker/shared";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import { renderWithData } from "@/test/render";
@@ -60,7 +61,7 @@ const copy = (id: string, extra: Partial<CopyRow>): CopyRow => ({
 const enLp = copy("00000000-0000-4000-8000-0000000000c1", {
   condition: "LP",
   pricePaid: 20,
-  value: { usd: 28, pricedAt: "LP", day: "2026-10-27", asOf: false },
+  value: { usd: 28, pricedAt: "NM", day: "2026-10-27", asOf: false },
   gain: 8,
 });
 const jaNm = copy("00000000-0000-4000-8000-0000000000c2", {
@@ -69,8 +70,6 @@ const jaNm = copy("00000000-0000-4000-8000-0000000000c2", {
   imageUrl: "https://img.test/luffy-ja.png",
   acquiredOn: "2026-10-05",
   belowMinimum: true,
-  value: { usd: 50, pricedAt: "NM", day: "2026-10-19", asOf: true },
-  gain: null,
 });
 const zoro = copy("00000000-0000-4000-8000-0000000000c3", {
   printingId: ZORO_EN,
@@ -78,7 +77,9 @@ const zoro = copy("00000000-0000-4000-8000-0000000000c3", {
   setName: "OP-06",
   imageUrl: "https://img.test/zoro-en.png",
   nameEn: "Roronoa Zoro",
+  condition: "HP",
   acquiredOn: "2026-10-09",
+  value: { usd: 5, pricedAt: "MP", day: "2026-10-19", asOf: true },
 });
 
 const history: Drawer = {
@@ -101,6 +102,12 @@ const seed = (client: QueryClient) => {
   }
 };
 const show = () => renderWithData(<BinderSheet page={1} onFlip={() => {}} onArtist={() => {}} />, seed);
+
+/** The Binder with its page in state, as the route keeps it in the URL. */
+function Flipping() {
+  const [page, setPage] = useState(1);
+  return <BinderSheet page={page} onFlip={setPage} onArtist={() => {}} />;
+}
 
 const sheet = () => screen.getByRole("group", { name: "Sheet" });
 const pockets = () => within(sheet()).getAllByRole("button", { name: /^OP0/ });
@@ -127,7 +134,7 @@ describe("BinderSheet", () => {
     show();
 
     expect(within(sheet()).getByText("$28.00")).toBeInTheDocument();
-    expect(within(sheet()).getByText("$50.00")).toBeInTheDocument();
+    expect(within(sheet()).getByText("$5.00")).toBeInTheDocument();
     expect(within(sheet()).getByText("as of Oct 19")).toBeInTheDocument();
     expect(within(sheet()).getByText("—")).toBeInTheDocument();
   });
@@ -152,16 +159,35 @@ describe("BinderSheet", () => {
 
   it("opens the aside's Price History on the Condition the Copy was priced at, NM when unpriced", () => {
     show();
-    expect(condition()).toHaveTextContent("LP");
+    // EN LP priced from NM.
+    expect(condition()).toHaveTextContent("NM");
 
     fireEvent.click(pockets()[2]!);
+    expect(condition()).toHaveTextContent("MP");
+
+    fireEvent.click(pockets()[1]!);
     expect(condition()).toHaveTextContent("NM");
   });
 
   it("opens the drawer for the sticker's own Copy's Printing", () => {
     show();
-    fireEvent.click(within(sheet()).getByRole("button", { name: /\$50\.00/ }));
+    fireEvent.click(within(sheet()).getByRole("button", { name: /\$5\.00/ }));
 
-    expect(screen.getByRole("dialog", { name: "OP05-119_p1 · JA" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "OP06-001 · EN" })).toBeInTheDocument();
+  });
+
+  it("selects the first Pocket again after flipping away and back", () => {
+    const more = Array.from({ length: 7 }, (_, i) =>
+      copy(`00000000-0000-4000-8000-00000000010${i}`, { variantId: `OP07-00${i}`, nameEn: "Filler" }),
+    );
+    renderWithData(<Flipping />, (client) => {
+      seed(client);
+      client.setQueryData(trpc.tcg.copies.list.queryKey(), [zoro, jaNm, enLp, ...more]);
+    });
+    fireEvent.click(pockets()[2]!);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
+    expect(pockets()[0]).toHaveAttribute("aria-pressed", "true");
   });
 });

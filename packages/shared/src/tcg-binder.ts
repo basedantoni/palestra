@@ -1,14 +1,17 @@
-import { TCG_CONDITIONS } from "./tcg";
+import { TCG_CONDITIONS, TCG_LANGUAGE_NAME } from "./tcg";
 
 /** Pockets on one binder sheet: 3 × 3, like a physical 9-pocket page. */
 const BINDER_POCKETS = 9;
 
+type Language = keyof typeof TCG_LANGUAGE_NAME;
+
 /** An Artwork's Copies sit in its card tile's language order. */
-const POCKET_LANGUAGES = ["en", "ja", "zh", "ko"];
+const POCKET_LANGUAGES: Language[] = ["en", "ja", "zh", "ko"];
 
 type PocketCopy = {
+  id: string;
   variantId: string;
-  language: string;
+  language: Language;
   condition: (typeof TCG_CONDITIONS)[number];
   acquiredOn: string;
   createdAt: string;
@@ -18,7 +21,7 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * The Copies in Pocket order (KOI-379): card number (variant ID), as browse orders Artworks; then
- * language, best Condition, acquired date and when it was added, so an edit never reshuffles them.
+ * language, best Condition, acquired date and when it was added (then id), so an edit never reshuffles them.
  */
 export function binderPockets<T extends PocketCopy>(copies: readonly T[]) {
   return copies.toSorted(
@@ -27,7 +30,8 @@ export function binderPockets<T extends PocketCopy>(copies: readonly T[]) {
       POCKET_LANGUAGES.indexOf(a.language) - POCKET_LANGUAGES.indexOf(b.language) ||
       TCG_CONDITIONS.indexOf(a.condition) - TCG_CONDITIONS.indexOf(b.condition) ||
       compare(a.acquiredOn, b.acquiredOn) ||
-      compare(a.createdAt, b.createdAt),
+      compare(a.createdAt, b.createdAt) ||
+      compare(a.id, b.id),
   );
 }
 
